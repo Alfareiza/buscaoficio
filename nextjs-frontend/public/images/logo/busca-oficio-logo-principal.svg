@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+   <circle class="cL" cx="24" cy="18" r="12.5" fill="#F55F20"></circle>
+   <circle class="cR" cx="24" cy="30" r="12.5" fill="#1A3C6E" fill-opacity=".5"></circle>
+   <path class="chk" data-draw="" pathLength="120" d="M19.5 24l3.4 3.4 6-6.6" stroke="#fff" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>

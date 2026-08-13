@@ -1,0 +1,16 @@
+{
+  "workspace": {
+    "id": "46ae7feb-bc4a-4186-8769-70441d330e36"
+  },
+  "entities": {
+    "environments": [],
+    "flows": [],
+    "globals": [],
+    "mocks": [],
+    "specs": [
+      "../tests/commands/files/openapi_test.json",
+      "../tests/commands/files/openapi_test_output.json"
+    ],
+    "collections": []
+  }
+}
