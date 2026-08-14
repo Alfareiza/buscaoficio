@@ -18,8 +18,7 @@ def test_all_api_routes_have_openapi_docs():
     missing = [
         f"{sorted(route.methods)} {route.path}"
         for route in app.routes
-        if isinstance(route, APIRoute)
-        and (not route.summary or not route.description)
+        if isinstance(route, APIRoute) and (not route.summary or not route.description)
     ]
 
     assert missing == [], f"Routes missing OpenAPI docs: {missing}"

@@ -99,9 +99,7 @@ class TestGetMe:
         assert_user_payload(response.json(), authenticated_user["user"])
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_rejects_inactive_user(
-        self, test_client: AsyncClient, create_user
-    ):
+    async def test_rejects_inactive_user(self, test_client: AsyncClient, create_user):
         """Return 401 when the token belongs to an inactive user."""
         user = await create_user(is_active=False)
         headers = await issue_auth_headers(user)
@@ -356,12 +354,12 @@ class TestDeleteUser:
         )
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
-        assert (
-            await db_session.get(User, target.id)
-        ) is None
+        assert (await db_session.get(User, target.id)) is None
         leftover_items = (
-            await db_session.execute(select(Item).where(Item.user_id == target.id))
-        ).scalars().all()
+            (await db_session.execute(select(Item).where(Item.user_id == target.id)))
+            .scalars()
+            .all()
+        )
         assert leftover_items == []
 
     @pytest.mark.asyncio(loop_scope="function")

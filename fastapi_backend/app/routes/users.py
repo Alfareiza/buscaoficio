@@ -88,9 +88,7 @@ async def update_me(
             },
         )
     except exceptions.UserAlreadyExists:
-        logger.warning(
-            f"Current user update failed: email exists user_id={user.id}"
-        )
+        logger.warning(f"Current user update failed: email exists user_id={user.id}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=ErrorCode.UPDATE_USER_EMAIL_ALREADY_EXISTS,
@@ -181,15 +179,22 @@ async def get_cliente_or_404(usuario_id, db: AsyncSession) -> Cliente:
     result = await db.execute(select(Cliente).filter(Cliente.usuario_id == usuario_id))
     cliente = result.scalars().first()
     if not cliente:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cliente profile not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Cliente profile not found"
+        )
     return cliente
 
 
 async def get_profesional_or_404(usuario_id, db: AsyncSession) -> Profesional:
-    result = await db.execute(select(Profesional).filter(Profesional.usuario_id == usuario_id))
+    result = await db.execute(
+        select(Profesional).filter(Profesional.usuario_id == usuario_id)
+    )
     profesional = result.scalars().first()
     if not profesional:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profesional profile not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profesional profile not found",
+        )
     return profesional
 
 

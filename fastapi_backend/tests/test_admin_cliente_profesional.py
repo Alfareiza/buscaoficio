@@ -15,7 +15,9 @@ def cliente_admin(engine, mocker) -> ClienteAdmin:
     test_sessionmaker = async_sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False
     )
-    mocker.patch.object(ClienteAdmin, "get_sessionmaker", return_value=test_sessionmaker)
+    mocker.patch.object(
+        ClienteAdmin, "get_sessionmaker", return_value=test_sessionmaker
+    )
     return ClienteAdmin(Cliente)
 
 
@@ -24,7 +26,9 @@ def profesional_admin(engine, mocker) -> ProfesionalAdmin:
     test_sessionmaker = async_sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False
     )
-    mocker.patch.object(ProfesionalAdmin, "get_sessionmaker", return_value=test_sessionmaker)
+    mocker.patch.object(
+        ProfesionalAdmin, "get_sessionmaker", return_value=test_sessionmaker
+    )
     return ProfesionalAdmin(Profesional)
 
 
@@ -76,7 +80,11 @@ class TestClienteAdminSaveModelCreate:
         await cliente_admin.save_model(None, payload)
 
         users = (
-            (await db_session.execute(select(User).filter_by(email="existing@example.com")))
+            (
+                await db_session.execute(
+                    select(User).filter_by(email="existing@example.com")
+                )
+            )
             .scalars()
             .all()
         )
@@ -128,7 +136,9 @@ class TestClienteAdminSaveModelEdit:
     async def test_updates_linked_usuario_fields(
         self, cliente_admin: ClienteAdmin, db_session: AsyncSession, create_user
     ):
-        user = await create_user(email="cliente.edit@example.com", nombre_completo="Old Name")
+        user = await create_user(
+            email="cliente.edit@example.com", nombre_completo="Old Name"
+        )
         cliente = Cliente(usuario_id=user.id, direccion_default="Old address")
         db_session.add(cliente)
         await db_session.commit()
@@ -157,7 +167,9 @@ class TestClienteAdminSaveModelEdit:
     async def test_blank_password_leaves_it_unchanged(
         self, cliente_admin: ClienteAdmin, db_session: AsyncSession, create_user
     ):
-        user = await create_user(email="keep.pass@example.com", password="OriginalPass123#")
+        user = await create_user(
+            email="keep.pass@example.com", password="OriginalPass123#"
+        )
         original_hash = user.hashed_password
         cliente = Cliente(usuario_id=user.id)
         db_session.add(cliente)
@@ -182,7 +194,9 @@ class TestClienteAdminSaveModelEdit:
     async def test_new_password_changes_hash(
         self, cliente_admin: ClienteAdmin, db_session: AsyncSession, create_user
     ):
-        user = await create_user(email="change.pass@example.com", password="OriginalPass123#")
+        user = await create_user(
+            email="change.pass@example.com", password="OriginalPass123#"
+        )
         original_hash = user.hashed_password
         cliente = Cliente(usuario_id=user.id)
         db_session.add(cliente)
@@ -230,7 +244,9 @@ class TestClienteAdminSaveModelEdit:
     async def test_get_obj_prefills_real_usuario_values(
         self, cliente_admin: ClienteAdmin, db_session: AsyncSession, create_user
     ):
-        user = await create_user(email="prefill@example.com", nombre_completo="Prefill Name")
+        user = await create_user(
+            email="prefill@example.com", nombre_completo="Prefill Name"
+        )
         cliente = Cliente(usuario_id=user.id, direccion_default="Some address")
         db_session.add(cliente)
         await db_session.commit()
@@ -265,7 +281,9 @@ class TestSharedFieldsSchema:
     def test_profesional_admin_hides_creado_en_usuario_shows_id_mirror(
         self, profesional_admin: ProfesionalAdmin
     ):
-        fields = {f.name: f for f in profesional_admin.get_model_fields_with_widget_types()}
+        fields = {
+            f.name: f for f in profesional_admin.get_model_fields_with_widget_types()
+        }
 
         assert fields["creado_en"].is_immutable is True
         assert fields["actualizado_en"].is_immutable is True
@@ -273,7 +291,9 @@ class TestSharedFieldsSchema:
         assert fields["id"].column_name == "usuario_id"
 
     def test_user_admin_hides_creado_en(self):
-        fields = {f.name: f for f in UserAdmin(User).get_model_fields_with_widget_types()}
+        fields = {
+            f.name: f for f in UserAdmin(User).get_model_fields_with_widget_types()
+        }
 
         assert fields["creado_en"].is_immutable is True
         assert fields["actualizado_en"].is_immutable is True
@@ -309,4 +329,7 @@ class TestProfesionalAdminSaveModelCreate:
             )
         ).scalar_one()
         assert profesional_row.documento_numero == "123456789"
-        assert profesional_row.estado_verificacion == EstadoVerificacionProfesional.PENDIENTE.value
+        assert (
+            profesional_row.estado_verificacion
+            == EstadoVerificacionProfesional.PENDIENTE.value
+        )

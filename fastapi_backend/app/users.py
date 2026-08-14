@@ -92,4 +92,6 @@ fastapi_users = FastAPIUsers[User, uuid.UUID](get_user_manager, [auth_backend])
 # Estos callables son usados como injección de dependencias en routes/
 current_active_user: Callable = fastapi_users.current_user(active=True)
 current_superuser: Callable = fastapi_users.current_user(active=True, superuser=True)
-current_user_token: Callable = fastapi_users.authenticator.current_user_token(active=True)
+current_user_token: Callable = fastapi_users.authenticator.current_user_token(
+    active=True
+)
