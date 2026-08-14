@@ -34,7 +34,8 @@ PROFESIONAL_ENUM_FORMFIELD_OVERRIDES = {
         {
             "required": True,
             "options": [
-                {"label": e.name, "value": e.value} for e in EstadoVerificacionProfesional
+                {"label": e.name, "value": e.value}
+                for e in EstadoVerificacionProfesional
             ],
         },
     ),
@@ -125,7 +126,9 @@ class ClienteInline(ClienteProfesionalSharedFieldsMixin, SqlAlchemyInlineModelAd
     )
 
 
-class ProfesionalInline(ClienteProfesionalSharedFieldsMixin, SqlAlchemyInlineModelAdmin):
+class ProfesionalInline(
+    ClienteProfesionalSharedFieldsMixin, SqlAlchemyInlineModelAdmin
+):
     """Shows a User's profesional profile inline on UserAdmin's change page.
 
     Same routing caveat as ClienteInline — saves go through ProfesionalAdmin.
@@ -205,10 +208,14 @@ class UserAdmin(SqlAlchemyModelAdmin):
         sessionmaker = self.get_sessionmaker()
         async with sessionmaker() as session:
             has_cliente = (
-                await session.execute(select(Cliente.usuario_id).filter_by(usuario_id=obj.id))
+                await session.execute(
+                    select(Cliente.usuario_id).filter_by(usuario_id=obj.id)
+                )
             ).first() is not None
             has_profesional = (
-                await session.execute(select(Profesional.usuario_id).filter_by(usuario_id=obj.id))
+                await session.execute(
+                    select(Profesional.usuario_id).filter_by(usuario_id=obj.id)
+                )
             ).first() is not None
         labels = []
         if has_cliente:
@@ -219,7 +226,7 @@ class UserAdmin(SqlAlchemyModelAdmin):
 
     @property
     def hasher(self):
-        if not hasattr(self, '_hasher'):
+        if not hasattr(self, "_hasher"):
             self._hasher = Argon2Hasher()
         return self._hasher
 
@@ -380,7 +387,9 @@ class UsuarioProvisioningAdminMixin(ClienteProfesionalSharedFieldsMixin):
                 return None
             return await self.serialize_obj(obj)
 
-    async def save_model(self, id: uuid.UUID | int | str | None, payload: dict) -> dict | None:
+    async def save_model(
+        self, id: uuid.UUID | int | str | None, payload: dict
+    ) -> dict | None:
         payload = dict(payload)
         email = payload.pop("usuario_email", None)
         password = payload.pop("usuario_password", None)
@@ -391,7 +400,9 @@ class UsuarioProvisioningAdminMixin(ClienteProfesionalSharedFieldsMixin):
 
         if id is not None:
             if email or password or nombre_completo or whatsapp is not None:
-                await self._update_usuario(id, email, password, nombre_completo, whatsapp)
+                await self._update_usuario(
+                    id, email, password, nombre_completo, whatsapp
+                )
             return await super().save_model(id, payload)
 
         if usuario_ref:
@@ -406,7 +417,9 @@ class UsuarioProvisioningAdminMixin(ClienteProfesionalSharedFieldsMixin):
                 400,
                 detail="Completa email, password y nombre_completo para crear el usuario.",
             )
-        usuario_id = await self._create_usuario(email, password, nombre_completo, whatsapp)
+        usuario_id = await self._create_usuario(
+            email, password, nombre_completo, whatsapp
+        )
         payload["usuario"] = usuario_id
         return await super().save_model(None, payload)
 
@@ -427,9 +440,13 @@ class UsuarioProvisioningAdminMixin(ClienteProfesionalSharedFieldsMixin):
                     safe=True,
                 )
             except exceptions.UserAlreadyExists as exc:
-                raise AdminApiException(400, detail="Ya existe un usuario con ese email.") from exc
+                raise AdminApiException(
+                    400, detail="Ya existe un usuario con ese email."
+                ) from exc
             except exceptions.InvalidPasswordException as exc:
-                raise AdminApiException(400, detail=f"Password inválido: {exc.reason}") from exc
+                raise AdminApiException(
+                    400, detail=f"Password inválido: {exc.reason}"
+                ) from exc
         return user.id
 
     async def _update_usuario(
@@ -451,7 +468,9 @@ class UsuarioProvisioningAdminMixin(ClienteProfesionalSharedFieldsMixin):
             if email and email != user.email:
                 existing = await user_manager.user_db.get_by_email(email)
                 if existing is not None and existing.id != usuario_id:
-                    raise AdminApiException(400, detail="Ya existe un usuario con ese email.")
+                    raise AdminApiException(
+                        400, detail="Ya existe un usuario con ese email."
+                    )
                 user.email = email
             if nombre_completo:
                 user.nombre_completo = nombre_completo
@@ -544,13 +563,17 @@ class ProfesionalAdmin(UsuarioProvisioningAdminMixin, SqlAlchemyModelAdmin):
                     field.filter_widget_type = WidgetType.Select
                     field.filter_widget_props = {
                         "required": False,
-                        "options": [{"label": e.label, "value": e.value} for e in TipoDocumento],
+                        "options": [
+                            {"label": e.label, "value": e.value} for e in TipoDocumento
+                        ],
                     }
         return fields
 
     @display
     async def estado_verificacion_badge(self, obj: Profesional) -> str:
-        return ESTADO_VERIFICACION_BADGES.get(obj.estado_verificacion, obj.estado_verificacion)
+        return ESTADO_VERIFICACION_BADGES.get(
+            obj.estado_verificacion, obj.estado_verificacion
+        )
 
     @display
     async def whatsapp_verificado_badge(self, obj: Profesional) -> str:

@@ -105,7 +105,9 @@ class TestPasswordValidation:
 
 class TestRegisterCliente:
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_creates_usuario_and_cliente_in_one_request(self, test_client, db_session):
+    async def test_creates_usuario_and_cliente_in_one_request(
+        self, test_client, db_session
+    ):
         """A single POST creates both the usuario and cliente rows."""
         json = {
             "email": "cliente@example.com",
@@ -117,7 +119,9 @@ class TestRegisterCliente:
 
         assert response.status_code == status.HTTP_201_CREATED
         user = (
-            await db_session.execute(select(User).filter_by(email="cliente@example.com"))
+            await db_session.execute(
+                select(User).filter_by(email="cliente@example.com")
+            )
         ).scalar_one()
         cliente = (
             await db_session.execute(select(Cliente).filter_by(usuario_id=user.id))
@@ -151,7 +155,9 @@ class TestRegisterCliente:
 
 class TestRegisterProfesional:
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_creates_usuario_and_profesional_in_one_request(self, test_client, db_session):
+    async def test_creates_usuario_and_profesional_in_one_request(
+        self, test_client, db_session
+    ):
         """A single POST creates both the usuario and profesional rows."""
         json = {
             "email": "profesional@example.com",
@@ -160,11 +166,15 @@ class TestRegisterProfesional:
             "documento_tipo": "CC",
             "documento_numero": "123456789",
         }
-        response = await test_client.post("/api/v1/auth/register/profesional", json=json)
+        response = await test_client.post(
+            "/api/v1/auth/register/profesional", json=json
+        )
 
         assert response.status_code == status.HTTP_201_CREATED
         user = (
-            await db_session.execute(select(User).filter_by(email="profesional@example.com"))
+            await db_session.execute(
+                select(User).filter_by(email="profesional@example.com")
+            )
         ).scalar_one()
         profesional = (
             await db_session.execute(select(Profesional).filter_by(usuario_id=user.id))
@@ -173,10 +183,14 @@ class TestRegisterProfesional:
         assert profesional.estado_verificacion == "pendiente"
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_rejects_duplicate_documento_numero(self, test_client, db_session, create_user):
+    async def test_rejects_duplicate_documento_numero(
+        self, test_client, db_session, create_user
+    ):
         existing_user = await create_user(email="existing.pro@example.com")
         db_session.add(
-            Profesional(usuario_id=existing_user.id, documento_tipo="CC", documento_numero="999")
+            Profesional(
+                usuario_id=existing_user.id, documento_tipo="CC", documento_numero="999"
+            )
         )
         await db_session.commit()
 
@@ -187,7 +201,9 @@ class TestRegisterProfesional:
             "documento_tipo": "CC",
             "documento_numero": "999",
         }
-        response = await test_client.post("/api/v1/auth/register/profesional", json=json)
+        response = await test_client.post(
+            "/api/v1/auth/register/profesional", json=json
+        )
 
         assert response.status_code == status.HTTP_409_CONFLICT
 
@@ -201,6 +217,8 @@ class TestRegisterProfesional:
             "documento_tipo": "CC",
             "documento_numero": "111",
         }
-        response = await test_client.post("/api/v1/auth/register/profesional", json=json)
+        response = await test_client.post(
+            "/api/v1/auth/register/profesional", json=json
+        )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST

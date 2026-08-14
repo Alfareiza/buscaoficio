@@ -154,7 +154,8 @@ async def register_cliente(
         )
         if not referido.scalars().first():
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="referido_por_id not found"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="referido_por_id not found",
             )
 
     user = User(
@@ -177,7 +178,9 @@ async def register_cliente(
         await db.commit()
     except IntegrityError:
         await db.rollback()
-        logger.warning(f"Cliente registration failed: integrity error email={payload.email}")
+        logger.warning(
+            f"Cliente registration failed: integrity error email={payload.email}"
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Registration conflicts with an existing record",
@@ -229,11 +232,14 @@ async def register_profesional(
         )
 
     dup_doc = await db.execute(
-        select(Profesional).filter(Profesional.documento_numero == payload.documento_numero)
+        select(Profesional).filter(
+            Profesional.documento_numero == payload.documento_numero
+        )
     )
     if dup_doc.scalars().first():
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="documento_numero already registered"
+            status_code=status.HTTP_409_CONFLICT,
+            detail="documento_numero already registered",
         )
 
     user = User(
@@ -258,7 +264,9 @@ async def register_profesional(
         await db.commit()
     except IntegrityError:
         await db.rollback()
-        logger.warning(f"Profesional registration failed: integrity error email={payload.email}")
+        logger.warning(
+            f"Profesional registration failed: integrity error email={payload.email}"
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Registration conflicts with an existing record",

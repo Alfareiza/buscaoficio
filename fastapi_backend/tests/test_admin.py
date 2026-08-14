@@ -49,7 +49,9 @@ class TestUserAdminAuthenticate:
     @pytest.mark.asyncio(loop_scope="function")
     async def test_returns_none_for_unknown_email(self, user_admin: UserAdmin):
         """Return None when no superuser exists for the given email."""
-        result = await user_admin.authenticate("missing@example.com", DEFAULT_USER_PASSWORD)
+        result = await user_admin.authenticate(
+            "missing@example.com", DEFAULT_USER_PASSWORD
+        )
 
         assert result is None
 

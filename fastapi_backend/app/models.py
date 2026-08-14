@@ -15,9 +15,14 @@ class Base(DeclarativeBase):
 
 
 class TimestampMixin:
-    creado_en = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    creado_en = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
     actualizado_en = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )
 
 
@@ -69,7 +74,10 @@ class User(SQLAlchemyBaseUserTableUUID, TimestampMixin, Base):
         "Cliente", back_populates="usuario", uselist=False, cascade="all, delete-orphan"
     )
     profesional = relationship(
-        "Profesional", back_populates="usuario", uselist=False, cascade="all, delete-orphan"
+        "Profesional",
+        back_populates="usuario",
+        uselist=False,
+        cascade="all, delete-orphan",
     )
 
     def __str__(self) -> str:
@@ -82,7 +90,9 @@ class Cliente(TimestampMixin, UsuarioProvisioningDisplayMixin, Base):
     usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), primary_key=True)
     direccion_default = Column(String, nullable=True)
     repeat_customer = Column(Boolean, default=False, nullable=False)
-    referido_por_id = Column(UUID(as_uuid=True), ForeignKey("clientes.usuario_id"), nullable=True)
+    referido_por_id = Column(
+        UUID(as_uuid=True), ForeignKey("clientes.usuario_id"), nullable=True
+    )
 
     usuario = relationship("User", back_populates="cliente")
 
