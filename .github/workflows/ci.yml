@@ -11,12 +11,12 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
-      ACCESS_SECRET_KEY: ${{ secrets.ACCESS_SECRET_KEY }}
-      RESET_PASSWORD_SECRET_KEY: ${{ secrets.RESET_PASSWORD_SECRET_KEY }}
-      VERIFICATION_SECRET_KEY: ${{ secrets.VERIFICATION_SECRET_KEY }}
-      CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+      DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5433/testdatabase
+      TEST_DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5433/testdatabase
+      ACCESS_SECRET_KEY: test-access-secret
+      RESET_PASSWORD_SECRET_KEY: test-reset-secret
+      VERIFICATION_SECRET_KEY: test-verification-secret
+      CORS_ORIGINS: '["*"]'
 
     services:
       postgres:
@@ -54,6 +54,7 @@ jobs:
 
       - name: Coveralls GitHub Action
         uses: coverallsapp/github-action@v2.3.4
+        continue-on-error: true
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           flag-name: python-coverage
@@ -90,6 +91,7 @@ jobs:
 
       - name: Coveralls GitHub Action
         uses: coverallsapp/github-action@v2.3.4
+        continue-on-error: true
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           flag-name: node-coverage
@@ -106,6 +108,7 @@ jobs:
     steps:
       - name: Close parallel build
         uses: coverallsapp/github-action@v2.3.4
+        continue-on-error: true
         with:
           parallel-finished: true
           carryforward: "python-coverage,node-coverage"
