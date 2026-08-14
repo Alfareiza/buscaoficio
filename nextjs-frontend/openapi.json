@@ -5,7 +5,7 @@
     "version": "0.1.0"
   },
   "paths": {
-    "/auth/jwt/login": {
+    "/api/v1/auth/jwt/login": {
       "post": {
         "tags": [
           "auth"
@@ -45,7 +45,7 @@
         }
       }
     },
-    "/auth/jwt/logout": {
+    "/api/v1/auth/jwt/logout": {
       "post": {
         "tags": [
           "auth"
@@ -70,7 +70,7 @@
         ]
       }
     },
-    "/auth/register": {
+    "/api/v1/auth/register": {
       "post": {
         "tags": [
           "auth"
@@ -112,7 +112,91 @@
         }
       }
     },
-    "/auth/forgot-password": {
+    "/api/v1/auth/register/cliente": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Register as cliente",
+        "description": "Create a usuario and its cliente profile in one request.\n\nCombines POST /auth/register + POST /users/me/cliente. Next:\nPOST /auth/request-verify-token, POST /auth/verify, then\nPOST /auth/jwt/login.",
+        "operationId": "register:register_cliente",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClienteRegisterCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register/profesional": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Register as profesional",
+        "description": "Create a usuario and its profesional profile in one request.\n\nCombines POST /auth/register + POST /users/me/profesional. Starts as\nestado_verificacion=pendiente; verification review happens out of band.\nNext: POST /auth/request-verify-token, POST /auth/verify, then\nPOST /auth/jwt/login.",
+        "operationId": "register:register_profesional",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfesionalRegisterCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/forgot-password": {
       "post": {
         "tags": [
           "auth"
@@ -152,7 +236,7 @@
         }
       }
     },
-    "/auth/reset-password": {
+    "/api/v1/auth/reset-password": {
       "post": {
         "tags": [
           "auth"
@@ -192,7 +276,7 @@
         }
       }
     },
-    "/auth/request-verify-token": {
+    "/api/v1/auth/request-verify-token": {
       "post": {
         "tags": [
           "auth"
@@ -232,7 +316,7 @@
         }
       }
     },
-    "/auth/verify": {
+    "/api/v1/auth/verify": {
       "post": {
         "tags": [
           "auth"
@@ -274,7 +358,7 @@
         }
       }
     },
-    "/users/me": {
+    "/api/v1/users/me": {
       "get": {
         "tags": [
           "users"
@@ -346,7 +430,7 @@
         ]
       }
     },
-    "/users/{id}": {
+    "/api/v1/users/{id}": {
       "get": {
         "tags": [
           "users"
@@ -489,7 +573,7 @@
         }
       }
     },
-    "/users/me/cliente": {
+    "/api/v1/users/me/cliente": {
       "get": {
         "tags": [
           "users",
@@ -505,52 +589,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ClienteRead"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
-      },
-      "post": {
-        "tags": [
-          "users",
-          "clientes"
-        ],
-        "summary": "Create cliente profile for current user",
-        "description": "Create the current user's cliente profile.\n\nRequires POST /auth/jwt/login. Returns 409 if one already exists.",
-        "operationId": "clientes:create_me",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ClienteCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClienteRead"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -628,64 +666,7 @@
         ]
       }
     },
-    "/users/{id}/cliente": {
-      "post": {
-        "tags": [
-          "users",
-          "clientes"
-        ],
-        "summary": "Create cliente profile for user by id (superuser)",
-        "description": "Create a cliente profile for a user by id.\n\nSuperuser only after POST /auth/jwt/login. Use POST /users/me/cliente\nfor the current user.",
-        "operationId": "clientes:create",
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ClienteCreate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClienteRead"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
+    "/api/v1/users/{id}/cliente": {
       "get": {
         "tags": [
           "users",
@@ -831,7 +812,7 @@
         }
       }
     },
-    "/users/me/profesional": {
+    "/api/v1/users/me/profesional": {
       "get": {
         "tags": [
           "users",
@@ -847,52 +828,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProfesionalRead"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
-      },
-      "post": {
-        "tags": [
-          "users",
-          "profesionales"
-        ],
-        "summary": "Create profesional profile for current user",
-        "description": "Create the current user's profesional profile.\n\nRequires POST /auth/jwt/login. Starts as estado_verificacion=pendiente;\nverification review happens out of band (see the operating doc).",
-        "operationId": "profesionales:create_me",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProfesionalCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProfesionalRead"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -970,64 +905,7 @@
         ]
       }
     },
-    "/users/{id}/profesional": {
-      "post": {
-        "tags": [
-          "users",
-          "profesionales"
-        ],
-        "summary": "Create profesional profile for user by id (superuser)",
-        "description": "Create a profesional profile for a user by id.\n\nSuperuser only after POST /auth/jwt/login. Use POST\n/users/me/profesional for the current user.",
-        "operationId": "profesionales:create",
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProfesionalCreate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProfesionalRead"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
+    "/api/v1/users/{id}/profesional": {
       "get": {
         "tags": [
           "users",
@@ -1173,7 +1051,7 @@
         }
       }
     },
-    "/items/": {
+    "/api/v1/items/": {
       "get": {
         "tags": [
           "item"
@@ -1284,7 +1162,7 @@
         }
       }
     },
-    "/items/{item_id}": {
+    "/api/v1/items/{item_id}": {
       "delete": {
         "tags": [
           "item"
@@ -1421,35 +1299,6 @@
         "type": "object",
         "title": "ClienteAdminUpdate"
       },
-      "ClienteCreate": {
-        "properties": {
-          "direccion_default": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Direccion Default"
-          },
-          "referido_por_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Referido Por Id"
-          }
-        },
-        "type": "object",
-        "title": "ClienteCreate"
-      },
       "ClienteRead": {
         "properties": {
           "direccion_default": {
@@ -1475,11 +1324,6 @@
             ],
             "title": "Referido Por Id"
           },
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Id"
-          },
           "usuario_id": {
             "type": "string",
             "format": "uuid",
@@ -1502,13 +1346,106 @@
         },
         "type": "object",
         "required": [
-          "id",
           "usuario_id",
           "repeat_customer",
           "creado_en",
           "actualizado_en"
         ],
         "title": "ClienteRead"
+      },
+      "ClienteRegisterCreate": {
+        "properties": {
+          "direccion_default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direccion Default"
+          },
+          "referido_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referido Por Id"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active",
+            "default": true
+          },
+          "is_superuser": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Superuser",
+            "default": false
+          },
+          "is_verified": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Verified",
+            "default": false
+          },
+          "nombre_completo": {
+            "type": "string",
+            "title": "Nombre Completo"
+          },
+          "whatsapp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Whatsapp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password",
+          "nombre_completo"
+        ],
+        "title": "ClienteRegisterCreate"
       },
       "ClienteUpdate": {
         "properties": {
@@ -1780,45 +1717,6 @@
         "type": "object",
         "title": "ProfesionalAdminUpdate"
       },
-      "ProfesionalCreate": {
-        "properties": {
-          "documento_tipo": {
-            "$ref": "#/components/schemas/TipoDocumento"
-          },
-          "documento_numero": {
-            "type": "string",
-            "title": "Documento Numero"
-          },
-          "anos_experiencia": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Anos Experiencia"
-          },
-          "foto_perfil_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Foto Perfil Url"
-          }
-        },
-        "type": "object",
-        "required": [
-          "documento_tipo",
-          "documento_numero"
-        ],
-        "title": "ProfesionalCreate"
-      },
       "ProfesionalRead": {
         "properties": {
           "documento_tipo": {
@@ -1849,11 +1747,6 @@
               }
             ],
             "title": "Foto Perfil Url"
-          },
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Id"
           },
           "usuario_id": {
             "type": "string",
@@ -1913,7 +1806,6 @@
         "required": [
           "documento_tipo",
           "documento_numero",
-          "id",
           "usuario_id",
           "estado_verificacion",
           "whatsapp_verificado",
@@ -1923,6 +1815,108 @@
           "actualizado_en"
         ],
         "title": "ProfesionalRead"
+      },
+      "ProfesionalRegisterCreate": {
+        "properties": {
+          "documento_tipo": {
+            "$ref": "#/components/schemas/TipoDocumento"
+          },
+          "documento_numero": {
+            "type": "string",
+            "title": "Documento Numero"
+          },
+          "anos_experiencia": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anos Experiencia"
+          },
+          "foto_perfil_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Foto Perfil Url"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active",
+            "default": true
+          },
+          "is_superuser": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Superuser",
+            "default": false
+          },
+          "is_verified": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Verified",
+            "default": false
+          },
+          "nombre_completo": {
+            "type": "string",
+            "title": "Nombre Completo"
+          },
+          "whatsapp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Whatsapp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "documento_tipo",
+          "documento_numero",
+          "email",
+          "password",
+          "nombre_completo"
+        ],
+        "title": "ProfesionalRegisterCreate"
       },
       "ProfesionalUpdate": {
         "properties": {
@@ -1957,9 +1951,17 @@
         "enum": [
           "CC",
           "CE",
-          "PASAPORTE"
+          "TI",
+          "RC",
+          "PA",
+          "MS",
+          "PE",
+          "CN",
+          "PT",
+          "SC"
         ],
-        "title": "TipoDocumento"
+        "title": "TipoDocumento",
+        "description": "Each member carries a human-readable Spanish label alongside its code\n(e.g. TipoDocumento.CC.label == \"C\u00e9dula de Ciudadan\u00eda\"), used to render\nadmin dropdown options \u2014 the codes alone aren't self-explanatory."
       },
       "UserCreate": {
         "properties": {
@@ -2264,7 +2266,7 @@
         "flows": {
           "password": {
             "scopes": {},
-            "tokenUrl": "auth/jwt/login"
+            "tokenUrl": "api/v1/auth/jwt/login"
           }
         }
       }
