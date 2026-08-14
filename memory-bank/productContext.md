@@ -12,9 +12,16 @@ The template gives a clean, typed full-stack starting point so product work can 
 ## How it should work
 1. Backend exposes FastAPI routes and Pydantic models; OpenAPI schema is generated.
 2. Frontend regenerates a typed client from that schema.
-3. Users authenticate and manage items via the Next.js dashboard.
-4. Schema changes to Postgres go through Alembic migrations (explicit, not automatic on model edit).
-5. Unhandled errors, traces, and app logs go to Sentry when a DSN is set; local without DSN stays silent.
+3. Users register as a `Cliente` or a `Profesional` (via `/api/v1/auth/register/cliente`
+   or `/register/profesional`); each shares its `Usuario` identity via `usuario_id` as PK
+   (no separate surrogate id), so one person can hold both roles. **The Next.js
+   registration UI has not been updated to this flow yet — see GitHub issue #7.**
+4. Users authenticate and manage items via the Next.js dashboard (template leftover).
+5. Schema changes to Postgres go through Alembic migrations (explicit, not automatic on
+   model edit). Running them in production is a separate, deliberate step — either the
+   `migrate.yml` GitHub Actions workflow (triggered by migration-file changes on `main`,
+   or manually) or the migration step baked into `prod-backend-deploy.yml`.
+6. Unhandled errors, traces, and app logs go to Sentry when a DSN is set; local without DSN stays silent.
 
 ## UX goals
 - Immediate usable auth + dashboard after setup.

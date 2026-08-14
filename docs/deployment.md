@@ -67,6 +67,11 @@ You can do it with the following commands:
 
    4. **Migrating the Database**
       - The database migration will happen automatically during the GitHub action deployment, setting up the necessary tables and schema.
+      - There is also a dedicated `.github/workflows/migrate.yml` workflow that runs
+        `alembic upgrade head` against production on its own, without a full backend
+        deploy. It triggers on a push to `main` that touches
+        `fastapi_backend/alembic_migrations/**` or `fastapi_backend/alembic.ini`, or can
+        be run manually from the Actions tab ("Run workflow").
 ### Frontend Setup
 
 1. Link the nextjs-frontend Project

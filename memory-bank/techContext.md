@@ -44,10 +44,19 @@ Changed from defaults (Postgres 5432/5433, API 8000) to avoid conflict with anot
 - Docker Compose: `backend`, `frontend`, `db`, `db_test`, `mailhog`
 - Shared volume `local-shared-data` for OpenAPI schema between BE and FE containers
 - Makefile for start, migrate, test, shells
-- GitHub Actions: CI (FastAPI + Next.js), pre-commit, release
+- GitHub Actions: `ci.yml` (FastAPI + Next.js + Coveralls), `pre-commit.yml`,
+  `migrate.yml` (Alembic migrations on demand — path-filtered push to `main` or manual
+  `workflow_dispatch`), `release.yml`. See `systemPatterns.md` → "CI/CD pattern" for the
+  full table and known gotchas (ruff version pinning, `--all-files` hook triggering).
 - Deploy target: **Vercel** (separate FE/BE projects; prod deploy workflow files at repo root, move into `.github/workflows` to enable)
-- Quality: pre-commit, Ruff, mypy, ESLint/Prettier
+- Quality: pre-commit, Ruff (pinned to **v0.12.2** in `.pre-commit-config.yaml` — do not
+  rely on the older `ruff<0.2` pinned in `fastapi_backend/pyproject.toml`'s dev deps for
+  formatting decisions), mypy, ESLint/Prettier
 - Docs: MkDocs Material
+- Repo secrets: **none configured** as of 2026-08-14 (no `DATABASE_URL`,
+  `ACCESS_SECRET_KEY`, `COVERALLS_REPO_TOKEN`, etc. in GitHub Actions secrets). CI
+  workflows use hardcoded test values instead (see `systemPatterns.md`); this repo is
+  also not yet registered on coveralls.io.
 
 ## E2E type safety
 Not “E2W”. End-to-end type safety means:
