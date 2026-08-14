@@ -14,7 +14,15 @@ from tests.conftest import DEFAULT_USER_PASSWORD, issue_auth_headers
 MISSING_USER_ID = "00000000-0000-0000-0000-000000000000"
 NEW_EMAIL = "updated@example.com"
 NEW_PASSWORD = "NewPassword456#"
-USER_READ_FIELDS = {"id", "email", "is_active", "is_superuser", "is_verified"}
+USER_READ_FIELDS = {
+    "id",
+    "email",
+    "is_active",
+    "is_superuser",
+    "is_verified",
+    "nombre_completo",
+    "whatsapp",
+}
 
 
 def assert_user_payload(payload: dict, user: User, **overrides) -> None:
@@ -38,11 +46,11 @@ class TestUsersAuthentication:
     @pytest.mark.parametrize(
         "method, path",
         [
-            ("GET", "/users/me"),
-            ("PATCH", "/users/me"),
-            ("GET", f"/users/{MISSING_USER_ID}"),
-            ("PATCH", f"/users/{MISSING_USER_ID}"),
-            ("DELETE", f"/users/{MISSING_USER_ID}"),
+            ("GET", "/api/v1/users/me"),
+            ("PATCH", "/api/v1/users/me"),
+            ("GET", f"/api/v1/users/{MISSING_USER_ID}"),
+            ("PATCH", f"/api/v1/users/{MISSING_USER_ID}"),
+            ("DELETE", f"/api/v1/users/{MISSING_USER_ID}"),
         ],
     )
     @pytest.mark.asyncio(loop_scope="function")
@@ -67,7 +75,7 @@ class TestUsersAuthorization:
         user_id = authenticated_user["user"].id
         response = await test_client.request(
             method,
-            f"/users/{user_id}",
+            f"/api/v1/users/{user_id}",
             headers=authenticated_user["headers"],
             json={},
         )
@@ -84,7 +92,7 @@ class TestGetMe:
     ):
         """Return the authenticated user without exposing the password hash."""
         response = await test_client.get(
-            "/users/me", headers=authenticated_user["headers"]
+            "/api/v1/users/me", headers=authenticated_user["headers"]
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -98,7 +106,7 @@ class TestGetMe:
         user = await create_user(is_active=False)
         headers = await issue_auth_headers(user)
 
-        response = await test_client.get("/users/me", headers=headers)
+        response = await test_client.get("/api/v1/users/me", headers=headers)
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
@@ -112,7 +120,7 @@ class TestPatchMe:
     ):
         """Change email and mark the account unverified."""
         response = await test_client.patch(
-            "/users/me",
+            "/api/v1/users/me",
             headers=authenticated_user["headers"],
             json={"email": NEW_EMAIL},
         )
@@ -133,7 +141,7 @@ class TestPatchMe:
         other = await create_user(email="taken@example.com")
 
         response = await test_client.patch(
-            "/users/me",
+            "/api/v1/users/me",
             headers=authenticated_user["headers"],
             json={"email": other.email},
         )
@@ -165,7 +173,7 @@ class TestPatchMe:
     ):
         """Return 400 when the new password fails UserManager rules."""
         response = await test_client.patch(
-            "/users/me",
+            "/api/v1/users/me",
             headers=authenticated_user["headers"],
             json={"password": password},
         )
@@ -183,21 +191,21 @@ class TestPatchMe:
         email = authenticated_user["user"].email
 
         response = await test_client.patch(
-            "/users/me",
+            "/api/v1/users/me",
             headers=authenticated_user["headers"],
             json={"password": NEW_PASSWORD},
         )
         assert response.status_code == status.HTTP_200_OK
 
         new_login = await test_client.post(
-            "/auth/jwt/login",
+            "/api/v1/auth/jwt/login",
             data={"username": email, "password": NEW_PASSWORD},
         )
         assert new_login.status_code == status.HTTP_200_OK
         assert "access_token" in new_login.json()
 
         old_login = await test_client.post(
-            "/auth/jwt/login",
+            "/api/v1/auth/jwt/login",
             data={"username": email, "password": DEFAULT_USER_PASSWORD},
         )
         assert old_login.status_code == status.HTTP_400_BAD_REQUEST
@@ -208,7 +216,7 @@ class TestPatchMe:
     ):
         """Ignore is_superuser on PATCH /me (safe=True)."""
         response = await test_client.patch(
-            "/users/me",
+            "/api/v1/users/me",
             headers=authenticated_user["headers"],
             json={"is_superuser": True, "is_verified": False, "is_active": False},
         )
@@ -231,7 +239,7 @@ class TestGetUserById:
         target = await create_user(email="target@example.com")
 
         response = await test_client.get(
-            f"/users/{target.id}",
+            f"/api/v1/users/{target.id}",
             headers=authenticated_superuser["headers"],
         )
 
@@ -244,7 +252,7 @@ class TestGetUserById:
     ):
         """Return 404 when the UUID does not match a user."""
         response = await test_client.get(
-            f"/users/{MISSING_USER_ID}",
+            f"/api/v1/users/{MISSING_USER_ID}",
             headers=authenticated_superuser["headers"],
         )
 
@@ -256,7 +264,7 @@ class TestGetUserById:
     ):
         """Return 404 when the path id is not a valid UUID."""
         response = await test_client.get(
-            "/users/not-a-uuid",
+            "/api/v1/users/not-a-uuid",
             headers=authenticated_superuser["headers"],
         )
 
@@ -277,7 +285,7 @@ class TestPatchUserById:
         target = await create_user(email="target@example.com")
 
         response = await test_client.patch(
-            f"/users/{target.id}",
+            f"/api/v1/users/{target.id}",
             headers=authenticated_superuser["headers"],
             json={"is_superuser": True, "is_active": False},
         )
@@ -302,7 +310,7 @@ class TestPatchUserById:
         other = await create_user(email="taken@example.com")
 
         response = await test_client.patch(
-            f"/users/{target.id}",
+            f"/api/v1/users/{target.id}",
             headers=authenticated_superuser["headers"],
             json={"email": other.email},
         )
@@ -316,7 +324,7 @@ class TestPatchUserById:
     ):
         """Return 404 when patching a user that does not exist."""
         response = await test_client.patch(
-            f"/users/{MISSING_USER_ID}",
+            f"/api/v1/users/{MISSING_USER_ID}",
             headers=authenticated_superuser["headers"],
             json={"email": NEW_EMAIL},
         )
@@ -343,7 +351,7 @@ class TestDeleteUser:
         await db_session.commit()
 
         response = await test_client.delete(
-            f"/users/{target.id}",
+            f"/api/v1/users/{target.id}",
             headers=authenticated_superuser["headers"],
         )
 
@@ -362,7 +370,7 @@ class TestDeleteUser:
     ):
         """Return 404 when deleting a user that does not exist."""
         response = await test_client.delete(
-            f"/users/{uuid.uuid4()}",
+            f"/api/v1/users/{uuid.uuid4()}",
             headers=authenticated_superuser["headers"],
         )
 

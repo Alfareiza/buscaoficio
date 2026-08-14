@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.sql import func
@@ -20,6 +21,43 @@ class TimestampMixin:
     )
 
 
+class UsuarioProvisioningDisplayMixin:
+    """Backs the admin-only usuario_email/password/nombre_completo/whatsapp
+    form fields (app/admin.py's UsuarioProvisioningAdminMixin) with the
+    linked Usuario's real values, so the Cliente/Profesional edit form can
+    show and update them — without ever risking an async lazy-load crash if
+    the `usuario` relationship happens not to be eager-loaded for a given
+    fetch (e.g. a list-view row). sqlalchemy.inspect(self).unloaded is a
+    synchronous, non-querying check: if `usuario` isn't already loaded, these
+    just read as None (same as before eager loading existed) instead of
+    touching the relationship at all.
+    """
+
+    def _loaded_usuario(self):
+        if "usuario" in sa_inspect(self).unloaded:
+            return None
+        return self.usuario
+
+    @property
+    def usuario_email(self) -> str | None:
+        usuario = self._loaded_usuario()
+        return usuario.email if usuario else None
+
+    @property
+    def usuario_password(self) -> None:
+        return None  # never echo the stored hash back
+
+    @property
+    def usuario_nombre_completo(self) -> str | None:
+        usuario = self._loaded_usuario()
+        return usuario.nombre_completo if usuario else None
+
+    @property
+    def usuario_whatsapp(self) -> str | None:
+        usuario = self._loaded_usuario()
+        return usuario.whatsapp if usuario else None
+
+
 class User(SQLAlchemyBaseUserTableUUID, TimestampMixin, Base):
     __tablename__ = "usuarios"
 
@@ -34,24 +72,31 @@ class User(SQLAlchemyBaseUserTableUUID, TimestampMixin, Base):
         "Profesional", back_populates="usuario", uselist=False, cascade="all, delete-orphan"
     )
 
+    def __str__(self) -> str:
+        return f"{self.nombre_completo} ({self.email})"
 
-class Cliente(TimestampMixin, Base):
+
+class Cliente(TimestampMixin, UsuarioProvisioningDisplayMixin, Base):
     __tablename__ = "clientes"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), unique=True, nullable=False)
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), primary_key=True)
     direccion_default = Column(String, nullable=True)
     repeat_customer = Column(Boolean, default=False, nullable=False)
-    referido_por_id = Column(UUID(as_uuid=True), ForeignKey("clientes.id"), nullable=True)
+    referido_por_id = Column(UUID(as_uuid=True), ForeignKey("clientes.usuario_id"), nullable=True)
 
     usuario = relationship("User", back_populates="cliente")
 
+    def __str__(self) -> str:
+        usuario = self._loaded_usuario()
+        if usuario is not None:
+            return f"{usuario.nombre_completo} ({usuario.email})"
+        return f"Cliente {self.usuario_nombre_completo}"
 
-class Profesional(TimestampMixin, Base):
+
+class Profesional(TimestampMixin, UsuarioProvisioningDisplayMixin, Base):
     __tablename__ = "profesionales"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), unique=True, nullable=False)
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), primary_key=True)
 
     documento_tipo = Column(String, nullable=False)
     documento_numero = Column(String, unique=True, nullable=False)
@@ -75,6 +120,12 @@ class Profesional(TimestampMixin, Base):
     trabajos_gratis_restantes = Column(Integer, default=3, nullable=False)
 
     usuario = relationship("User", back_populates="profesional")
+
+    def __str__(self) -> str:
+        usuario = self._loaded_usuario()
+        if usuario is not None:
+            return f"{usuario.nombre_completo} ({usuario.email})"
+        return f"Profesional {self.usuario_id}"
 
 
 class Item(Base):

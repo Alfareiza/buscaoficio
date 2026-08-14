@@ -45,10 +45,6 @@ class ClienteBase(BaseModel):
     referido_por_id: UUID | None = None
 
 
-class ClienteCreate(ClienteBase):
-    pass
-
-
 class ClienteUpdate(BaseModel):
     direccion_default: str | None = None
 
@@ -58,7 +54,6 @@ class ClienteAdminUpdate(ClienteUpdate):
 
 
 class ClienteRead(ClienteBase):
-    id: UUID
     usuario_id: UUID
     repeat_customer: bool
     creado_en: datetime
@@ -67,15 +62,15 @@ class ClienteRead(ClienteBase):
     model_config = {"from_attributes": True}
 
 
+class ClienteRegisterCreate(UserCreate, ClienteBase):
+    pass
+
+
 class ProfesionalBase(BaseModel):
     documento_tipo: TipoDocumento
     documento_numero: str
     anos_experiencia: int | None = None
     foto_perfil_url: str | None = None
-
-
-class ProfesionalCreate(ProfesionalBase):
-    pass
 
 
 class ProfesionalUpdate(BaseModel):
@@ -92,7 +87,6 @@ class ProfesionalAdminUpdate(ProfesionalUpdate):
 
 
 class ProfesionalRead(ProfesionalBase):
-    id: UUID
     usuario_id: UUID
     estado_verificacion: EstadoVerificacionProfesional
     score_calificacion: int | None = None
@@ -104,3 +98,7 @@ class ProfesionalRead(ProfesionalBase):
     actualizado_en: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ProfesionalRegisterCreate(UserCreate, ProfesionalBase):
+    pass
