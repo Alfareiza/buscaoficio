@@ -7,6 +7,7 @@ new to the project — it explains why these routes exist explicitly instead of
 relying on fastapi-users' built-in router, how permissions work, and how to
 create a superuser.
 """
+
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
