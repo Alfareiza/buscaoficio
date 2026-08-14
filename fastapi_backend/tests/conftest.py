@@ -97,6 +97,7 @@ async def create_user(db_session: AsyncSession) -> Callable[..., Awaitable[User]
         *,
         email: str = DEFAULT_USER_EMAIL,
         password: str = DEFAULT_USER_PASSWORD,
+        nombre_completo: str = "Test User",
         is_superuser: bool = False,
         is_active: bool = True,
         is_verified: bool = True,
@@ -105,6 +106,7 @@ async def create_user(db_session: AsyncSession) -> Callable[..., Awaitable[User]
 
         :param email: Unique email for the user.
         :param password: Plaintext password to hash and store.
+        :param nombre_completo: Full name (required, non-nullable column).
         :param is_superuser: Whether the user has admin privileges.
         :param is_active: Whether the user can authenticate.
         :param is_verified: Whether the email is verified.
@@ -114,6 +116,7 @@ async def create_user(db_session: AsyncSession) -> Callable[..., Awaitable[User]
             id=uuid.uuid4(),
             email=email,
             hashed_password=PasswordHelper().hash(password),
+            nombre_completo=nombre_completo,
             is_active=is_active,
             is_superuser=is_superuser,
             is_verified=is_verified,

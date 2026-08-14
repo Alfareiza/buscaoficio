@@ -10,7 +10,7 @@ class TestItems:
         """Test creating an item."""
         item_data = {"name": "Test Item", "description": "Test Description"}
         create_response = await test_client.post(
-            "/items/", json=item_data, headers=authenticated_user["headers"]
+            "/api/v1/items/", json=item_data, headers=authenticated_user["headers"]
         )
 
         assert create_response.status_code == status.HTTP_200_OK
@@ -52,7 +52,7 @@ class TestItems:
 
         # Read items - test pagination response
         read_response = await test_client.get(
-            "/items/", headers=authenticated_user["headers"]
+            "/api/v1/items/", headers=authenticated_user["headers"]
         )
         assert read_response.status_code == status.HTTP_200_OK
         response_data = read_response.json()
@@ -92,7 +92,7 @@ class TestItems:
 
         # Delete the item
         delete_response = await test_client.delete(
-            f"/items/{db_item.id}", headers=authenticated_user["headers"]
+            f"/api/v1/items/{db_item.id}", headers=authenticated_user["headers"]
         )
         assert delete_response.status_code == status.HTTP_200_OK
 
@@ -107,7 +107,7 @@ class TestItems:
         """Test deleting an item that doesn't exist."""
         # Try to delete non-existent item
         delete_response = await test_client.delete(
-            "/items/00000000-0000-0000-0000-000000000000",
+            "/api/v1/items/00000000-0000-0000-0000-000000000000",
             headers=authenticated_user["headers"],
         )
         assert delete_response.status_code == status.HTTP_404_NOT_FOUND
@@ -115,20 +115,20 @@ class TestItems:
     @pytest.mark.asyncio(loop_scope="function")
     async def test_unauthorized_read_items(self, test_client):
         """Test reading items without authentication."""
-        response = await test_client.get("/items/")
+        response = await test_client.get("/api/v1/items/")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_unauthorized_create_item(self, test_client):
         """Test creating item without authentication."""
         item_data = {"name": "Unauthorized Item", "description": "Should fail"}
-        response = await test_client.post("/items/", json=item_data)
+        response = await test_client.post("/api/v1/items/", json=item_data)
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_unauthorized_delete_item(self, test_client):
         """Test deleting item without authentication."""
         response = await test_client.delete(
-            "/items/00000000-0000-0000-0000-000000000000"
+            "/api/v1/items/00000000-0000-0000-0000-000000000000"
         )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED

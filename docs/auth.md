@@ -47,13 +47,41 @@ When registering or resetting a password the following rules are enforced:
 This is the normal path for a new user.
 
 ```
-POST /auth/register               → creates the account
-POST /auth/request-verify-token   → triggers the verification hook (see note below)
-POST /auth/verify                 → marks the account as verified using the token
-POST /auth/jwt/login              → returns a JWT
+POST /api/v1/auth/register               → creates the account
+POST /api/v1/auth/request-verify-token   → triggers the verification hook (see note below)
+POST /api/v1/auth/verify                 → marks the account as verified using the token
+POST /api/v1/auth/jwt/login              → returns a JWT
 ```
 
 > **Why the verification step?** It confirms the user controls the email address they registered with. An unverified account can still log in — `is_verified` is informational unless you add a guard.
+
+#### Registering as cliente or profesional
+
+Buscaoficio users register with one of two roles (a user can hold both).
+Each role's registration is a single request that creates the `usuarios`
+row and the role's `clientes`/`profesionales` row together — no separate
+call to `POST /auth/register` first.
+
+```
+POST /api/v1/auth/register/cliente       → creates the account + cliente profile
+POST /api/v1/auth/register/profesional   → creates the account + profesional profile
+```
+
+Each accepts the same fields as `POST /api/v1/auth/register` (`email`,
+`password`, `nombre_completo`, optional `whatsapp`) plus the role's own
+fields (`direccion_default`/`referido_por_id` for cliente;
+`documento_tipo`/`documento_numero`/`anos_experiencia`/`foto_perfil_url`
+for profesional). Both return `UserRead` and follow with the same
+verify → log in steps above.
+
+> **Known gap:** there is currently no REST endpoint to add the *second*
+> role to an account that already registered with one — `/api/v1/users/me/cliente`
+> and `/api/v1/users/me/profesional` are GET/PATCH/DELETE only now (the POST
+> variants were removed when registration consolidated into the two
+> endpoints above). An admin can still attach the second role via the
+> FastAdmin panel (`/admin`). If self-service dual-role upgrade is needed,
+> a `POST /api/v1/users/me/cliente` (or `/profesional`)-style endpoint
+> would need to be reintroduced.
 
 #### How the verification token reaches the user
 
@@ -76,8 +104,8 @@ The verification flow needs the same treatment: implement `send_verification_ema
 ### 2 · Log in / log out
 
 ```
-POST /auth/jwt/login    → email + password → JWT
-POST /auth/jwt/logout   → invalidates the current token
+POST /api/v1/auth/jwt/login    → email + password → JWT
+POST /api/v1/auth/jwt/logout   → invalidates the current token
 ```
 
 The login endpoint expects `application/x-www-form-urlencoded` with `username` (the email) and `password`. This matches the OAuth2 convention used by the interactive docs at `/docs`.
@@ -89,11 +117,11 @@ The login endpoint expects `application/x-www-form-urlencoded` with `username` (
 For users who have forgotten their password. Requires that email is configured.
 
 ```
-POST /auth/forgot-password   → sends a reset link to the email address
-POST /auth/reset-password    → uses the token from the email to set a new password
+POST /api/v1/auth/forgot-password   → sends a reset link to the email address
+POST /api/v1/auth/reset-password    → uses the token from the email to set a new password
 ```
 
-After resetting, the user logs in normally via `POST /auth/jwt/login`.
+After resetting, the user logs in normally via `POST /api/v1/auth/jwt/login`.
 
 > The API intentionally does not reveal whether the email exists in the database. Both valid and unknown emails receive the same empty response to avoid leaking user information.
 
@@ -108,7 +136,7 @@ The project currently provides **two levels of access**:
 | Any authenticated active user | `current_active_user` dependency |
 | Superusers only | `current_superuser` dependency |
 
-These are injected as FastAPI dependencies in route handlers. For example, `/users/me` requires any active user, while `/users/{id}` (GET, PATCH, DELETE) requires a superuser.
+These are injected as FastAPI dependencies in route handlers. For example, `/api/v1/users/me` requires any active user, while `/api/v1/users/{id}` (GET, PATCH, DELETE) requires a superuser.
 
 **What is NOT implemented yet:**
 
@@ -136,10 +164,10 @@ async def admin_route(user: User = Depends(current_superuser)):
 
 ## Creating a superuser
 
-There is no `createsuperuser` CLI command yet. The current workaround is to create a user via `POST /auth/register` and then promote it directly in the database:
+There is no `createsuperuser` CLI command yet. The current workaround is to create a user via `POST /api/v1/auth/register` and then promote it directly in the database:
 
 ```sql
-UPDATE "user" SET is_superuser = true WHERE email = 'you@example.com';
+UPDATE usuarios SET is_superuser = true WHERE email = 'you@example.com';
 ```
 
 Connect to the local database with:
@@ -154,19 +182,21 @@ docker compose exec db psql -U postgres -d postgres
 
 ## Routes overview
 
-All routes live under the `/auth` prefix and are defined in `fastapi_backend/app/routes/auth.py`.
+All routes live under the `/api/v1/auth` prefix and are defined in `fastapi_backend/app/routes/auth.py`.
 
 > These routes were written explicitly (rather than using fastapi-users' built-in router) to allow clear docstrings and summary labels in the OpenAPI docs. The underlying logic still delegates to the `UserManager` from fastapi-users.
 
 | Method | Path | Who can call it |
 |--------|------|-----------------|
-| POST | `/auth/register` | Anyone |
-| POST | `/auth/jwt/login` | Anyone |
-| POST | `/auth/jwt/logout` | Authenticated user |
-| POST | `/auth/forgot-password` | Anyone |
-| POST | `/auth/reset-password` | Anyone (needs the emailed token) |
-| POST | `/auth/request-verify-token` | Anyone |
-| POST | `/auth/verify` | Anyone (needs the emailed token) |
+| POST | `/api/v1/auth/register` | Anyone |
+| POST | `/api/v1/auth/register/cliente` | Anyone |
+| POST | `/api/v1/auth/register/profesional` | Anyone |
+| POST | `/api/v1/auth/jwt/login` | Anyone |
+| POST | `/api/v1/auth/jwt/logout` | Authenticated user |
+| POST | `/api/v1/auth/forgot-password` | Anyone |
+| POST | `/api/v1/auth/reset-password` | Anyone (needs the emailed token) |
+| POST | `/api/v1/auth/request-verify-token` | Anyone |
+| POST | `/api/v1/auth/verify` | Anyone (needs the emailed token) |
 
 Interactive docs with a built-in "Authorize" button: **http://localhost:8001/docs**
 
@@ -194,14 +224,14 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 **Q: Why are there explicit route handlers if fastapi-users already provides them?**  
 A: To add meaningful `summary` labels and docstrings that appear in the OpenAPI docs. The logic inside still calls fastapi-users' `UserManager`.
 
-**Q: I called `/auth/request-verify-token` but never received an email — is that normal?**  
-A: Yes, for now. The verification email is not implemented yet. The token is printed to the server log instead. Copy it from there and post it to `POST /auth/verify` manually.
+**Q: I called `/api/v1/auth/request-verify-token` but never received an email — is that normal?**  
+A: Yes, for now. The verification email is not implemented yet. The token is printed to the server log instead. Copy it from there and post it to `POST /api/v1/auth/verify` manually.
 
-**Q: The `/auth/forgot-password` endpoint returned 202 but I never got an email — why?**  
+**Q: The `/api/v1/auth/forgot-password` endpoint returned 202 but I never got an email — why?**  
 A: Locally, emails are caught by MailHog at `http://localhost:8025`. Make sure the MailHog container is running (`make docker-up-mailhog`) and that your `.env` points to it. Note that password reset emails are sent; verification emails are not yet.
 
 **Q: How do I know which token to use where?**  
-A: There is only one token type — the JWT you get from `/auth/jwt/login`. Use it as `Authorization: Bearer <token>` on every protected request.
+A: There is only one token type — the JWT you get from `/api/v1/auth/jwt/login`. Use it as `Authorization: Bearer <token>` on every protected request.
 
 **Q: Can I create a superuser without touching the database directly?**  
 A: Not yet. See the [Creating a superuser](#creating-a-superuser) section above.

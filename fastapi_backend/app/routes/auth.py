@@ -15,10 +15,19 @@ from fastapi_users import exceptions
 from fastapi_users.authentication import Strategy
 from fastapi_users.router.common import ErrorCode
 from pydantic import EmailStr
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 from app.config import logger
-from app.models import User
-from app.schemas import UserCreate, UserRead
+from app.database import get_async_session
+from app.models import Cliente, Profesional, User
+from app.schemas import (
+    ClienteRegisterCreate,
+    ProfesionalRegisterCreate,
+    UserCreate,
+    UserRead,
+)
 from app.users import UserManager, auth_backend, current_user_token, get_user_manager
 
 router = APIRouter(tags=["auth"])
@@ -99,6 +108,166 @@ async def register(
                 "reason": exc.reason,
             },
         )
+
+
+@router.post(
+    "/register/cliente",
+    summary="Register as cliente",
+    response_model=UserRead,
+    status_code=status.HTTP_201_CREATED,
+    name="register:register_cliente",
+)
+async def register_cliente(
+    request: Request,
+    payload: ClienteRegisterCreate,
+    db: AsyncSession = Depends(get_async_session),
+    user_manager: UserManager = Depends(get_user_manager),
+):
+    """Create a usuario and its cliente profile in one request.
+
+    Combines POST /auth/register + POST /users/me/cliente. Next:
+    POST /auth/request-verify-token, POST /auth/verify, then
+    POST /auth/jwt/login.
+    """
+    try:
+        await user_manager.validate_password(payload.password, payload)
+    except exceptions.InvalidPasswordException as exc:
+        logger.warning("Cliente registration failed: invalid password")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": ErrorCode.REGISTER_INVALID_PASSWORD,
+                "reason": exc.reason,
+            },
+        )
+
+    if await user_manager.user_db.get_by_email(payload.email) is not None:
+        logger.warning("Cliente registration failed: user already exists")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=ErrorCode.REGISTER_USER_ALREADY_EXISTS,
+        )
+
+    if payload.referido_por_id is not None:
+        referido = await db.execute(
+            select(Cliente).filter(Cliente.usuario_id == payload.referido_por_id)
+        )
+        if not referido.scalars().first():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="referido_por_id not found"
+            )
+
+    user = User(
+        email=payload.email,
+        hashed_password=user_manager.password_helper.hash(payload.password),
+        nombre_completo=payload.nombre_completo,
+        whatsapp=payload.whatsapp,
+    )
+    try:
+        db.add(user)
+        await db.flush()  # populate user.id without committing
+
+        db.add(
+            Cliente(
+                usuario_id=user.id,
+                direccion_default=payload.direccion_default,
+                referido_por_id=payload.referido_por_id,
+            )
+        )
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        logger.warning(f"Cliente registration failed: integrity error email={payload.email}")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Registration conflicts with an existing record",
+        )
+    await db.refresh(user)
+
+    await user_manager.on_after_register(user, request)
+    logger.info(f"Cliente registered usuario_id={user.id}")
+    return user
+
+
+@router.post(
+    "/register/profesional",
+    summary="Register as profesional",
+    response_model=UserRead,
+    status_code=status.HTTP_201_CREATED,
+    name="register:register_profesional",
+)
+async def register_profesional(
+    request: Request,
+    payload: ProfesionalRegisterCreate,
+    db: AsyncSession = Depends(get_async_session),
+    user_manager: UserManager = Depends(get_user_manager),
+):
+    """Create a usuario and its profesional profile in one request.
+
+    Combines POST /auth/register + POST /users/me/profesional. Starts as
+    estado_verificacion=pendiente; verification review happens out of band.
+    Next: POST /auth/request-verify-token, POST /auth/verify, then
+    POST /auth/jwt/login.
+    """
+    try:
+        await user_manager.validate_password(payload.password, payload)
+    except exceptions.InvalidPasswordException as exc:
+        logger.warning("Profesional registration failed: invalid password")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": ErrorCode.REGISTER_INVALID_PASSWORD,
+                "reason": exc.reason,
+            },
+        )
+
+    if await user_manager.user_db.get_by_email(payload.email) is not None:
+        logger.warning("Profesional registration failed: user already exists")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=ErrorCode.REGISTER_USER_ALREADY_EXISTS,
+        )
+
+    dup_doc = await db.execute(
+        select(Profesional).filter(Profesional.documento_numero == payload.documento_numero)
+    )
+    if dup_doc.scalars().first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="documento_numero already registered"
+        )
+
+    user = User(
+        email=payload.email,
+        hashed_password=user_manager.password_helper.hash(payload.password),
+        nombre_completo=payload.nombre_completo,
+        whatsapp=payload.whatsapp,
+    )
+    try:
+        db.add(user)
+        await db.flush()  # populate user.id without committing
+
+        db.add(
+            Profesional(
+                usuario_id=user.id,
+                documento_tipo=payload.documento_tipo,
+                documento_numero=payload.documento_numero,
+                anos_experiencia=payload.anos_experiencia,
+                foto_perfil_url=payload.foto_perfil_url,
+            )
+        )
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        logger.warning(f"Profesional registration failed: integrity error email={payload.email}")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Registration conflicts with an existing record",
+        )
+    await db.refresh(user)
+
+    await user_manager.on_after_register(user, request)
+    logger.info(f"Profesional registered usuario_id={user.id}")
+    return user
 
 
 @router.post(

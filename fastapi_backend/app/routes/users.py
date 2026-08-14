@@ -9,11 +9,9 @@ from app.database import get_async_session
 from app.models import Cliente, Profesional, User
 from app.schemas import (
     ClienteAdminUpdate,
-    ClienteCreate,
     ClienteRead,
     ClienteUpdate,
     ProfesionalAdminUpdate,
-    ProfesionalCreate,
     ProfesionalRead,
     ProfesionalUpdate,
     UserRead,
@@ -195,78 +193,7 @@ async def get_profesional_or_404(usuario_id, db: AsyncSession) -> Profesional:
     return profesional
 
 
-async def create_cliente_for(usuario_id, cliente_create: ClienteCreate, db: AsyncSession) -> Cliente:
-    existing = await db.execute(select(Cliente).filter(Cliente.usuario_id == usuario_id))
-    if existing.scalars().first():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Cliente profile already exists"
-        )
-
-    if cliente_create.referido_por_id is not None:
-        referido = await db.execute(
-            select(Cliente).filter(Cliente.id == cliente_create.referido_por_id)
-        )
-        if not referido.scalars().first():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="referido_por_id not found"
-            )
-
-    db_cliente = Cliente(**cliente_create.model_dump(), usuario_id=usuario_id)
-    db.add(db_cliente)
-    await db.commit()
-    await db.refresh(db_cliente)
-    return db_cliente
-
-
-async def create_profesional_for(
-    usuario_id, profesional_create: ProfesionalCreate, db: AsyncSession
-) -> Profesional:
-    existing = await db.execute(select(Profesional).filter(Profesional.usuario_id == usuario_id))
-    if existing.scalars().first():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Profesional profile already exists"
-        )
-
-    dup_doc = await db.execute(
-        select(Profesional).filter(
-            Profesional.documento_numero == profesional_create.documento_numero
-        )
-    )
-    if dup_doc.scalars().first():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="documento_numero already registered"
-        )
-
-    db_profesional = Profesional(**profesional_create.model_dump(), usuario_id=usuario_id)
-    db.add(db_profesional)
-    await db.commit()
-    await db.refresh(db_profesional)
-    return db_profesional
-
-
 # --- Cliente: self-service (current user) ---
-
-
-@router.post(
-    "/me/cliente",
-    tags=["clientes"],
-    summary="Create cliente profile for current user",
-    response_model=ClienteRead,
-    status_code=status.HTTP_201_CREATED,
-    name="clientes:create_me",
-)
-async def create_my_cliente(
-    cliente_create: ClienteCreate,
-    db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
-):
-    """Create the current user's cliente profile.
-
-    Requires POST /auth/jwt/login. Returns 409 if one already exists.
-    """
-    cliente = await create_cliente_for(user.id, cliente_create, db)
-    logger.info(f"Cliente profile created usuario_id={user.id}")
-    return cliente
 
 
 @router.get(
@@ -336,30 +263,6 @@ async def delete_my_cliente(
 
 
 # --- Cliente: by user id (superuser) ---
-
-
-@router.post(
-    "/{id}/cliente",
-    tags=["clientes"],
-    summary="Create cliente profile for user by id (superuser)",
-    response_model=ClienteRead,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(current_superuser)],
-    name="clientes:create",
-)
-async def create_cliente(
-    cliente_create: ClienteCreate,
-    db: AsyncSession = Depends(get_async_session),
-    target_user: User = Depends(get_user_or_404),
-):
-    """Create a cliente profile for a user by id.
-
-    Superuser only after POST /auth/jwt/login. Use POST /users/me/cliente
-    for the current user.
-    """
-    cliente = await create_cliente_for(target_user.id, cliente_create, db)
-    logger.info(f"Cliente profile created (admin) usuario_id={target_user.id}")
-    return cliente
 
 
 @router.get(
@@ -436,29 +339,6 @@ async def delete_cliente(
 # --- Profesional: self-service (current user) ---
 
 
-@router.post(
-    "/me/profesional",
-    tags=["profesionales"],
-    summary="Create profesional profile for current user",
-    response_model=ProfesionalRead,
-    status_code=status.HTTP_201_CREATED,
-    name="profesionales:create_me",
-)
-async def create_my_profesional(
-    profesional_create: ProfesionalCreate,
-    db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
-):
-    """Create the current user's profesional profile.
-
-    Requires POST /auth/jwt/login. Starts as estado_verificacion=pendiente;
-    verification review happens out of band (see the operating doc).
-    """
-    profesional = await create_profesional_for(user.id, profesional_create, db)
-    logger.info(f"Profesional profile created usuario_id={user.id}")
-    return profesional
-
-
 @router.get(
     "/me/profesional",
     tags=["profesionales"],
@@ -528,30 +408,6 @@ async def delete_my_profesional(
 
 
 # --- Profesional: by user id (superuser) ---
-
-
-@router.post(
-    "/{id}/profesional",
-    tags=["profesionales"],
-    summary="Create profesional profile for user by id (superuser)",
-    response_model=ProfesionalRead,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(current_superuser)],
-    name="profesionales:create",
-)
-async def create_profesional(
-    profesional_create: ProfesionalCreate,
-    db: AsyncSession = Depends(get_async_session),
-    target_user: User = Depends(get_user_or_404),
-):
-    """Create a profesional profile for a user by id.
-
-    Superuser only after POST /auth/jwt/login. Use POST
-    /users/me/profesional for the current user.
-    """
-    profesional = await create_profesional_for(target_user.id, profesional_create, db)
-    logger.info(f"Profesional profile created (admin) usuario_id={target_user.id}")
-    return profesional
 
 
 @router.get(

@@ -25,6 +25,7 @@ from .models import User
 from .schemas import UserCreate
 
 AUTH_URL_PATH = "auth"
+API_V1_PREFIX = "/api/v1"
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
@@ -68,7 +69,9 @@ async def get_user_manager(user_db: SQLAlchemyUserDatabase = Depends(get_user_db
     yield UserManager(user_db)
 
 
-bearer_transport = BearerTransport(tokenUrl=f"{AUTH_URL_PATH}/jwt/login")
+bearer_transport = BearerTransport(
+    tokenUrl=f"{API_V1_PREFIX.lstrip('/')}/{AUTH_URL_PATH}/jwt/login"
+)
 
 
 def get_jwt_strategy() -> JWTStrategy:

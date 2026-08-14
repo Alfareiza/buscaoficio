@@ -15,7 +15,7 @@ from app.routes.users import router as users_router
 
 from . import admin  # noqa: F401
 from .config import STATIC_DIR, logger, settings
-from .users import AUTH_URL_PATH
+from .users import API_V1_PREFIX, AUTH_URL_PATH
 from .utils import simple_generate_unique_route_id
 
 if settings.SENTRY_DSN and "pytest" not in sys.modules:
@@ -58,8 +58,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth_router, prefix=f"/{AUTH_URL_PATH}")
-app.include_router(users_router, prefix="/users")
-app.include_router(items_router, prefix="/items")
+app.include_router(auth_router, prefix=f"{API_V1_PREFIX}/{AUTH_URL_PATH}")
+app.include_router(users_router, prefix=f"{API_V1_PREFIX}/users")
+app.include_router(items_router, prefix=f"{API_V1_PREFIX}/items")
 
 add_pagination(app)
