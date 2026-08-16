@@ -55,6 +55,22 @@ Prefer `make start-*` / `make docker-start-*` over bare `pnpm run dev` or `uv ru
 - To verify a password, use `PasswordHelper().verify_and_update(plain, stored_hash)` — never re-hash and compare
 - Superuser creation: no CLI command; promote via SQL until a `createsuperuser` command is built
 - Full auth documentation for new developers: `docs/auth.md`
+- Fetch a user by UUID inside a custom route with `user_manager.get(user_id)` — fastapi-users has no `get_by_id`.
+
+### JWT refresh token rotation (branch `feature/jwt-refresh-tokens`, tracked in #9, not yet merged)
+Decided 2026-08-15 after a `grill-me` design session comparing against the Hasura JWT/GraphQL best-practices article. Chose **Option B** (rotation) over a simpler single long-lived token, specifically to shrink the access-token blast radius without hurting UX.
+
+- **Two token types, two lifetimes:**
+  - Access token: JWT, 15 min (`ACCESS_TOKEN_EXPIRE_SECONDS`), returned in the login/refresh response body, sent as `Authorization: Bearer <token>`.
+  - Refresh token: opaque random string, 30 days (`REFRESH_TOKEN_EXPIRE_SECONDS`), HttpOnly/Secure/SameSite=Strict cookie, **path-scoped to `/api/v1/auth/jwt/refresh` only** (never sent on other requests).
+- **Fingerprint cookie (double-submit pattern, not a browser fingerprint):** a second random token, same cookie scoping as the refresh token. Both raw values must be presented together on `/auth/jwt/refresh`; both are SHA-256-hashed and compared against the stored row. A leaked refresh token alone (e.g. via logs or an XSS payload reading response bodies) is useless without the paired HttpOnly cookie the attacker's JS cannot read. This is simpler than the originally-scoped "compute a hash from user-agent + IP" approach — no fingerprint-collection code is needed on the frontend.
+- **Storage:** `RefreshToken` model / `refresh_tokens` table (`app/models.py`, migration `d8c5f7a9b3e1`) stores only hashes (`refresh_token_hash`, `fingerprint_hash`), never raw tokens — `user_id`, `expires_at`, `revoked_at`, `created_ip`.
+- **Service layer:** `RefreshTokenManager` (`app/refresh_token_manager.py`) — `generate_tokens`, `store_refresh_token`, `validate_refresh_token`, `rotate_refresh_token`, `detect_theft_and_revoke`, `revoke_all_user_tokens`. All DB-touching methods that mutate state call `db.commit()` internally except `store_refresh_token` (only `flush()`s — the caller commits, since it's also used mid-transaction during registration-style flows).
+- **Rotation:** every successful `POST /auth/jwt/refresh` revokes the old refresh_tokens row and inserts a new one. Legitimate clients always present the newest token.
+- **Theft detection:** if a client presents a refresh token whose row is already revoked (i.e. it was already rotated away — a replay), `detect_theft_and_revoke` revokes **every** active refresh token for that user and the request gets 401. This is deliberate: a replay of an old, already-superseded token is treated as a compromise signal, not a race condition to tolerate.
+- **Logout:** `POST /auth/jwt/logout` revokes **all** refresh tokens for the user (every device/session dies, not just the current one) — a deliberate choice, not the minimal "revoke only this session" option.
+- **Known bug (tracked in #9, not yet fixed):** `expires_in` in the login/refresh JSON response currently returns `RefreshTokenManager.REFRESH_TOKEN_LIFETIME` (30 days) instead of the access token's real lifetime (`settings.ACCESS_TOKEN_EXPIRE_SECONDS`, 15 min). Frontend (#10) must not rely on this field — decode the JWT's own `exp` claim client-side instead (unencrypted, just signed, safe to read).
+- **No cleanup job yet** for expired/revoked `refresh_tokens` rows.
 
 ## Logging & Sentry pattern
 
@@ -111,6 +127,10 @@ Do **not** add a wrapper in `lib/utils.ts`.
   `<img src>` values, so they must be browser URLs on the API origin
   (`http://localhost:8001/static/...`), not a filesystem path and not a Next.js
   `public/` file.
+
+## Testing patterns
+- `tests/conftest.py`'s `test_client` fixture uses `base_url="https://localhost:8001"` (not `http://`) — required so httpx's cookie jar will actually send Secure-flagged cookies (e.g. the refresh/fingerprint cookies) on subsequent requests within a test. Using `http://` makes the client silently drop them, producing confusing 401s that look like an auth bug but are actually a test-harness artifact.
+- Any DB write inside a route handler needs an explicit `await db.commit()`, not just `flush()`. The test harness's `override_get_async_session` closes the session in a `finally` block right after the request completes, which rolls back anything left uncommitted — a later assertion against the same `db_session` fixture will see nothing.
 
 ## Items pattern
 - Router in `app/routes/items.py`

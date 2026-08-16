@@ -8,7 +8,7 @@ This document explains how authentication works in Buscaoficio, what flows are a
 
 Authentication is handled by [fastapi-users](https://fastapi-users.github.io/fastapi-users/), a battle-tested library built on top of FastAPI. You do not need to read its full documentation to work on this project, but knowing it exists helps explain why the code is structured the way it is.
 
-The project uses **JWT Bearer tokens**. After a user logs in they receive a token that must be included in every subsequent request as an `Authorization: Bearer <token>` header. Tokens expire after 1 hour (configurable via `ACCESS_TOKEN_EXPIRE_SECONDS`).
+The project uses **JWT Bearer access tokens paired with rotating refresh tokens**. After a user logs in they receive a short-lived access token (used as `Authorization: Bearer <token>` on every subsequent request) plus a long-lived refresh token set as an HttpOnly cookie. See [Refresh tokens & rotation](#refresh-tokens--rotation) below for the full flow.
 
 Passwords are hashed with **Argon2** (the recommended modern algorithm). bcrypt is registered as a fallback so that passwords hashed with older tools can still be verified.
 
@@ -101,14 +101,67 @@ The verification flow needs the same treatment: implement `send_verification_ema
 
 ---
 
-### 2 · Log in / log out
+### 2 · Log in / refresh / log out
 
 ```
-POST /api/v1/auth/jwt/login    → email + password → JWT
-POST /api/v1/auth/jwt/logout   → invalidates the current token
+POST /api/v1/auth/jwt/login     → email + password → access token + refresh cookies
+POST /api/v1/auth/jwt/refresh   → rotates the refresh token, returns a new access token
+POST /api/v1/auth/jwt/logout    → revokes all refresh tokens for the user
 ```
 
 The login endpoint expects `application/x-www-form-urlencoded` with `username` (the email) and `password`. This matches the OAuth2 convention used by the interactive docs at `/docs`.
+
+---
+
+## Refresh tokens & rotation
+
+Buscaoficio uses **rotating refresh tokens with database-backed revocation and a double-submit fingerprint cookie**. This is the standard pattern for JWT auth in browser apps: short-lived access tokens limit the blast radius of a stolen token, while refresh tokens let the session persist without forcing frequent re-logins.
+
+### Token lifetimes
+
+| Token | Lifetime | Storage |
+|-------|----------|---------|
+| Access token | 15 minutes (`ACCESS_TOKEN_EXPIRE_SECONDS`) | Returned in the login/refresh response body; sent as `Authorization: Bearer <token>` |
+| Refresh token | 30 days (`REFRESH_TOKEN_EXPIRE_SECONDS`) | HttpOnly/Secure/SameSite=Strict cookie, scoped to `/api/v1/auth/jwt/refresh`; hash stored in `refresh_tokens` table |
+| Fingerprint token | Same as refresh token | HttpOnly/Secure/SameSite=Strict cookie, scoped to `/api/v1/auth/jwt/refresh`; hash stored alongside the refresh token row |
+
+### How it works
+
+1. **Login** (`POST /auth/jwt/login`) generates:
+   - A JWT access token (returned in the response body)
+   - A random refresh token + a random fingerprint token (both set as HttpOnly cookies, path-scoped to `/api/v1/auth/jwt/refresh` so they are never sent to other endpoints)
+   - Both raw tokens are hashed (SHA-256) and the hashes are stored in the `refresh_tokens` table, tied to the user and the request's IP
+
+2. **Refresh** (`POST /auth/jwt/refresh`) is called by the frontend shortly before the access token expires:
+   - The server hashes the incoming `refreshToken` and `fingerprintToken` cookies and looks up a matching, non-revoked, non-expired row
+   - If valid: the old row is revoked, a new refresh/fingerprint pair is generated and stored (**rotation**), and a new access token is returned
+   - If the refresh token hash matches a row that **already has a newer generation** (i.e. someone is replaying an old, already-rotated token): every active refresh token for that user is revoked and the request is rejected with 401. This is the **theft-detection** trigger — legitimate clients always use the newest token, so a replay is a strong signal of a stolen token.
+
+3. **Logout** (`POST /auth/jwt/logout`) revokes **all** refresh tokens for the user (not just the current one), so logging out on one device ends every session for that account. The refresh/fingerprint cookies are also cleared.
+
+### Why a separate fingerprint cookie?
+
+The fingerprint token implements a **double-submit cookie pattern**: even if a refresh token leaks (e.g. via a logging bug or an XSS payload that can read response bodies), it is useless without the paired fingerprint cookie, which — being HttpOnly — is never exposed to JavaScript. Both values are required on every `/refresh` call and both are hashed independently in the database.
+
+### Database model
+
+`RefreshToken` (`fastapi_backend/app/models.py`) — table `refresh_tokens`:
+
+| Column | Notes |
+|--------|-------|
+| `user_id` | FK to `usuarios.id` |
+| `refresh_token_hash` | SHA-256 hash of the raw refresh token cookie |
+| `fingerprint_hash` | SHA-256 hash of the raw fingerprint token cookie |
+| `expires_at` | Set at issuance to `now() + REFRESH_TOKEN_EXPIRE_SECONDS` |
+| `revoked_at` | `NULL` while active; set on rotation, logout, or theft detection |
+| `created_ip` | IP the token was issued to (from `X-Forwarded-For` or the connecting socket) |
+
+All rotation/validation/revocation logic lives in `RefreshTokenManager` (`fastapi_backend/app/refresh_token_manager.py`).
+
+### What is NOT implemented yet
+
+- The frontend does not yet call `/auth/jwt/refresh` automatically before the access token expires (silent refresh) or synchronize logout across browser tabs — this is tracked separately from the backend work.
+- Expired/revoked rows are not purged; there is no cleanup job for the `refresh_tokens` table yet.
 
 ---
 
@@ -192,6 +245,7 @@ All routes live under the `/api/v1/auth` prefix and are defined in `fastapi_back
 | POST | `/api/v1/auth/register/cliente` | Anyone |
 | POST | `/api/v1/auth/register/profesional` | Anyone |
 | POST | `/api/v1/auth/jwt/login` | Anyone |
+| POST | `/api/v1/auth/jwt/refresh` | Anyone with a valid refresh + fingerprint cookie pair |
 | POST | `/api/v1/auth/jwt/logout` | Authenticated user |
 | POST | `/api/v1/auth/forgot-password` | Anyone |
 | POST | `/api/v1/auth/reset-password` | Anyone (needs the emailed token) |
@@ -209,7 +263,8 @@ Interactive docs with a built-in "Authorize" button: **http://localhost:8001/doc
 | `ACCESS_SECRET_KEY` | Signs JWT access tokens |
 | `RESET_PASSWORD_SECRET_KEY` | Signs password-reset tokens |
 | `VERIFICATION_SECRET_KEY` | Signs email-verification tokens |
-| `ACCESS_TOKEN_EXPIRE_SECONDS` | Token lifetime in seconds (default: 3600) |
+| `ACCESS_TOKEN_EXPIRE_SECONDS` | Access token lifetime in seconds (default: 900 = 15 minutes) |
+| `REFRESH_TOKEN_EXPIRE_SECONDS` | Refresh token lifetime in seconds (default: 2592000 = 30 days) |
 
 Generate secrets locally with:
 
@@ -231,7 +286,19 @@ A: Yes, for now. The verification email is not implemented yet. The token is pri
 A: Locally, emails are caught by MailHog at `http://localhost:8025`. Make sure the MailHog container is running (`make docker-up-mailhog`) and that your `.env` points to it. Note that password reset emails are sent; verification emails are not yet.
 
 **Q: How do I know which token to use where?**  
-A: There is only one token type — the JWT you get from `/api/v1/auth/jwt/login`. Use it as `Authorization: Bearer <token>` on every protected request.
+A: The access token from `/api/v1/auth/jwt/login` (or `/api/v1/auth/jwt/refresh`) is used as `Authorization: Bearer <token>` on every protected request. The refresh and fingerprint tokens are cookies — you never read or send them manually; the browser attaches them automatically on calls to `/api/v1/auth/jwt/refresh` because they're scoped to that path.
+
+**Q: My access token expired — what do I do?**  
+A: Call `POST /api/v1/auth/jwt/refresh` (no body needed; it reads the refresh/fingerprint cookies automatically) to get a new access token. If that also returns 401, the refresh token has expired, been revoked, or reuse was detected — the user needs to log in again.
+
+**Q: What happens if a refresh token is used twice (e.g. replayed after rotation)?**  
+A: All refresh tokens for that user are immediately revoked and the request is rejected with 401. This is a deliberate theft-detection measure — see [Refresh tokens & rotation](#refresh-tokens--rotation).
+
+**Q: How does the app know when the access token is about to expire, so it can refresh it before that happens?**  
+A: This is a fair thing to wonder, because there's no alarm clock sitting on the server counting down. The trick is that a JWT already carries its own expiry time inside it — the `exp` field, buried in the token itself. It's not secret or encrypted, just signed, so anyone holding the token (including the browser) can peek at it. So the plan is: when the frontend gets a fresh access token, it opens it up, reads that `exp` timestamp, and sets a timer to quietly ask for a new one a couple of minutes before that moment arrives — well before the user would ever notice anything expired. One thing worth flagging: the login/refresh responses also include a field called `expires_in` that's *supposed* to make this easier by just telling you the lifetime directly, but right now it's returning the wrong number (it reports the refresh token's 30-day lifetime instead of the access token's real 15-minute one). So for now, reading the `exp` field inside the token itself is the reliable way — that part is tracked as frontend work still to be built.
+
+**Q: What happens if I just close the browser tab instead of clicking "log out"?**  
+A: Nothing dramatic happens right away, and that's by design. The session doesn't end the instant you close the tab — the refresh token cookie is still sitting there, valid, ready to pick up where you left off if you reopen the site (this is exactly why "remember me for a while" sessions feel seamless). It'll naturally stop working after 30 days of not being used, or sooner if you log out from somewhere, or if something looks like it might've been stolen. So: closing the tab is safe and normal, it just isn't the same thing as logging out — logging out is the only thing that immediately kills the session everywhere.
 
 **Q: Can I create a superuser without touching the database directly?**  
 A: Not yet. See the [Creating a superuser](#creating-a-superuser) section above.

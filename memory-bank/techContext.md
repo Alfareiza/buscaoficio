@@ -24,7 +24,7 @@
 - PostgreSQL 17 (Docker)
 - SQLAlchemy 2 + asyncpg
 - Migrations: Alembic (async)
-- Models: `User` (UUID, fastapi-users) ↔ `Item` (name, description, quantity, FK user, cascade delete)
+- Models: `User` (UUID, fastapi-users) ↔ `Item` (name, description, quantity, FK user, cascade delete); `RefreshToken` (hash, fingerprint hash, expiry, revoked_at, FK user — see `systemPatterns.md`, branch `feature/jwt-refresh-tokens`, not yet merged)
 - Separate test DB: `db_test`
 - Engine uses **NullPool** (serverless / Vercel friendly)
 
@@ -84,6 +84,9 @@ Not “E2W”. End-to-end type safety means:
 ## Key env vars (backend)
 - `DATABASE_URL`, `TEST_DATABASE_URL`
 - `ACCESS_SECRET_KEY`, `RESET_PASSWORD_SECRET_KEY`, `VERIFICATION_SECRET_KEY`
+- `ACCESS_TOKEN_EXPIRE_SECONDS` (default 900 = 15 min, was 3600),
+  `REFRESH_TOKEN_EXPIRE_SECONDS` (default 2592000 = 30 days, new) — see
+  `systemPatterns.md` § Auth pattern for the refresh-token-rotation flow
 - `OPENAPI_OUTPUT_FILE`
 - `CORS_ORIGINS`, `FRONTEND_URL`
 - Mail settings (`MAIL_*`)

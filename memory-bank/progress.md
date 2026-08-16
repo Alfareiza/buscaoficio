@@ -2,6 +2,9 @@
 
 ## What works (template baseline)
 - FastAPI auth (JWT register/login/verify/reset) + users router
+- JWT refresh token rotation with DB-backed revocation + double-submit
+  fingerprint cookie (branch `feature/jwt-refresh-tokens`, **not yet
+  committed/merged** — see Session log below and issue #9)
 - Items CRUD + pagination
 - Next.js auth pages + dashboard
 - OpenAPI → typed FE client generation
@@ -26,6 +29,13 @@
 - [x] FastAdmin site name + header/sign-in logo served from `/static`
 
 ## What's left / unknown
+- [ ] Commit + push `feature/jwt-refresh-tokens` and open PR for #9 (waiting
+  on explicit go-ahead — do not commit/push without it)
+- [ ] Fix `expires_in` bug in login/refresh responses (returns refresh token
+  lifetime instead of access token lifetime) — tracked in #9
+- [ ] Frontend: silent token refresh, cross-tab logout sync (GitHub issue #10)
+- [ ] Cleanup job for expired/revoked `refresh_tokens` rows (not started, not
+  urgent at current scale)
 - [ ] Confirm DBs restarted and migrations applied after port change
 - [ ] Domain product features for "busca oficio" (not started)
 - [ ] Production email provider (beyond MailHog)
@@ -45,6 +55,16 @@
 - `on_after_request_verify` logs `user.id` only — verification email not yet sent.
 - No `createsuperuser` command; must promote via SQL (`UPDATE "user" SET is_superuser = true WHERE email = '...'`).
 - fastadmin `authenticate` hook must use `PasswordHelper().verify_and_update(plain, stored)` — re-hashing produces a different hash every time (random salt).
+- httpx `AsyncClient` test fixture must use `base_url="https://..."` (not
+  `http://`) — Secure-flagged cookies are silently dropped by the client's
+  cookie jar over plain HTTP, causing confusing 401s on anything that reads
+  cookies (e.g. the refresh endpoint) even though the cookies were set fine.
+- `UserManager.get(user_id)` is the fastapi-users method to fetch a user by
+  UUID — there is no `get_by_id`.
+- Any DB write inside a custom auth route needs an explicit `await
+  db.commit()`. The test harness's `get_async_session` override closes the
+  session right after the request completes, silently rolling back anything
+  that was only `flush()`-ed.
 
 ## Session log (2026-08-10 / 2026-08-11)
 - Indexed codebase; reviewed stack by section (FE/BE/DB/DevOps).
@@ -71,3 +91,39 @@
   logger, Jest Sentry mock, and optional `tunnelRoute`.
 - Documented why server/edge/client init files look similar but must stay
   separate (isolated Next.js runtimes; `proxy.ts` is Edge).
+
+## Session log (2026-08-15 / 2026-08-16)
+- Reviewed the Hasura "JWT with GraphQL best practices" article against the
+  existing implementation; identified gaps (no refresh tokens, no
+  server-side logout invalidation, no OWASP fingerprinting, no silent
+  refresh, no cross-tab logout sync).
+- Opened GitHub issues [#8](https://github.com/Alfareiza/buscaoficio/issues/8)
+  (parent/architecture), [#9](https://github.com/Alfareiza/buscaoficio/issues/9)
+  (backend), [#10](https://github.com/Alfareiza/buscaoficio/issues/10)
+  (frontend) to track the work without assumptions baked in.
+- Ran a `grill-me` design session; decided **Option B** — refresh token
+  rotation with DB-backed hash storage + rotation-on-reuse theft detection +
+  a double-submit fingerprint cookie — over a simpler single-token approach.
+  Logout revokes all sessions for the user, not just the current one.
+- Implemented the full backend on branch `feature/jwt-refresh-tokens`:
+  `RefreshToken` model + migration, `RefreshTokenManager` service,
+  rewritten `/auth/jwt/login` + `/auth/jwt/logout`, new `/auth/jwt/refresh`,
+  27 new tests, `docs/auth.md` rewritten. **Left uncommitted** per explicit
+  instruction not to commit/push until told to.
+- Found (via a user question about how the frontend would know an access
+  token is about to expire) that the `expires_in` field in the login/refresh
+  response returns the wrong lifetime (refresh token's, not access token's).
+  Logged as a tracked bug in #9 rather than silently fixed, since it directly
+  shapes how #10 should be implemented (decode the JWT `exp` claim
+  client-side; don't trust `expires_in` as-is).
+- Rewrote issues #9 and #10 to match what was actually built (Option A
+  language removed; Requirement 3 in #10 corrected — it's a server-issued
+  double-submit cookie, not a computed browser fingerprint, so there's no
+  fingerprint-collection code needed on the frontend after all).
+- Added two FAQ entries to `docs/auth.md`: how the frontend will know when
+  to refresh, and what happens if a user just closes the tab instead of
+  logging out.
+- Found and fixed a broken half-refactor in `app/routes/auth.py` /
+  `app/utils.py` (bad absolute import, one leftover call to a deleted
+  private helper) that had crept in outside this conversation's edits —
+  full backend suite (102/102) confirmed green after the fix.
