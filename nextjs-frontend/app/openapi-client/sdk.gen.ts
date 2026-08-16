@@ -15,6 +15,12 @@ import type {
   RegisterRegisterData,
   RegisterRegisterResponses,
   RegisterRegisterErrors,
+  RegisterRegisterClienteData,
+  RegisterRegisterClienteResponses,
+  RegisterRegisterClienteErrors,
+  RegisterRegisterProfesionalData,
+  RegisterRegisterProfesionalResponses,
+  RegisterRegisterProfesionalErrors,
   ResetForgotPasswordData,
   ResetForgotPasswordResponses,
   ResetForgotPasswordErrors,
@@ -41,6 +47,38 @@ import type {
   UsersPatchUserData,
   UsersPatchUserResponses,
   UsersPatchUserErrors,
+  ClientesDeleteMeData,
+  ClientesDeleteMeResponses,
+  ClientesReadMeData,
+  ClientesReadMeResponses,
+  ClientesUpdateMeData,
+  ClientesUpdateMeResponses,
+  ClientesUpdateMeErrors,
+  ClientesDeleteData,
+  ClientesDeleteResponses,
+  ClientesDeleteErrors,
+  ClientesReadData,
+  ClientesReadResponses,
+  ClientesReadErrors,
+  ClientesUpdateData,
+  ClientesUpdateResponses,
+  ClientesUpdateErrors,
+  ProfesionalesDeleteMeData,
+  ProfesionalesDeleteMeResponses,
+  ProfesionalesReadMeData,
+  ProfesionalesReadMeResponses,
+  ProfesionalesUpdateMeData,
+  ProfesionalesUpdateMeResponses,
+  ProfesionalesUpdateMeErrors,
+  ProfesionalesDeleteData,
+  ProfesionalesDeleteResponses,
+  ProfesionalesDeleteErrors,
+  ProfesionalesReadData,
+  ProfesionalesReadResponses,
+  ProfesionalesReadErrors,
+  ProfesionalesUpdateData,
+  ProfesionalesUpdateResponses,
+  ProfesionalesUpdateErrors,
   ReadItemData,
   ReadItemResponses,
   ReadItemErrors,
@@ -87,7 +125,7 @@ export const authJwtLogin = <ThrowOnError extends boolean = false>(
   >({
     ...urlSearchParamsBodySerializer,
     responseType: "json",
-    url: "/auth/jwt/login",
+    url: "/api/v1/auth/jwt/login",
     ...options,
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -117,7 +155,7 @@ export const authJwtLogout = <ThrowOnError extends boolean = false>(
         type: "http",
       },
     ],
-    url: "/auth/jwt/logout",
+    url: "/api/v1/auth/jwt/logout",
     ...options,
   });
 };
@@ -138,7 +176,62 @@ export const registerRegister = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     responseType: "json",
-    url: "/auth/register",
+    url: "/api/v1/auth/register",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+};
+
+/**
+ * Register as cliente
+ * Create a usuario and its cliente profile in one request.
+ *
+ * Combines POST /auth/register + POST /users/me/cliente. Next:
+ * POST /auth/request-verify-token, POST /auth/verify, then
+ * POST /auth/jwt/login.
+ */
+export const registerRegisterCliente = <ThrowOnError extends boolean = false>(
+  options: Options<RegisterRegisterClienteData, ThrowOnError>,
+) => {
+  return (options.client ?? client).post<
+    RegisterRegisterClienteResponses,
+    RegisterRegisterClienteErrors,
+    ThrowOnError
+  >({
+    responseType: "json",
+    url: "/api/v1/auth/register/cliente",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+};
+
+/**
+ * Register as profesional
+ * Create a usuario and its profesional profile in one request.
+ *
+ * Combines POST /auth/register + POST /users/me/profesional. Starts as
+ * estado_verificacion=pendiente; verification review happens out of band.
+ * Next: POST /auth/request-verify-token, POST /auth/verify, then
+ * POST /auth/jwt/login.
+ */
+export const registerRegisterProfesional = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<RegisterRegisterProfesionalData, ThrowOnError>,
+) => {
+  return (options.client ?? client).post<
+    RegisterRegisterProfesionalResponses,
+    RegisterRegisterProfesionalErrors,
+    ThrowOnError
+  >({
+    responseType: "json",
+    url: "/api/v1/auth/register/profesional",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -163,7 +256,7 @@ export const resetForgotPassword = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     responseType: "json",
-    url: "/auth/forgot-password",
+    url: "/api/v1/auth/forgot-password",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -187,7 +280,7 @@ export const resetResetPassword = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     responseType: "json",
-    url: "/auth/reset-password",
+    url: "/api/v1/auth/reset-password",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -211,7 +304,7 @@ export const verifyRequestToken = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     responseType: "json",
-    url: "/auth/request-verify-token",
+    url: "/api/v1/auth/request-verify-token",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -236,7 +329,7 @@ export const verifyVerify = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     responseType: "json",
-    url: "/auth/verify",
+    url: "/api/v1/auth/verify",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -266,7 +359,7 @@ export const usersCurrentUser = <ThrowOnError extends boolean = false>(
         type: "http",
       },
     ],
-    url: "/users/me",
+    url: "/api/v1/users/me",
     ...options,
   });
 };
@@ -293,7 +386,7 @@ export const usersPatchCurrentUser = <ThrowOnError extends boolean = false>(
         type: "http",
       },
     ],
-    url: "/users/me",
+    url: "/api/v1/users/me",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -323,7 +416,7 @@ export const usersDeleteUser = <ThrowOnError extends boolean = false>(
         type: "http",
       },
     ],
-    url: "/users/{id}",
+    url: "/api/v1/users/{id}",
     ...options,
   });
 };
@@ -350,7 +443,7 @@ export const usersUser = <ThrowOnError extends boolean = false>(
         type: "http",
       },
     ],
-    url: "/users/{id}",
+    url: "/api/v1/users/{id}",
     ...options,
   });
 };
@@ -377,7 +470,338 @@ export const usersPatchUser = <ThrowOnError extends boolean = false>(
         type: "http",
       },
     ],
-    url: "/users/{id}",
+    url: "/api/v1/users/{id}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+};
+
+/**
+ * Delete current user's cliente profile
+ * Delete the current user's cliente profile.
+ *
+ * Requires POST /auth/jwt/login.
+ */
+export const clientesDeleteMe = <ThrowOnError extends boolean = false>(
+  options?: Options<ClientesDeleteMeData, ThrowOnError>,
+) => {
+  return (options?.client ?? client).delete<
+    ClientesDeleteMeResponses,
+    unknown,
+    ThrowOnError
+  >({
+    security: [
+      {
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/api/v1/users/me/cliente",
+    ...options,
+  });
+};
+
+/**
+ * Get current user's cliente profile
+ * Get the current user's cliente profile.
+ *
+ * Requires POST /auth/jwt/login.
+ */
+export const clientesReadMe = <ThrowOnError extends boolean = false>(
+  options?: Options<ClientesReadMeData, ThrowOnError>,
+) => {
+  return (options?.client ?? client).get<
+    ClientesReadMeResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: "json",
+    security: [
+      {
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/api/v1/users/me/cliente",
+    ...options,
+  });
+};
+
+/**
+ * Update current user's cliente profile
+ * Update the current user's cliente profile.
+ *
+ * Requires POST /auth/jwt/login.
+ */
+export const clientesUpdateMe = <ThrowOnError extends boolean = false>(
+  options: Options<ClientesUpdateMeData, ThrowOnError>,
+) => {
+  return (options.client ?? client).patch<
+    ClientesUpdateMeResponses,
+    ClientesUpdateMeErrors,
+    ThrowOnError
+  >({
+    responseType: "json",
+    security: [
+      {
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/api/v1/users/me/cliente",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+};
+
+/**
+ * Delete cliente profile by user id (superuser)
+ * Delete a cliente profile by user id.
+ *
+ * Superuser only after POST /auth/jwt/login.
+ */
+export const clientesDelete = <ThrowOnError extends boolean = false>(
+  options: Options<ClientesDeleteData, ThrowOnError>,
+) => {
+  return (options.client ?? client).delete<
+    ClientesDeleteResponses,
+    ClientesDeleteErrors,
+    ThrowOnError
+  >({
+    security: [
+      {
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/api/v1/users/{id}/cliente",
+    ...options,
+  });
+};
+
+/**
+ * Get cliente profile by user id (superuser)
+ * Get a cliente profile by user id.
+ *
+ * Superuser only after POST /auth/jwt/login. Use GET /users/me/cliente
+ * for the current user.
+ */
+export const clientesRead = <ThrowOnError extends boolean = false>(
+  options: Options<ClientesReadData, ThrowOnError>,
+) => {
+  return (options.client ?? client).get<
+    ClientesReadResponses,
+    ClientesReadErrors,
+    ThrowOnError
+  >({
+    responseType: "json",
+    security: [
+      {
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/api/v1/users/{id}/cliente",
+    ...options,
+  });
+};
+
+/**
+ * Update cliente profile by user id (superuser)
+ * Update a cliente profile by user id.
+ *
+ * Superuser only after POST /auth/jwt/login. Use PATCH /users/me/cliente
+ * for the current user.
+ */
+export const clientesUpdate = <ThrowOnError extends boolean = false>(
+  options: Options<ClientesUpdateData, ThrowOnError>,
+) => {
+  return (options.client ?? client).patch<
+    ClientesUpdateResponses,
+    ClientesUpdateErrors,
+    ThrowOnError
+  >({
+    responseType: "json",
+    security: [
+      {
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/api/v1/users/{id}/cliente",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+};
+
+/**
+ * Delete current user's profesional profile
+ * Delete the current user's profesional profile.
+ *
+ * Requires POST /auth/jwt/login.
+ */
+export const profesionalesDeleteMe = <ThrowOnError extends boolean = false>(
+  options?: Options<ProfesionalesDeleteMeData, ThrowOnError>,
+) => {
+  return (options?.client ?? client).delete<
+    ProfesionalesDeleteMeResponses,
+    unknown,
+    ThrowOnError
+  >({
+    security: [
+      {
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/api/v1/users/me/profesional",
+    ...options,
+  });
+};
+
+/**
+ * Get current user's profesional profile
+ * Get the current user's profesional profile.
+ *
+ * Requires POST /auth/jwt/login.
+ */
+export const profesionalesReadMe = <ThrowOnError extends boolean = false>(
+  options?: Options<ProfesionalesReadMeData, ThrowOnError>,
+) => {
+  return (options?.client ?? client).get<
+    ProfesionalesReadMeResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: "json",
+    security: [
+      {
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/api/v1/users/me/profesional",
+    ...options,
+  });
+};
+
+/**
+ * Update current user's profesional profile
+ * Update the current user's profesional profile.
+ *
+ * Requires POST /auth/jwt/login. Only self-editable fields
+ * (anos_experiencia, foto_perfil_url) - verification/contract fields are
+ * superuser-only via PATCH /users/{id}/profesional.
+ */
+export const profesionalesUpdateMe = <ThrowOnError extends boolean = false>(
+  options: Options<ProfesionalesUpdateMeData, ThrowOnError>,
+) => {
+  return (options.client ?? client).patch<
+    ProfesionalesUpdateMeResponses,
+    ProfesionalesUpdateMeErrors,
+    ThrowOnError
+  >({
+    responseType: "json",
+    security: [
+      {
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/api/v1/users/me/profesional",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+};
+
+/**
+ * Delete profesional profile by user id (superuser)
+ * Delete a profesional profile by user id.
+ *
+ * Superuser only after POST /auth/jwt/login.
+ */
+export const profesionalesDelete = <ThrowOnError extends boolean = false>(
+  options: Options<ProfesionalesDeleteData, ThrowOnError>,
+) => {
+  return (options.client ?? client).delete<
+    ProfesionalesDeleteResponses,
+    ProfesionalesDeleteErrors,
+    ThrowOnError
+  >({
+    security: [
+      {
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/api/v1/users/{id}/profesional",
+    ...options,
+  });
+};
+
+/**
+ * Get profesional profile by user id (superuser)
+ * Get a profesional profile by user id.
+ *
+ * Superuser only after POST /auth/jwt/login. Use GET
+ * /users/me/profesional for the current user.
+ */
+export const profesionalesRead = <ThrowOnError extends boolean = false>(
+  options: Options<ProfesionalesReadData, ThrowOnError>,
+) => {
+  return (options.client ?? client).get<
+    ProfesionalesReadResponses,
+    ProfesionalesReadErrors,
+    ThrowOnError
+  >({
+    responseType: "json",
+    security: [
+      {
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/api/v1/users/{id}/profesional",
+    ...options,
+  });
+};
+
+/**
+ * Update profesional profile by user id (superuser)
+ * Update a profesional profile by user id, including verification and
+ * contract fields.
+ *
+ * Superuser only after POST /auth/jwt/login. Use PATCH
+ * /users/me/profesional for self-editable fields only.
+ */
+export const profesionalesUpdate = <ThrowOnError extends boolean = false>(
+  options: Options<ProfesionalesUpdateData, ThrowOnError>,
+) => {
+  return (options.client ?? client).patch<
+    ProfesionalesUpdateResponses,
+    ProfesionalesUpdateErrors,
+    ThrowOnError
+  >({
+    responseType: "json",
+    security: [
+      {
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/api/v1/users/{id}/profesional",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -407,7 +831,7 @@ export const readItem = <ThrowOnError extends boolean = false>(
         type: "http",
       },
     ],
-    url: "/items/",
+    url: "/api/v1/items/",
     ...options,
   });
 };
@@ -433,7 +857,7 @@ export const createItem = <ThrowOnError extends boolean = false>(
         type: "http",
       },
     ],
-    url: "/items/",
+    url: "/api/v1/items/",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -463,7 +887,7 @@ export const deleteItem = <ThrowOnError extends boolean = false>(
         type: "http",
       },
     ],
-    url: "/items/{item_id}",
+    url: "/api/v1/items/{item_id}",
     ...options,
   });
 };

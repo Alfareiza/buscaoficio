@@ -45,6 +45,111 @@ export type BodyAuthVerifyVerify = {
 };
 
 /**
+ * ClienteAdminUpdate
+ */
+export type ClienteAdminUpdate = {
+  /**
+   * Direccion Default
+   */
+  direccion_default?: string | null;
+  /**
+   * Repeat Customer
+   */
+  repeat_customer?: boolean | null;
+};
+
+/**
+ * ClienteRead
+ */
+export type ClienteRead = {
+  /**
+   * Direccion Default
+   */
+  direccion_default?: string | null;
+  /**
+   * Referido Por Id
+   */
+  referido_por_id?: string | null;
+  /**
+   * Usuario Id
+   */
+  usuario_id: string;
+  /**
+   * Repeat Customer
+   */
+  repeat_customer: boolean;
+  /**
+   * Creado En
+   */
+  creado_en: string;
+  /**
+   * Actualizado En
+   */
+  actualizado_en: string;
+};
+
+/**
+ * ClienteRegisterCreate
+ */
+export type ClienteRegisterCreate = {
+  /**
+   * Direccion Default
+   */
+  direccion_default?: string | null;
+  /**
+   * Referido Por Id
+   */
+  referido_por_id?: string | null;
+  /**
+   * Email
+   */
+  email: string;
+  /**
+   * Password
+   */
+  password: string;
+  /**
+   * Is Active
+   */
+  is_active?: boolean | null;
+  /**
+   * Is Superuser
+   */
+  is_superuser?: boolean | null;
+  /**
+   * Is Verified
+   */
+  is_verified?: boolean | null;
+  /**
+   * Nombre Completo
+   */
+  nombre_completo: string;
+  /**
+   * Whatsapp
+   */
+  whatsapp?: string | null;
+};
+
+/**
+ * ClienteUpdate
+ */
+export type ClienteUpdate = {
+  /**
+   * Direccion Default
+   */
+  direccion_default?: string | null;
+};
+
+/**
+ * EstadoVerificacionProfesional
+ */
+export type EstadoVerificacionProfesional =
+  | "pendiente"
+  | "verificado"
+  | "revisar_manual"
+  | "rechazado";
+
+/**
  * HTTPValidationError
  */
 export type HttpValidationError = {
@@ -125,6 +230,168 @@ export type PageItemRead = {
 };
 
 /**
+ * ProfesionalAdminUpdate
+ */
+export type ProfesionalAdminUpdate = {
+  /**
+   * Anos Experiencia
+   */
+  anos_experiencia?: number | null;
+  /**
+   * Foto Perfil Url
+   */
+  foto_perfil_url?: string | null;
+  estado_verificacion?: EstadoVerificacionProfesional | null;
+  /**
+   * Score Calificacion
+   */
+  score_calificacion?: number | null;
+  /**
+   * Whatsapp Verificado
+   */
+  whatsapp_verificado?: boolean | null;
+  /**
+   * Contrato Aceptado
+   */
+  contrato_aceptado?: boolean | null;
+  /**
+   * Trabajos Gratis Restantes
+   */
+  trabajos_gratis_restantes?: number | null;
+};
+
+/**
+ * ProfesionalRead
+ */
+export type ProfesionalRead = {
+  documento_tipo: TipoDocumento;
+  /**
+   * Documento Numero
+   */
+  documento_numero: string;
+  /**
+   * Anos Experiencia
+   */
+  anos_experiencia?: number | null;
+  /**
+   * Foto Perfil Url
+   */
+  foto_perfil_url?: string | null;
+  /**
+   * Usuario Id
+   */
+  usuario_id: string;
+  estado_verificacion: EstadoVerificacionProfesional;
+  /**
+   * Score Calificacion
+   */
+  score_calificacion?: number | null;
+  /**
+   * Whatsapp Verificado
+   */
+  whatsapp_verificado: boolean;
+  /**
+   * Contrato Aceptado
+   */
+  contrato_aceptado: boolean;
+  /**
+   * Contrato Aceptado En
+   */
+  contrato_aceptado_en?: string | null;
+  /**
+   * Trabajos Gratis Restantes
+   */
+  trabajos_gratis_restantes: number;
+  /**
+   * Creado En
+   */
+  creado_en: string;
+  /**
+   * Actualizado En
+   */
+  actualizado_en: string;
+};
+
+/**
+ * ProfesionalRegisterCreate
+ */
+export type ProfesionalRegisterCreate = {
+  documento_tipo: TipoDocumento;
+  /**
+   * Documento Numero
+   */
+  documento_numero: string;
+  /**
+   * Anos Experiencia
+   */
+  anos_experiencia?: number | null;
+  /**
+   * Foto Perfil Url
+   */
+  foto_perfil_url?: string | null;
+  /**
+   * Email
+   */
+  email: string;
+  /**
+   * Password
+   */
+  password: string;
+  /**
+   * Is Active
+   */
+  is_active?: boolean | null;
+  /**
+   * Is Superuser
+   */
+  is_superuser?: boolean | null;
+  /**
+   * Is Verified
+   */
+  is_verified?: boolean | null;
+  /**
+   * Nombre Completo
+   */
+  nombre_completo: string;
+  /**
+   * Whatsapp
+   */
+  whatsapp?: string | null;
+};
+
+/**
+ * ProfesionalUpdate
+ */
+export type ProfesionalUpdate = {
+  /**
+   * Anos Experiencia
+   */
+  anos_experiencia?: number | null;
+  /**
+   * Foto Perfil Url
+   */
+  foto_perfil_url?: string | null;
+};
+
+/**
+ * TipoDocumento
+ * Each member carries a human-readable Spanish label alongside its code
+ * (e.g. TipoDocumento.CC.label == "Cédula de Ciudadanía"), used to render
+ * admin dropdown options — the codes alone aren't self-explanatory.
+ */
+export type TipoDocumento =
+  | "CC"
+  | "CE"
+  | "TI"
+  | "RC"
+  | "PA"
+  | "MS"
+  | "PE"
+  | "CN"
+  | "PT"
+  | "SC";
+
+/**
  * UserCreate
  */
 export type UserCreate = {
@@ -148,6 +415,14 @@ export type UserCreate = {
    * Is Verified
    */
   is_verified?: boolean | null;
+  /**
+   * Nombre Completo
+   */
+  nombre_completo: string;
+  /**
+   * Whatsapp
+   */
+  whatsapp?: string | null;
 };
 
 /**
@@ -174,6 +449,14 @@ export type UserRead = {
    * Is Verified
    */
   is_verified?: boolean;
+  /**
+   * Nombre Completo
+   */
+  nombre_completo: string;
+  /**
+   * Whatsapp
+   */
+  whatsapp?: string | null;
 };
 
 /**
@@ -200,6 +483,14 @@ export type UserUpdate = {
    * Is Verified
    */
   is_verified?: boolean | null;
+  /**
+   * Nombre Completo
+   */
+  nombre_completo?: string | null;
+  /**
+   * Whatsapp
+   */
+  whatsapp?: string | null;
 };
 
 /**
@@ -254,7 +545,7 @@ export type AuthJwtLoginData = {
   body: Login;
   path?: never;
   query?: never;
-  url: "/auth/jwt/login";
+  url: "/api/v1/auth/jwt/login";
 };
 
 export type AuthJwtLoginErrors = {
@@ -277,7 +568,7 @@ export type AuthJwtLogoutData = {
   body?: never;
   path?: never;
   query?: never;
-  url: "/auth/jwt/logout";
+  url: "/api/v1/auth/jwt/logout";
 };
 
 export type AuthJwtLogoutResponses = {
@@ -291,7 +582,7 @@ export type RegisterRegisterData = {
   body: UserCreate;
   path?: never;
   query?: never;
-  url: "/auth/register";
+  url: "/api/v1/auth/register";
 };
 
 export type RegisterRegisterErrors = {
@@ -314,11 +605,65 @@ export type RegisterRegisterResponses = {
 export type RegisterRegisterResponse =
   RegisterRegisterResponses[keyof RegisterRegisterResponses];
 
+export type RegisterRegisterClienteData = {
+  body: ClienteRegisterCreate;
+  path?: never;
+  query?: never;
+  url: "/api/v1/auth/register/cliente";
+};
+
+export type RegisterRegisterClienteErrors = {
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type RegisterRegisterClienteError =
+  RegisterRegisterClienteErrors[keyof RegisterRegisterClienteErrors];
+
+export type RegisterRegisterClienteResponses = {
+  /**
+   * Successful Response
+   */
+  201: UserRead;
+};
+
+export type RegisterRegisterClienteResponse =
+  RegisterRegisterClienteResponses[keyof RegisterRegisterClienteResponses];
+
+export type RegisterRegisterProfesionalData = {
+  body: ProfesionalRegisterCreate;
+  path?: never;
+  query?: never;
+  url: "/api/v1/auth/register/profesional";
+};
+
+export type RegisterRegisterProfesionalErrors = {
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type RegisterRegisterProfesionalError =
+  RegisterRegisterProfesionalErrors[keyof RegisterRegisterProfesionalErrors];
+
+export type RegisterRegisterProfesionalResponses = {
+  /**
+   * Successful Response
+   */
+  201: UserRead;
+};
+
+export type RegisterRegisterProfesionalResponse =
+  RegisterRegisterProfesionalResponses[keyof RegisterRegisterProfesionalResponses];
+
 export type ResetForgotPasswordData = {
   body: BodyAuthResetForgotPassword;
   path?: never;
   query?: never;
-  url: "/auth/forgot-password";
+  url: "/api/v1/auth/forgot-password";
 };
 
 export type ResetForgotPasswordErrors = {
@@ -342,7 +687,7 @@ export type ResetResetPasswordData = {
   body: BodyAuthResetResetPassword;
   path?: never;
   query?: never;
-  url: "/auth/reset-password";
+  url: "/api/v1/auth/reset-password";
 };
 
 export type ResetResetPasswordErrors = {
@@ -366,7 +711,7 @@ export type VerifyRequestTokenData = {
   body: BodyAuthVerifyRequestToken;
   path?: never;
   query?: never;
-  url: "/auth/request-verify-token";
+  url: "/api/v1/auth/request-verify-token";
 };
 
 export type VerifyRequestTokenErrors = {
@@ -390,7 +735,7 @@ export type VerifyVerifyData = {
   body: BodyAuthVerifyVerify;
   path?: never;
   query?: never;
-  url: "/auth/verify";
+  url: "/api/v1/auth/verify";
 };
 
 export type VerifyVerifyErrors = {
@@ -416,7 +761,7 @@ export type UsersCurrentUserData = {
   body?: never;
   path?: never;
   query?: never;
-  url: "/users/me";
+  url: "/api/v1/users/me";
 };
 
 export type UsersCurrentUserResponses = {
@@ -433,7 +778,7 @@ export type UsersPatchCurrentUserData = {
   body: UserUpdate;
   path?: never;
   query?: never;
-  url: "/users/me";
+  url: "/api/v1/users/me";
 };
 
 export type UsersPatchCurrentUserErrors = {
@@ -465,7 +810,7 @@ export type UsersDeleteUserData = {
     id: string;
   };
   query?: never;
-  url: "/users/{id}";
+  url: "/api/v1/users/{id}";
 };
 
 export type UsersDeleteUserErrors = {
@@ -497,7 +842,7 @@ export type UsersUserData = {
     id: string;
   };
   query?: never;
-  url: "/users/{id}";
+  url: "/api/v1/users/{id}";
 };
 
 export type UsersUserErrors = {
@@ -527,7 +872,7 @@ export type UsersPatchUserData = {
     id: string;
   };
   query?: never;
-  url: "/users/{id}";
+  url: "/api/v1/users/{id}";
 };
 
 export type UsersPatchUserErrors = {
@@ -550,6 +895,319 @@ export type UsersPatchUserResponses = {
 export type UsersPatchUserResponse =
   UsersPatchUserResponses[keyof UsersPatchUserResponses];
 
+export type ClientesDeleteMeData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/users/me/cliente";
+};
+
+export type ClientesDeleteMeResponses = {
+  /**
+   * Successful Response
+   */
+  204: void;
+};
+
+export type ClientesDeleteMeResponse =
+  ClientesDeleteMeResponses[keyof ClientesDeleteMeResponses];
+
+export type ClientesReadMeData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/users/me/cliente";
+};
+
+export type ClientesReadMeResponses = {
+  /**
+   * Successful Response
+   */
+  200: ClienteRead;
+};
+
+export type ClientesReadMeResponse =
+  ClientesReadMeResponses[keyof ClientesReadMeResponses];
+
+export type ClientesUpdateMeData = {
+  body: ClienteUpdate;
+  path?: never;
+  query?: never;
+  url: "/api/v1/users/me/cliente";
+};
+
+export type ClientesUpdateMeErrors = {
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type ClientesUpdateMeError =
+  ClientesUpdateMeErrors[keyof ClientesUpdateMeErrors];
+
+export type ClientesUpdateMeResponses = {
+  /**
+   * Successful Response
+   */
+  200: ClienteRead;
+};
+
+export type ClientesUpdateMeResponse =
+  ClientesUpdateMeResponses[keyof ClientesUpdateMeResponses];
+
+export type ClientesDeleteData = {
+  body?: never;
+  path: {
+    /**
+     * Id
+     */
+    id: string;
+  };
+  query?: never;
+  url: "/api/v1/users/{id}/cliente";
+};
+
+export type ClientesDeleteErrors = {
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type ClientesDeleteError =
+  ClientesDeleteErrors[keyof ClientesDeleteErrors];
+
+export type ClientesDeleteResponses = {
+  /**
+   * Successful Response
+   */
+  204: void;
+};
+
+export type ClientesDeleteResponse =
+  ClientesDeleteResponses[keyof ClientesDeleteResponses];
+
+export type ClientesReadData = {
+  body?: never;
+  path: {
+    /**
+     * Id
+     */
+    id: string;
+  };
+  query?: never;
+  url: "/api/v1/users/{id}/cliente";
+};
+
+export type ClientesReadErrors = {
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type ClientesReadError = ClientesReadErrors[keyof ClientesReadErrors];
+
+export type ClientesReadResponses = {
+  /**
+   * Successful Response
+   */
+  200: ClienteRead;
+};
+
+export type ClientesReadResponse =
+  ClientesReadResponses[keyof ClientesReadResponses];
+
+export type ClientesUpdateData = {
+  body: ClienteAdminUpdate;
+  path: {
+    /**
+     * Id
+     */
+    id: string;
+  };
+  query?: never;
+  url: "/api/v1/users/{id}/cliente";
+};
+
+export type ClientesUpdateErrors = {
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type ClientesUpdateError =
+  ClientesUpdateErrors[keyof ClientesUpdateErrors];
+
+export type ClientesUpdateResponses = {
+  /**
+   * Successful Response
+   */
+  200: ClienteRead;
+};
+
+export type ClientesUpdateResponse =
+  ClientesUpdateResponses[keyof ClientesUpdateResponses];
+
+export type ProfesionalesDeleteMeData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/users/me/profesional";
+};
+
+export type ProfesionalesDeleteMeResponses = {
+  /**
+   * Successful Response
+   */
+  204: void;
+};
+
+export type ProfesionalesDeleteMeResponse =
+  ProfesionalesDeleteMeResponses[keyof ProfesionalesDeleteMeResponses];
+
+export type ProfesionalesReadMeData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/users/me/profesional";
+};
+
+export type ProfesionalesReadMeResponses = {
+  /**
+   * Successful Response
+   */
+  200: ProfesionalRead;
+};
+
+export type ProfesionalesReadMeResponse =
+  ProfesionalesReadMeResponses[keyof ProfesionalesReadMeResponses];
+
+export type ProfesionalesUpdateMeData = {
+  body: ProfesionalUpdate;
+  path?: never;
+  query?: never;
+  url: "/api/v1/users/me/profesional";
+};
+
+export type ProfesionalesUpdateMeErrors = {
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type ProfesionalesUpdateMeError =
+  ProfesionalesUpdateMeErrors[keyof ProfesionalesUpdateMeErrors];
+
+export type ProfesionalesUpdateMeResponses = {
+  /**
+   * Successful Response
+   */
+  200: ProfesionalRead;
+};
+
+export type ProfesionalesUpdateMeResponse =
+  ProfesionalesUpdateMeResponses[keyof ProfesionalesUpdateMeResponses];
+
+export type ProfesionalesDeleteData = {
+  body?: never;
+  path: {
+    /**
+     * Id
+     */
+    id: string;
+  };
+  query?: never;
+  url: "/api/v1/users/{id}/profesional";
+};
+
+export type ProfesionalesDeleteErrors = {
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type ProfesionalesDeleteError =
+  ProfesionalesDeleteErrors[keyof ProfesionalesDeleteErrors];
+
+export type ProfesionalesDeleteResponses = {
+  /**
+   * Successful Response
+   */
+  204: void;
+};
+
+export type ProfesionalesDeleteResponse =
+  ProfesionalesDeleteResponses[keyof ProfesionalesDeleteResponses];
+
+export type ProfesionalesReadData = {
+  body?: never;
+  path: {
+    /**
+     * Id
+     */
+    id: string;
+  };
+  query?: never;
+  url: "/api/v1/users/{id}/profesional";
+};
+
+export type ProfesionalesReadErrors = {
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type ProfesionalesReadError =
+  ProfesionalesReadErrors[keyof ProfesionalesReadErrors];
+
+export type ProfesionalesReadResponses = {
+  /**
+   * Successful Response
+   */
+  200: ProfesionalRead;
+};
+
+export type ProfesionalesReadResponse =
+  ProfesionalesReadResponses[keyof ProfesionalesReadResponses];
+
+export type ProfesionalesUpdateData = {
+  body: ProfesionalAdminUpdate;
+  path: {
+    /**
+     * Id
+     */
+    id: string;
+  };
+  query?: never;
+  url: "/api/v1/users/{id}/profesional";
+};
+
+export type ProfesionalesUpdateErrors = {
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type ProfesionalesUpdateError =
+  ProfesionalesUpdateErrors[keyof ProfesionalesUpdateErrors];
+
+export type ProfesionalesUpdateResponses = {
+  /**
+   * Successful Response
+   */
+  200: ProfesionalRead;
+};
+
+export type ProfesionalesUpdateResponse =
+  ProfesionalesUpdateResponses[keyof ProfesionalesUpdateResponses];
+
 export type ReadItemData = {
   body?: never;
   path?: never;
@@ -565,7 +1223,7 @@ export type ReadItemData = {
      */
     size?: number;
   };
-  url: "/items/";
+  url: "/api/v1/items/";
 };
 
 export type ReadItemErrors = {
@@ -590,7 +1248,7 @@ export type CreateItemData = {
   body: ItemCreate;
   path?: never;
   query?: never;
-  url: "/items/";
+  url: "/api/v1/items/";
 };
 
 export type CreateItemErrors = {
@@ -620,7 +1278,7 @@ export type DeleteItemData = {
     item_id: string;
   };
   query?: never;
-  url: "/items/{item_id}";
+  url: "/api/v1/items/{item_id}";
 };
 
 export type DeleteItemErrors = {

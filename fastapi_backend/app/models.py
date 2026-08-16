@@ -148,3 +148,17 @@ class Item(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
 
     user = relationship("User", back_populates="items")
+
+
+class RefreshToken(TimestampMixin, Base):
+    __tablename__ = "refresh_tokens"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
+    refresh_token_hash = Column(String, nullable=False)
+    fingerprint_hash = Column(String, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    created_ip = Column(String, nullable=True)
+
+    user = relationship("User")

@@ -10,7 +10,8 @@ create a superuser.
 
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import exceptions
 from fastapi_users.authentication import Strategy
@@ -22,7 +23,8 @@ from sqlalchemy.future import select
 
 from app.config import logger
 from app.database import get_async_session
-from app.models import Cliente, Profesional, User
+from app.models import Cliente, Profesional, RefreshToken, User
+from app.refresh_token_manager import RefreshTokenManager
 from app.schemas import (
     ClienteRegisterCreate,
     ProfesionalRegisterCreate,
@@ -30,6 +32,7 @@ from app.schemas import (
     UserRead,
 )
 from app.users import UserManager, auth_backend, current_user_token, get_user_manager
+from app.utils import get_client_ip
 
 router = APIRouter(tags=["auth"])
 
@@ -40,11 +43,16 @@ async def login(
     credentials: OAuth2PasswordRequestForm = Depends(),
     user_manager: UserManager = Depends(get_user_manager),
     strategy: Strategy[User, UUID] = Depends(auth_backend.get_strategy),
-):
-    """Login and return a JWT.
+    db: AsyncSession = Depends(get_async_session),
+) -> JSONResponse:
+    """Authenticate user and return access token + set refresh token cookie.
 
-    Create the user with POST /auth/register first. Optional:
-    POST /auth/request-verify-token then POST /auth/verify.
+    Generates a short-lived access token (returned in response body) and a
+    long-lived refresh token (set as HttpOnly cookie). Also sets a
+    fingerprint cookie for CSRF/XSS protection.
+
+    Returns:
+        JSON response with access_token, token_type, and expires_in.
     """
     user = await user_manager.authenticate(credentials)
 
@@ -55,9 +63,48 @@ async def login(
             detail=ErrorCode.LOGIN_BAD_CREDENTIALS,
         )
 
-    response = await auth_backend.login(strategy, user)
+    client_ip = get_client_ip(request)
+
+    access_token = await strategy.write_token(user)
+    (
+        refresh_token_raw,
+        fingerprint_token_raw,
+        refresh_hash,
+        fingerprint_hash,
+    ) = RefreshTokenManager.generate_tokens()
+    await RefreshTokenManager.store_refresh_token(
+        db, user.id, refresh_hash, fingerprint_hash, client_ip
+    )
+    await db.commit()
+
+    response = JSONResponse(
+        content={
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": RefreshTokenManager.REFRESH_TOKEN_LIFETIME,
+        }
+    )
+    response.set_cookie(
+        "refreshToken",
+        refresh_token_raw,
+        max_age=RefreshTokenManager.REFRESH_TOKEN_LIFETIME,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        path="/api/v1/auth/jwt/refresh",
+    )
+    response.set_cookie(
+        "fingerprintToken",
+        fingerprint_token_raw,
+        max_age=RefreshTokenManager.REFRESH_TOKEN_LIFETIME,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        path="/api/v1/auth/jwt/refresh",
+    )
+
     await user_manager.on_after_login(user, request, response)
-    logger.info(f"User {user.id} logged in")
+    logger.info(f"User {user.id} logged in from {client_ip}")
     return response
 
 
@@ -65,13 +112,138 @@ async def login(
 async def logout(
     user_token: tuple[User, str] = Depends(current_user_token),
     strategy: Strategy[User, UUID] = Depends(auth_backend.get_strategy),
-):
-    """Invalidate the current JWT.
+    db: AsyncSession = Depends(get_async_session),
+) -> Response:
+    """Invalidate all refresh tokens for the user.
 
-    Call after POST /auth/jwt/login when the user signs out.
+    Revokes all active refresh tokens (forcing re-login on all devices).
+    Also clears the refresh and fingerprint cookies.
     """
     user, token = user_token
-    return await auth_backend.logout(strategy, user, token)
+    await RefreshTokenManager.revoke_all_user_tokens(db, user.id)
+
+    response = await auth_backend.logout(strategy, user, token)
+
+    response.delete_cookie(
+        "refreshToken", path="/api/v1/auth/jwt/refresh", secure=True, httponly=True
+    )
+    response.delete_cookie(
+        "fingerprintToken", path="/api/v1/auth/jwt/refresh", secure=True, httponly=True
+    )
+
+    logger.info(f"User {user.id} logged out, all sessions revoked")
+    return response
+
+
+@router.post("/jwt/refresh", summary="Refresh Access Token", name="auth:jwt.refresh")
+async def refresh(
+    request: Request,
+    strategy: Strategy[User, UUID] = Depends(auth_backend.get_strategy),
+    db: AsyncSession = Depends(get_async_session),
+    user_manager: UserManager = Depends(get_user_manager),
+) -> JSONResponse:
+    """Rotate refresh token and issue new access token.
+
+    Validates the refresh token + fingerprint cookie, then:
+    1. Revokes the old refresh token
+    2. Issues a new access token
+    3. Sets new refresh + fingerprint tokens as cookies
+
+    If an old token is reused (possible theft), revokes all user sessions.
+
+    Returns:
+        JSON response with new access_token, token_type, and expires_in.
+
+    Raises:
+        401: If refresh token is invalid, expired, or fingerprint mismatch.
+    """
+    refresh_token_raw = request.cookies.get("refreshToken")
+    fingerprint_token_raw = request.cookies.get("fingerprintToken")
+
+    if not refresh_token_raw or not fingerprint_token_raw:
+        logger.warning("Refresh attempt missing cookies")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing refresh credentials",
+        )
+
+    refresh_hash = RefreshTokenManager._hash_token(refresh_token_raw)
+    fingerprint_hash = RefreshTokenManager._hash_token(fingerprint_token_raw)
+
+    stmt = select(RefreshToken).where(RefreshToken.refresh_token_hash == refresh_hash)
+    result = await db.execute(stmt)
+    refresh_token_row = result.scalar_one_or_none()
+
+    if not refresh_token_row:
+        logger.warning("Refresh attempt with invalid token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+        )
+
+    user_id = refresh_token_row.user_id
+    existing_token = await RefreshTokenManager.validate_refresh_token(
+        db, user_id, refresh_hash, fingerprint_hash
+    )
+
+    if not existing_token:
+        await RefreshTokenManager.detect_theft_and_revoke(db, user_id)
+        logger.warning(f"Possible token theft detected for user {user_id}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+
+    user = await user_manager.get(user_id)
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User inactive or deleted",
+        )
+
+    new_access_token = await strategy.write_token(user)
+
+    (
+        new_refresh_token_raw,
+        new_fingerprint_token_raw,
+        new_refresh_hash,
+        new_fingerprint_hash,
+    ) = RefreshTokenManager.generate_tokens()
+
+    client_ip = get_client_ip(request)
+    await RefreshTokenManager.rotate_refresh_token(
+        db, existing_token, new_refresh_hash, new_fingerprint_hash, client_ip
+    )
+
+    response = JSONResponse(
+        content={
+            "access_token": new_access_token,
+            "token_type": "bearer",
+            "expires_in": RefreshTokenManager.REFRESH_TOKEN_LIFETIME,
+        }
+    )
+
+    response.set_cookie(
+        "refreshToken",
+        new_refresh_token_raw,
+        max_age=RefreshTokenManager.REFRESH_TOKEN_LIFETIME,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        path="/api/v1/auth/jwt/refresh",
+    )
+    response.set_cookie(
+        "fingerprintToken",
+        new_fingerprint_token_raw,
+        max_age=RefreshTokenManager.REFRESH_TOKEN_LIFETIME,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        path="/api/v1/auth/jwt/refresh",
+    )
+
+    logger.info(f"User {user.id} refreshed token from {client_ip}")
+    return response
 
 
 @router.post(

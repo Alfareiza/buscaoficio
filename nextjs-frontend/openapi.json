@@ -11,7 +11,7 @@
           "auth"
         ],
         "summary": "Login \u2192 JWT",
-        "description": "Login and return a JWT.\n\nCreate the user with POST /auth/register first. Optional:\nPOST /auth/request-verify-token then POST /auth/verify.",
+        "description": "Authenticate user and return access token + set refresh token cookie.\n\nGenerates a short-lived access token (returned in response body) and a\nlong-lived refresh token (set as HttpOnly cookie). Also sets a\nfingerprint cookie for CSRF/XSS protection.\n\nReturns:\n    JSON response with access_token, token_type, and expires_in.",
         "operationId": "auth:jwt.login",
         "requestBody": {
           "content": {
@@ -51,7 +51,7 @@
           "auth"
         ],
         "summary": "Logout",
-        "description": "Invalidate the current JWT.\n\nCall after POST /auth/jwt/login when the user signs out.",
+        "description": "Invalidate all refresh tokens for the user.\n\nRevokes all active refresh tokens (forcing re-login on all devices).\nAlso clears the refresh and fingerprint cookies.",
         "operationId": "auth:jwt.logout",
         "responses": {
           "200": {
@@ -68,6 +68,26 @@
             "OAuth2PasswordBearer": []
           }
         ]
+      }
+    },
+    "/api/v1/auth/jwt/refresh": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Refresh Access Token",
+        "description": "Rotate refresh token and issue new access token.\n\nValidates the refresh token + fingerprint cookie, then:\n1. Revokes the old refresh token\n2. Issues a new access token\n3. Sets new refresh + fingerprint tokens as cookies\n\nIf an old token is reused (possible theft), revokes all user sessions.\n\nReturns:\n    JSON response with new access_token, token_type, and expires_in.\n\nRaises:\n    401: If refresh token is invalid, expired, or fingerprint mismatch.",
+        "operationId": "auth:jwt.refresh",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/auth/register": {
