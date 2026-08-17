@@ -6,7 +6,9 @@ import pytest
 from fastapi import status
 from sqlalchemy import select
 
+from app.config import settings
 from app.models import RefreshToken, User
+from app.refresh_token_manager import RefreshTokenManager
 
 DEFAULT_PASSWORD = "TestPassword123#"
 
@@ -33,6 +35,18 @@ class TestLoginIssuesRefreshToken:
         body = response.json()
         assert "access_token" in body
         assert body["token_type"] == "bearer"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_login_expires_in_reflects_access_token_lifetime(
+        self, test_client, create_user: Callable[..., Awaitable[User]]
+    ) -> None:
+        """Regression test: expires_in must describe the access token, not the refresh token."""
+        user = await create_user()
+        response = await _login(test_client, user.email)
+
+        body = response.json()
+        assert body["expires_in"] == settings.ACCESS_TOKEN_EXPIRE_SECONDS
+        assert body["expires_in"] != RefreshTokenManager.REFRESH_TOKEN_LIFETIME
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_login_sets_refresh_and_fingerprint_cookies(
@@ -96,6 +110,20 @@ class TestRefreshEndpoint:
         body = refresh_response.json()
         assert isinstance(body["access_token"], str) and body["access_token"]
         assert body["token_type"] == "bearer"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_refresh_expires_in_reflects_access_token_lifetime(
+        self, test_client, create_user: Callable[..., Awaitable[User]]
+    ) -> None:
+        """Regression test: expires_in must describe the access token, not the refresh token."""
+        user = await create_user()
+        await _login(test_client, user.email)
+
+        refresh_response = await test_client.post("/api/v1/auth/jwt/refresh")
+
+        body = refresh_response.json()
+        assert body["expires_in"] == settings.ACCESS_TOKEN_EXPIRE_SECONDS
+        assert body["expires_in"] != RefreshTokenManager.REFRESH_TOKEN_LIFETIME
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_refresh_rotates_cookies(

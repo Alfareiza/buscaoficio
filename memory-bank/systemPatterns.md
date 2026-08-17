@@ -57,7 +57,7 @@ Prefer `make start-*` / `make docker-start-*` over bare `pnpm run dev` or `uv ru
 - Full auth documentation for new developers: `docs/auth.md`
 - Fetch a user by UUID inside a custom route with `user_manager.get(user_id)` — fastapi-users has no `get_by_id`.
 
-### JWT refresh token rotation (branch `feature/jwt-refresh-tokens`, tracked in #9, not yet merged)
+### JWT refresh token rotation (backend, #9 — merged to `main` via PR #11)
 Decided 2026-08-15 after a `grill-me` design session comparing against the Hasura JWT/GraphQL best-practices article. Chose **Option B** (rotation) over a simpler single long-lived token, specifically to shrink the access-token blast radius without hurting UX.
 
 - **Two token types, two lifetimes:**
@@ -69,8 +69,18 @@ Decided 2026-08-15 after a `grill-me` design session comparing against the Hasur
 - **Rotation:** every successful `POST /auth/jwt/refresh` revokes the old refresh_tokens row and inserts a new one. Legitimate clients always present the newest token.
 - **Theft detection:** if a client presents a refresh token whose row is already revoked (i.e. it was already rotated away — a replay), `detect_theft_and_revoke` revokes **every** active refresh token for that user and the request gets 401. This is deliberate: a replay of an old, already-superseded token is treated as a compromise signal, not a race condition to tolerate.
 - **Logout:** `POST /auth/jwt/logout` revokes **all** refresh tokens for the user (every device/session dies, not just the current one) — a deliberate choice, not the minimal "revoke only this session" option.
-- **Known bug (tracked in #9, not yet fixed):** `expires_in` in the login/refresh JSON response currently returns `RefreshTokenManager.REFRESH_TOKEN_LIFETIME` (30 days) instead of the access token's real lifetime (`settings.ACCESS_TOKEN_EXPIRE_SECONDS`, 15 min). Frontend (#10) must not rely on this field — decode the JWT's own `exp` claim client-side instead (unencrypted, just signed, safe to read).
+- **`expires_in` bug: fixed** (on branch `feature/jwt-frontend-refresh`, folded into #10 rather than shipped standalone). Both `/jwt/login` and `/jwt/refresh` now return `settings.ACCESS_TOKEN_EXPIRE_SECONDS`; previously returned the refresh token's 30-day lifetime. 2 regression tests added.
 - **No cleanup job yet** for expired/revoked `refresh_tokens` rows.
+
+## Frontend auth pattern (#10, branch `feature/jwt-frontend-refresh`, implemented + tested, not yet committed)
+
+The current frontend is **Server Actions + Edge middleware based** — every backend call is server-to-server (from the Next.js server, not the browser), which changes how refresh tokens have to be handled compared to a typical SPA. `API_BASE_URL` deliberately has no `NEXT_PUBLIC_` prefix, confirming the browser never calls FastAPI directly today. **This is a factual description of the current code, not a locked-in decision** — see `activeContext.md` for an open, unresolved discussion about whether to keep this, move to a full SPA, or a hybrid (server-mediated auth + client-side CRUD/live features).
+
+- **The cookie-forwarding problem:** a server-to-server fetch's `Set-Cookie` response headers land on the Next.js server, not the browser — they must be explicitly re-applied on the Next.js server's own response. `lib/auth-cookies.ts` centralizes this: `forwardAuthCookies`, `setAccessTokenCookie`, `clearAuthCookies`, `decodeJwtExpiryMs`. Uses a structural `CookieWriter` interface (`set`/`delete`) rather than importing a concrete type, since it's called from two runtimes with different-but-compatible cookie APIs: `next/headers`'s `cookies()` (Server Actions) and `NextResponse.cookies` (middleware).
+- **Silent refresh via `proxy.ts`:** no persistent client-side refresh timer. `proxy.ts` runs on every `/dashboard/:path*` request (matches Server Action POSTs to those routes too), decodes the access token's `exp`, and if expired or within a 2-minute buffer, refreshes server-to-server against FastAPI — manually forwarding `refreshToken`/`fingerprintToken` as a `Cookie` header (server-to-server calls don't auto-attach the browser's cookies). On success, forwards the new cookies onto the outgoing response. On failure (including theft-detection revocation), clears all cookies and redirects to `/login`.
+- **Reactive fallback in Server Actions:** `items-action.ts` checks each result with `isUnauthorizedError()` (`lib/api-errors.ts`, handles both a top-level `status` and Axios's nested `response.status` shape) — catches a token revoked between the middleware's check and the actual call.
+- **Cross-tab logout needs no active sync code:** unlike `localStorage`/in-memory SPA token storage, cookies are already shared by the browser across tabs for the same origin — there's no separate client-side state to desync. The only gap (a tab with stale "logged in" UI) is caught on its next navigation/action by `proxy.ts` or the reactive fallback above. Deliberately did not add `BroadcastChannel`/`storage`-event sync — it would solve a problem this architecture doesn't have.
+- Full write-up: `docs/auth.md` § "Frontend: cookie forwarding & silent refresh".
 
 ## Logging & Sentry pattern
 
@@ -131,6 +141,8 @@ Do **not** add a wrapper in `lib/utils.ts`.
 ## Testing patterns
 - `tests/conftest.py`'s `test_client` fixture uses `base_url="https://localhost:8001"` (not `http://`) — required so httpx's cookie jar will actually send Secure-flagged cookies (e.g. the refresh/fingerprint cookies) on subsequent requests within a test. Using `http://` makes the client silently drop them, producing confusing 401s that look like an auth bug but are actually a test-harness artifact.
 - Any DB write inside a route handler needs an explicit `await db.commit()`, not just `flush()`. The test harness's `override_get_async_session` closes the session in a `finally` block right after the request completes, which rolls back anything left uncommitted — a later assertion against the same `db_session` fixture will see nothing.
+- Frontend: Jest's default `jsdom` environment lacks the `Request`/`Response` Web APIs that `next/server`'s `NextRequest` needs — any test file that imports `NextRequest` (e.g. `proxy.test.ts`) needs `/** @jest-environment node */` at the top.
+- Frontend: Next.js `redirect()` throws internally in production, but a Jest mock of it does not — code depending on `redirect()` halting execution needs an explicit `return redirect(...)`, otherwise execution falls through under test (can end up calling a downstream function with an undefined token, e.g. `logout-action.ts`/`items-action.ts`).
 
 ## Items pattern
 - Router in `app/routes/items.py`

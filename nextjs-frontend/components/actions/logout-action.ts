@@ -3,13 +3,15 @@
 import { cookies } from "next/headers";
 import { authJwtLogout } from "@/app/clientService";
 import { redirect } from "next/navigation";
+import { clearAuthCookies } from "@/lib/auth-cookies";
 
 export async function logout() {
   const cookieStore = await cookies();
   const token = cookieStore.get("accessToken")?.value;
 
   if (!token) {
-    return { message: "No access token found" };
+    clearAuthCookies(cookieStore);
+    return redirect(`/login`);
   }
 
   const { error } = await authJwtLogout({
@@ -22,6 +24,6 @@ export async function logout() {
     return { message: error };
   }
 
-  cookieStore.delete("accessToken");
+  clearAuthCookies(cookieStore);
   redirect(`/login`);
 }

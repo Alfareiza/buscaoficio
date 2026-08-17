@@ -26,6 +26,7 @@ describe("login action", () => {
     // Mock a successful login
     (authJwtLogin as jest.Mock).mockResolvedValue({
       data: { access_token: "1245token" },
+      headers: {},
     });
 
     await login({}, formData);
@@ -38,7 +39,46 @@ describe("login action", () => {
     });
 
     expect(cookies).toHaveBeenCalled();
-    expect(mockSet).toHaveBeenCalledWith("accessToken", "1245token");
+    expect(mockSet).toHaveBeenCalledWith(
+      "accessToken",
+      "1245token",
+      expect.objectContaining({
+        httpOnly: true,
+        sameSite: "strict",
+        path: "/",
+      }),
+    );
+  });
+
+  it("should forward refresh and fingerprint cookies from the backend response", async () => {
+    const formData = new FormData();
+    formData.set("username", "a@a.com");
+    formData.set("password", "Q12341414#");
+
+    const mockSet = (await cookies()).set;
+
+    (authJwtLogin as jest.Mock).mockResolvedValue({
+      data: { access_token: "1245token" },
+      headers: {
+        "set-cookie": [
+          "refreshToken=raw-refresh-value; HttpOnly; Max-Age=2592000; Path=/api/v1/auth/jwt/refresh; SameSite=strict; Secure",
+          "fingerprintToken=raw-fingerprint-value; HttpOnly; Max-Age=2592000; Path=/api/v1/auth/jwt/refresh; SameSite=strict; Secure",
+        ],
+      },
+    });
+
+    await login({}, formData);
+
+    expect(mockSet).toHaveBeenCalledWith(
+      "refreshToken",
+      "raw-refresh-value",
+      expect.objectContaining({ httpOnly: true, maxAge: 2592000 }),
+    );
+    expect(mockSet).toHaveBeenCalledWith(
+      "fingerprintToken",
+      "raw-fingerprint-value",
+      expect.objectContaining({ httpOnly: true, maxAge: 2592000 }),
+    );
   });
 
   it("should should return an error if the server validation fails", async () => {

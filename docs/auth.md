@@ -160,8 +160,42 @@ All rotation/validation/revocation logic lives in `RefreshTokenManager` (`fastap
 
 ### What is NOT implemented yet
 
-- The frontend does not yet call `/auth/jwt/refresh` automatically before the access token expires (silent refresh) or synchronize logout across browser tabs — this is tracked separately from the backend work.
 - Expired/revoked rows are not purged; there is no cleanup job for the `refresh_tokens` table yet.
+
+---
+
+## Frontend: cookie forwarding & silent refresh
+
+**This app is Server Actions + Edge middleware based, not a client-side SPA.** `API_BASE_URL` (no `NEXT_PUBLIC_` prefix) means the browser never calls FastAPI directly — every request goes through a Next.js Server Action (`components/actions/*.ts`) or `proxy.ts` (Edge middleware, matches `/dashboard/:path*`), both of which do a **server-to-server** fetch to the backend. This matters a lot for how refresh tokens work here, and is easy to get wrong by copying a typical SPA pattern.
+
+### The cookie-forwarding problem
+
+When a Server Action calls the backend (e.g. `login-action.ts` calling `authJwtLogin()`), that request is made by the **Next.js server**, not the browser. FastAPI's `Set-Cookie` response headers for `refreshToken`/`fingerprintToken` land on that server-to-server response — they do not reach the browser automatically the way they would on a direct browser→backend call. The Next.js server has to explicitly re-set them on its own response for the browser to ever see them.
+
+`lib/auth-cookies.ts` provides the shared helpers:
+- `forwardAuthCookies(setCookieHeaders, cookieWriter)` — parses the raw `Set-Cookie` strings from a backend response (`response.headers["set-cookie"]` on the axios-based generated client) and re-applies each as a cookie on the Next.js response, with `httpOnly: true`, `sameSite: "strict"`, `path: "/"`, and `secure` gated on `NODE_ENV === "production"` (hardcoding `secure: true` would silently break these cookies in local dev over `http://localhost:3000` — the same class of issue as the `https://` fix needed in the backend's own test client).
+- `setAccessTokenCookie` / `clearAuthCookies` — the same treatment for the access token cookie and for clearing all three on logout or a dead session.
+- `decodeJwtExpiryMs` — reads the access token's `exp` claim client-side-safe (no signature verification needed; it's only used to decide *when* to refresh, never to authorize anything).
+
+These helpers accept a small structural `CookieWriter` interface (`set`/`delete`) rather than importing a concrete cookie type, since they're used from two different runtimes with different but compatible cookie APIs: `next/headers`'s `cookies()` in Server Actions, and `NextResponse.cookies` in middleware.
+
+### Silent refresh via `proxy.ts`
+
+There is no persistent client-side JS holding a refresh timer — instead, `proxy.ts` (which already runs on every `/dashboard/:path*` request, including Server Action POSTs to those routes) decodes the access token's `exp` before validating it. If it's expired or within 2 minutes of expiring, the middleware:
+1. Reads `refreshToken` + `fingerprintToken` from the incoming request's cookies
+2. Calls `POST {API_BASE_URL}/api/v1/auth/jwt/refresh` via a plain `fetch()` (not the axios-based generated client — native `fetch` is simpler to guarantee Edge-runtime-compatible), manually forwarding the cookies as a `Cookie` request header, since server-to-server calls don't auto-attach the browser's cookies
+3. On success: forwards the new cookies via `forwardAuthCookies` onto the outgoing `NextResponse`, and continues the request with the new access token
+4. On failure (refresh token invalid, expired, or revoked — including theft-detection revocation): clears all three cookies and redirects to `/login`
+
+If the access token is missing `refreshToken`/`fingerprintToken` cookies at all when a refresh is needed, that's treated as a dead session (redirect to `/login`) rather than attempted.
+
+### Reactive fallback in Server Actions
+
+Middleware covers the common case (page loads and same-route Server Action POSTs), but as a narrower safety net, `items-action.ts` checks each backend call's result with `isUnauthorizedError()` (`lib/api-errors.ts`) — if a call still comes back 401 (e.g. a token revoked between the middleware's check and the actual backend call), the action clears cookies and redirects to `/login` instead of surfacing a generic error.
+
+### Cross-tab logout — no active sync needed
+
+Unlike a typical SPA storing tokens in `localStorage` or in-memory state, these are cookies — the browser already shares them across every tab for the same origin. There's no separate client-side session state that can go stale independently per tab. The only gap is a tab with already-rendered "logged in" UI not knowing a session ended until its next navigation or action — which is exactly when `proxy.ts` (or the Server Action fallback above) would catch it and redirect. No `BroadcastChannel` or `storage`-event based sync is implemented, since it would be solving a problem this cookie-based architecture doesn't actually have.
 
 ---
 
@@ -295,7 +329,7 @@ A: Call `POST /api/v1/auth/jwt/refresh` (no body needed; it reads the refresh/fi
 A: All refresh tokens for that user are immediately revoked and the request is rejected with 401. This is a deliberate theft-detection measure — see [Refresh tokens & rotation](#refresh-tokens--rotation).
 
 **Q: How does the app know when the access token is about to expire, so it can refresh it before that happens?**  
-A: This is a fair thing to wonder, because there's no alarm clock sitting on the server counting down. The trick is that a JWT already carries its own expiry time inside it — the `exp` field, buried in the token itself. It's not secret or encrypted, just signed, so anyone holding the token (including the browser) can peek at it. So the plan is: when the frontend gets a fresh access token, it opens it up, reads that `exp` timestamp, and sets a timer to quietly ask for a new one a couple of minutes before that moment arrives — well before the user would ever notice anything expired. One thing worth flagging: the login/refresh responses also include a field called `expires_in` that's *supposed* to make this easier by just telling you the lifetime directly, but right now it's returning the wrong number (it reports the refresh token's 30-day lifetime instead of the access token's real 15-minute one). So for now, reading the `exp` field inside the token itself is the reliable way — that part is tracked as frontend work still to be built.
+A: This is a fair thing to wonder, because there's no alarm clock sitting on the server counting down. The trick is that a JWT already carries its own expiry time inside it — the `exp` field, buried in the token itself. It's not secret or encrypted, just signed, so anyone holding the token can peek at it. There's also a field called `expires_in` in the login/refresh response that tells you the same thing more directly — that one used to be wrong (it reported the refresh token's 30-day lifetime instead of the access token's real 15-minute one), but that's fixed now, both agree. In this app specifically, it's not client-side JavaScript doing the watching — it's `proxy.ts`, the piece of server code that already runs before every page in the dashboard loads. Right before it lets you in, it peeks at that `exp` field, and if it's about to run out, it quietly swaps in a fresh token behind the scenes before you ever notice. See [Frontend: cookie forwarding & silent refresh](#frontend-cookie-forwarding--silent-refresh) for the full picture.
 
 **Q: What happens if I just close the browser tab instead of clicking "log out"?**  
 A: Nothing dramatic happens right away, and that's by design. The session doesn't end the instant you close the tab — the refresh token cookie is still sitting there, valid, ready to pick up where you left off if you reopen the site (this is exactly why "remember me for a while" sessions feel seamless). It'll naturally stop working after 30 days of not being used, or sooner if you log out from somewhere, or if something looks like it might've been stolen. So: closing the tab is safe and normal, it just isn't the same thing as logging out — logging out is the only thing that immediately kills the session everywhere.

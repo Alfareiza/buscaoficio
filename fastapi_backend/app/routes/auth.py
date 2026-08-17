@@ -21,7 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.config import logger
+from app.config import logger, settings
 from app.database import get_async_session
 from app.models import Cliente, Profesional, RefreshToken, User
 from app.refresh_token_manager import RefreshTokenManager
@@ -81,7 +81,7 @@ async def login(
         content={
             "access_token": access_token,
             "token_type": "bearer",
-            "expires_in": RefreshTokenManager.REFRESH_TOKEN_LIFETIME,
+            "expires_in": settings.ACCESS_TOKEN_EXPIRE_SECONDS,
         }
     )
     response.set_cookie(
@@ -219,7 +219,7 @@ async def refresh(
         content={
             "access_token": new_access_token,
             "token_type": "bearer",
-            "expires_in": RefreshTokenManager.REFRESH_TOKEN_LIFETIME,
+            "expires_in": settings.ACCESS_TOKEN_EXPIRE_SECONDS,
         }
     )
 
