@@ -146,7 +146,9 @@ describe("proxy middleware", () => {
 
   it("redirects to /login and clears cookies when the refresh call is rejected", async () => {
     const oldToken = makeJwt({ sub: "u1", exp: NEAR_EXPIRY });
-    global.fetch = jest.fn().mockResolvedValue(mockFetchResponse({ ok: false }));
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(mockFetchResponse({ ok: false }));
 
     const request = makeRequest({
       accessToken: oldToken,
@@ -163,7 +165,9 @@ describe("proxy middleware", () => {
   });
 
   it("treats an undecodable access token as needing refresh", async () => {
-    global.fetch = jest.fn().mockResolvedValue(mockFetchResponse({ ok: false }));
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(mockFetchResponse({ ok: false }));
 
     const request = makeRequest({
       accessToken: "not-a-real-jwt",
