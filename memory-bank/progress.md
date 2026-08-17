@@ -3,8 +3,10 @@
 ## What works (template baseline)
 - FastAPI auth (JWT register/login/verify/reset) + users router
 - JWT refresh token rotation with DB-backed revocation + double-submit
-  fingerprint cookie (branch `feature/jwt-refresh-tokens`, **not yet
-  committed/merged** — see Session log below and issue #9)
+  fingerprint cookie — **merged to `main` via PR #11** (issue #9)
+- Frontend cookie forwarding + middleware-based silent refresh + reactive
+  401 fallback (branch `feature/jwt-frontend-refresh`, **fully implemented
+  and tested, not yet committed** — see Session log below and issue #10)
 - Items CRUD + pagination
 - Next.js auth pages + dashboard
 - OpenAPI → typed FE client generation
@@ -29,11 +31,12 @@
 - [x] FastAdmin site name + header/sign-in logo served from `/static`
 
 ## What's left / unknown
-- [ ] Commit + push `feature/jwt-refresh-tokens` and open PR for #9 (waiting
-  on explicit go-ahead — do not commit/push without it)
-- [ ] Fix `expires_in` bug in login/refresh responses (returns refresh token
-  lifetime instead of access token lifetime) — tracked in #9
-- [ ] Frontend: silent token refresh, cross-tab logout sync (GitHub issue #10)
+- [ ] **Decide frontend architecture** (server-mediated vs. SPA vs. hybrid —
+  see `activeContext.md`) — blocks whether #10 ships as-is or needs rework
+- [ ] Commit + push `feature/jwt-frontend-refresh` and open PR for #10
+  (waiting on explicit go-ahead — do not commit/push without it — and on
+  the architecture decision above)
+- [ ] Close issue #8 (parent) once #10 is merged
 - [ ] Cleanup job for expired/revoked `refresh_tokens` rows (not started, not
   urgent at current scale)
 - [ ] Confirm DBs restarted and migrations applied after port change
@@ -65,6 +68,21 @@
   db.commit()`. The test harness's `get_async_session` override closes the
   session right after the request completes, silently rolling back anything
   that was only `flush()`-ed.
+- Server-to-server `fetch()`/axios responses' `Set-Cookie` headers do **not**
+  reach the browser automatically — only same-origin browser→backend calls
+  get that for free. Any Server Action or middleware that calls FastAPI on
+  the user's behalf must manually re-apply the backend's `Set-Cookie`
+  headers onto its own response (`lib/auth-cookies.ts`'s
+  `forwardAuthCookies`).
+- jsdom (Jest's default test environment) lacks the `Request`/`Response` Web
+  APIs `next/server`'s `NextRequest` needs — any test importing `NextRequest`
+  (e.g. `proxy.test.ts`) needs `/** @jest-environment node */` at the top of
+  the file.
+- Next.js `redirect()` throws internally in production but a Jest mock of it
+  does not — code that relies on `redirect()` halting execution must use an
+  explicit `return redirect(...)`, or execution falls through past it under
+  test (and can end up calling a downstream function with an undefined
+  token).
 
 ## Session log (2026-08-10 / 2026-08-11)
 - Indexed codebase; reviewed stack by section (FE/BE/DB/DevOps).
@@ -127,3 +145,29 @@
   `app/utils.py` (bad absolute import, one leftover call to a deleted
   private helper) that had crept in outside this conversation's edits —
   full backend suite (102/102) confirmed green after the fix.
+
+## Session log (2026-08-17)
+- Reviewed and approved backend refresh-token PR; user rebased and merged it
+  — **#9 is now on `main`** (commit `0a8376b`).
+- Discovered the app's actual architecture (Server Actions + Edge
+  middleware, not a client SPA) breaks #10's original ticket assumptions
+  (client-side JWT decoding, `BroadcastChannel`, direct browser→backend
+  calls). User approved rewriting #10 to match reality.
+- Implemented #10 on branch `feature/jwt-frontend-refresh`: cookie
+  forwarding (`lib/auth-cookies.ts`), middleware-based silent refresh
+  (`proxy.ts` rewrite), reactive 401 fallback (`lib/api-errors.ts` +
+  `items-action.ts`), documented why cross-tab sync needs no code. Folded
+  in the previously-tracked `expires_in` bug fix per user's choice. 104/104
+  backend tests, all frontend suites green. **Left uncommitted** per
+  standing instruction.
+- User pushed back on the "Server Actions, not a client SPA" framing,
+  explaining the product's intended client-server usage (cliente/profesional
+  actions eventually calling the API directly, possibly SPA-oriented).
+  Opened an architecture discussion (server-mediated vs. SPA vs. hybrid) —
+  **not resolved**; user wants to keep talking it through. See
+  `activeContext.md` for the full state and a provisional (unagreed) lean
+  toward hybrid.
+- Confirmed `docs/auth.md` already documents the full #10 implementation
+  (cookie forwarding, silent refresh, reactive fallback, cross-tab
+  reasoning, `expires_in` fix) — no additional doc changes needed this
+  session, just this memory-bank sync.

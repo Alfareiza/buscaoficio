@@ -4,6 +4,8 @@ import { cookies } from "next/headers";
 import { readItem, deleteItem, createItem } from "@/app/clientService";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { isUnauthorizedError } from "@/lib/api-errors";
+import { clearAuthCookies } from "@/lib/auth-cookies";
 import { itemSchema } from "@/lib/definitions";
 
 export async function fetchItems(page: number = 1, size: number = 10) {
@@ -14,7 +16,7 @@ export async function fetchItems(page: number = 1, size: number = 10) {
     return { message: "No access token found" };
   }
 
-  const { data, error } = await readItem({
+  const result = await readItem({
     query: {
       page: page,
       size: size,
@@ -23,8 +25,13 @@ export async function fetchItems(page: number = 1, size: number = 10) {
       Authorization: `Bearer ${token}`,
     },
   });
+  const { data, error } = result;
 
   if (error) {
+    if (isUnauthorizedError(result)) {
+      clearAuthCookies(cookieStore);
+      return redirect("/login");
+    }
     return { message: error };
   }
 
@@ -39,7 +46,7 @@ export async function removeItem(id: string) {
     return { message: "No access token found" };
   }
 
-  const { error } = await deleteItem({
+  const result = await deleteItem({
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -47,8 +54,13 @@ export async function removeItem(id: string) {
       item_id: id,
     },
   });
+  const { error } = result;
 
   if (error) {
+    if (isUnauthorizedError(result)) {
+      clearAuthCookies(cookieStore);
+      return redirect("/login");
+    }
     return { message: error };
   }
   revalidatePath("/dashboard");
@@ -84,8 +96,13 @@ export async function addItem(prevState: {}, formData: FormData) {
       quantity,
     },
   };
-  const { error } = await createItem(input);
+  const result = await createItem(input);
+  const { error } = result;
   if (error) {
+    if (isUnauthorizedError(result)) {
+      clearAuthCookies(cookieStore);
+      return redirect("/login");
+    }
     return { message: `${error.detail}` };
   }
   redirect(`/dashboard`);

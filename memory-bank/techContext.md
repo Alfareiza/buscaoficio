@@ -6,10 +6,16 @@
 - Next.js 16 (App Router) + React 19 + TypeScript
 - Tailwind CSS + shadcn/ui (Radix) + Heroicons / Lucide
 - Forms: react-hook-form + Zod
-- API client: `@hey-api/openapi-ts` → `app/openapi-client`
+- API client: `@hey-api/openapi-ts` → `app/openapi-client` (axios adapter —
+  returns `{...response, data}` on success, raw `AxiosError` with `.error`
+  attached on failure)
 - Package manager: **pnpm**
 - Pages: login, register, password recovery, dashboard (list/add/delete items)
 - Tests: Jest + Testing Library
+- Auth helpers: `lib/auth-cookies.ts` (cookie forwarding/silent-refresh
+  support), `lib/api-errors.ts` (`isUnauthorizedError`) — see
+  `systemPatterns.md` § Frontend auth pattern (#10, uncommitted branch
+  `feature/jwt-frontend-refresh`)
 
 ### Backend
 - FastAPI (async) + Uvicorn / Starlette
@@ -24,7 +30,7 @@
 - PostgreSQL 17 (Docker)
 - SQLAlchemy 2 + asyncpg
 - Migrations: Alembic (async)
-- Models: `User` (UUID, fastapi-users) ↔ `Item` (name, description, quantity, FK user, cascade delete); `RefreshToken` (hash, fingerprint hash, expiry, revoked_at, FK user — see `systemPatterns.md`, branch `feature/jwt-refresh-tokens`, not yet merged)
+- Models: `User` (UUID, fastapi-users) ↔ `Item` (name, description, quantity, FK user, cascade delete); `RefreshToken` (hash, fingerprint hash, expiry, revoked_at, FK user — merged to `main`, see `systemPatterns.md` § JWT refresh token rotation)
 - Separate test DB: `db_test`
 - Engine uses **NullPool** (serverless / Vercel friendly)
 

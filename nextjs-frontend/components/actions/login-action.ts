@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 
 import { authJwtLogin } from "@/app/clientService";
 import { redirect } from "next/navigation";
+import { forwardAuthCookies, setAccessTokenCookie } from "@/lib/auth-cookies";
 import { loginSchema } from "@/lib/definitions";
 import { getErrorMessage } from "@/lib/utils";
 
@@ -30,7 +31,8 @@ export async function login(prevState: unknown, formData: FormData) {
   };
 
   try {
-    const { data, error } = await authJwtLogin(input);
+    const result = await authJwtLogin(input);
+    const { data, error } = result;
     if (error) {
       return { server_validation_error: getErrorMessage(error) };
     }
@@ -44,7 +46,12 @@ export async function login(prevState: unknown, formData: FormData) {
     if (!accessToken) {
       return { server_validation_error: "An unknown error occurred" };
     }
-    (await cookies()).set("accessToken", accessToken);
+    const cookieStore = await cookies();
+    setAccessTokenCookie(cookieStore, accessToken);
+    forwardAuthCookies(
+      result.headers?.["set-cookie"] as string[] | undefined,
+      cookieStore,
+    );
   } catch (error) {
     Sentry.captureException(error);
     Sentry.logger.error("Login error", {

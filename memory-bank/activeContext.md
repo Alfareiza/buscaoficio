@@ -1,16 +1,72 @@
 # Active Context
 
 ## Current focus
-- JWT session hardening: refresh token rotation is implemented on the backend
-  (branch `feature/jwt-refresh-tokens`, **uncommitted**, tracked as GitHub
-  issue [#9](https://github.com/Alfareiza/buscaoficio/issues/9)). Frontend
-  side (silent refresh, cross-tab logout sync) is issue
-  [#10](https://github.com/Alfareiza/buscaoficio/issues/10), not started.
+- JWT session hardening: backend refresh token rotation
+  ([#9](https://github.com/Alfareiza/buscaoficio/issues/9)) is **merged to
+  `main`** via PR #11 (commit `0a8376b`). Frontend side
+  ([#10](https://github.com/Alfareiza/buscaoficio/issues/10) — cookie
+  forwarding, silent refresh, reactive 401 fallback) is **fully implemented
+  and tested on branch `feature/jwt-frontend-refresh`, intentionally left
+  uncommitted** pending explicit go-ahead.
+- **Open architecture question, unresolved:** whether to keep the current
+  server-mediated frontend (Server Actions + Edge middleware — what #10 was
+  built on), move toward a client-side SPA calling FastAPI directly, or a
+  hybrid (server-mediated auth + client-side CRUD/live features once a short
+  token is available). Surfaced when the user pushed back on the "Server
+  Actions, not a client SPA" characterization and described the product's
+  intended client-server usage pattern (cliente/profesional actions
+  eventually calling the API directly). Not decided — user wants to keep
+  talking it through (e.g. by walking a concrete future feature, like a
+  service request with live status, through each option) before committing.
+  This choice determines whether the already-built #10 work is the right
+  long-term foundation or needs rework. See Active decisions below for the
+  provisional lean.
 - FastAdmin branding (site name + logo) is wired; auth gaps (email
   verification, #1) are still open behind the JWT work above.
 
 ## Recent changes
-- **JWT refresh token rotation (backend, #9 — not yet committed):**
+- **JWT refresh token rotation frontend (#10, branch
+  `feature/jwt-frontend-refresh`, based on merged `main`, not committed):**
+  - `lib/auth-cookies.ts` (new): `forwardAuthCookies`, `setAccessTokenCookie`,
+    `clearAuthCookies`, `decodeJwtExpiryMs` — re-applies backend `Set-Cookie`
+    headers onto the Next.js server's own response, since server-to-server
+    fetches never expose them to the browser directly. Uses a structural
+    `CookieWriter` interface so the same helpers work from both
+    `next/headers`' `cookies()` (Server Actions) and `NextResponse.cookies`
+    (middleware).
+  - `lib/api-errors.ts` (new): `isUnauthorizedError()` — detects a 401 from
+    either the top-level or Axios-nested `response.status` shape.
+  - `proxy.ts` (rewritten): decodes the access token's `exp` claim before
+    every `/dashboard/:path*` request; if expired or within 2 minutes of
+    expiring, refreshes server-to-server against
+    `${API_BASE_URL}/api/v1/auth/jwt/refresh` (manually forwarding
+    `refreshToken`/`fingerprintToken` as a `Cookie` header), forwards the new
+    cookies to the browser, and redirects to `/login` (clearing cookies) on
+    any failure. This is the app's silent-refresh mechanism — there is no
+    client-side refresh timer.
+  - `login-action.ts` / `logout-action.ts`: now use the shared cookie
+    helpers — login forwards all three cookies from the backend response;
+    logout clears all three (previously only cleared `accessToken`).
+  - `items-action.ts`: each backend call checks `isUnauthorizedError()` as a
+    reactive fallback — if a token is revoked between the middleware's check
+    and the actual call, the action clears cookies and redirects instead of
+    surfacing a generic error.
+  - Fixed the `expires_in` bug (folded into this branch per user's choice
+    rather than a standalone fix): both `/jwt/login` and `/jwt/refresh` now
+    return `settings.ACCESS_TOKEN_EXPIRE_SECONDS`, not the refresh token's
+    30-day lifetime. 2 new backend regression tests.
+  - Decided **not** to implement `BroadcastChannel`/`storage`-event cross-tab
+    sync — cookies are already shared natively across tabs for the same
+    origin, so there's no separate client-side session state that could go
+    stale per tab. Documented in `docs/auth.md` instead of built.
+  - Tests: 104/104 backend, all frontend suites green (12 test files,
+    including new `auth-cookies.test.ts`, `api-errors.test.ts`,
+    `logout.test.tsx`, `proxy.test.ts`). `proxy.test.ts` needs
+    `/** @jest-environment node */` — jsdom lacks the `Request`/`Response`
+    APIs `next/server`'s `NextRequest` needs.
+  - `docs/auth.md` extended with a "Frontend: cookie forwarding & silent
+    refresh" section and updated FAQ answers — see docs section below.
+- **JWT refresh token rotation (backend, #9 — merged via PR #11):**
   - New `RefreshToken` model (`app/models.py`) + table `refresh_tokens`
     (migration `d8c5f7a9b3e1`): hash of refresh token, hash of a paired
     fingerprint token, expiry, revocation timestamp, issuing IP.
@@ -31,11 +87,8 @@
   - `ACCESS_TOKEN_EXPIRE_SECONDS` default lowered 3600 → **900** (15 min).
     New `REFRESH_TOKEN_EXPIRE_SECONDS` = **2592000** (30 days).
   - 27 new tests (`tests/test_refresh_tokens.py`,
-    `tests/routes/test_auth_refresh.py`); full backend suite 102/102 green.
-  - **Known bug, tracked in #9, not yet fixed:** the `expires_in` field in
-    the login/refresh JSON response returns the refresh token's lifetime
-    (30 days) instead of the access token's (15 min). Frontend (#10) must
-    not trust it — decode the JWT's own `exp` claim client-side instead.
+    `tests/routes/test_auth_refresh.py`); full backend suite 102/102 green
+    at merge time (now 104/104 with the #10 branch's `expires_in` fix tests).
   - `docs/auth.md` rewritten with a full "Refresh tokens & rotation"
     section plus FAQ entries on token-expiry detection and closing the
     browser without logging out.
@@ -43,6 +96,11 @@
     reflect the actual implementation (Option B — refresh rotation — was
     chosen over Option A — single long-lived token — deliberately, to keep
     the access-token blast radius small without hurting UX).
+  - Issue #10 was further **rewritten a second time** before implementation
+    started: its original text assumed client-side JWT decoding /
+    BroadcastChannel / direct browser→backend calls, which don't match this
+    app's actual Server Actions + Edge middleware architecture. Rewritten to
+    match reality, then implemented (see above).
 - FastAdmin header/sign-in logo now served from FastAPI `app/static/` at
   `/static/images/logo/busca-oficio-logo-principal.svg`. `ADMIN_SITE_*` values
   are URL paths, not filesystem paths. `load_dotenv()` moved to `app/__init__.py`.
@@ -67,8 +125,20 @@
   Logout revokes *all* sessions for the user, not just the current device —
   chosen deliberately over a narrower "revoke this session only" approach.
 - Do not commit or push work-in-progress branches without explicit
-  go-ahead — `feature/jwt-refresh-tokens` is fully implemented and tested
+  go-ahead — `feature/jwt-frontend-refresh` is fully implemented and tested
   but intentionally left uncommitted per this rule.
+- Frontend architecture (server-mediated vs. SPA vs. hybrid): **not yet
+  decided**, actively being discussed with the user (see Current focus).
+  Provisional lean (not agreed): **hybrid** — keep auth server-mediated
+  exactly as #10 built it (HttpOnly-only cookies, strongest security
+  posture, no client JS ever touches a token), and give the client a
+  short-lived access token only for the specific future features that need
+  it (live status, messaging/notifications — a two-sided marketplace will
+  plausibly want these, and a Server Action has no way to receive a
+  server-push update). Reasoning: no stated need today for a mobile app or
+  third-party API consumer that would justify a full SPA rewrite, and the
+  #10 work already built is exactly the auth foundation a hybrid model
+  needs (nothing built so far would need to be redone under this option).
 - Stay on template patterns (Makefile + watchers for OpenAPI sync).
 - Keep Vercel as intended deploy target (serverless, not containers).
 - MailHog remains for local email; Mailpit is a known alternative if we replace later.
@@ -85,14 +155,17 @@
   `tunnelRoute` unless we explicitly decide to.
 
 ## Next steps (suggested)
-1. Get explicit go-ahead, then commit/push `feature/jwt-refresh-tokens` and
-   open the PR for #9 (backend refresh token rotation).
-2. Fix the `expires_in` bug in `app/routes/auth.py` before or alongside that
-   PR (small change, tracked in #9).
-3. Start frontend work for #10: silent refresh (decode JWT `exp`, do not
-   trust `expires_in`), cross-tab logout sync, verify fingerprint cookie
-   round-trips correctly (no fingerprint-collection code needed — it's a
-   server-issued cookie, not a computed value).
+1. **Resolve the frontend architecture question** (server-mediated vs. SPA
+   vs. hybrid — see Current focus / Active decisions) before deciding what
+   to do with `feature/jwt-frontend-refresh`. If server-mediated or hybrid
+   is chosen, the branch as-built needs no rework. If full SPA is chosen,
+   #10 needs a redesign (cookies would need to become JS-readable or a
+   token-issuance endpoint would need adding) and issue #10 would need
+   rewriting a third time.
+2. Once resolved: get explicit go-ahead, then commit/push
+   `feature/jwt-frontend-refresh`, open the PR for #10, wait for CI/rebase
+   the same way #9/PR #11 was handled.
+3. Close out issue #8 (parent) once #10's actual scope is settled and merged.
 4. Implement email verification flow (GitHub issue #1).
 5. Add `createsuperuser` management command under `commands/`.
 6. If deploying: set Sentry env vars on Vercel (`SENTRY_ENVIRONMENT=production`)
