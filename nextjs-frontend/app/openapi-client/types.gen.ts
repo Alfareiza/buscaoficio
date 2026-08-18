@@ -90,9 +90,9 @@ export type ClienteRead = {
 
 /**
  * ClienteRegisterOtpCreate
- * Passwordless equivalent of ClienteRegisterCreate — no password, proven
- * email ownership via a short-lived registration_token from /auth/otp/verify
- * instead.
+ * Payload for passwordless cliente registration — no password; email
+ * ownership is proven by a short-lived registration_token from
+ * /auth/otp/verify instead.
  */
 export type ClienteRegisterOtpCreate = {
   /**
@@ -325,7 +325,8 @@ export type ProfesionalRead = {
 
 /**
  * ProfesionalRegisterOtpCreate
- * Passwordless equivalent of ProfesionalRegisterCreate.
+ * Payload for passwordless profesional registration. See
+ * ClienteRegisterOtpCreate for the general pattern.
  */
 export type ProfesionalRegisterOtpCreate = {
   documento_tipo: TipoDocumento;

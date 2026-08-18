@@ -184,19 +184,19 @@ export function AuthCard({ mode, intent = "login", onSuccess }: AuthCardProps) {
             </p>
           </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              disabled
-              className="flex w-min items-center justify-center gap-2 opacity-60"
-              title="Próximamente"
-              >
-              <FaGoogle className="h-4 w-4" />
-              Continuar con Google
-              <span className="ml-1 rounded-full bg-hueso-borde px-2 py-0.5 text-xs text-gray-500">
-                Próximamente
-              </span>
-            </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled
+            className="flex w-min items-center justify-center gap-2 opacity-60"
+            title="Próximamente"
+          >
+            <FaGoogle className="h-4 w-4" />
+            Continuar con Google
+            <span className="ml-1 rounded-full bg-hueso-borde px-2 py-0.5 text-xs text-gray-500">
+              Próximamente
+            </span>
+          </Button>
 
           <div className="flex items-center gap-3 text-xs text-gray-400">
             <span className="h-px flex-1 bg-hueso-borde" />
