@@ -5,7 +5,10 @@ The template gives a clean, typed full-stack starting point so product work can 
 
 ## Problems it solves
 - FE/BE schema drift → OpenAPI + generated TS client.
-- Auth boilerplate → fastapi-users (JWT, register, verify, reset).
+- Auth boilerplate → fastapi-users (JWT) fronting a passwordless email-OTP
+  login/registration flow (see `memory-bank/systemPatterns.md` § Passwordless
+  OTP auth pattern); password-based register/verify/reset routes remain in
+  the codebase but are vestigial as of 2026-08-18.
 - Local email testing without sending real mail → MailHog.
 - Consistent local environments → Docker Compose + Makefile.
 

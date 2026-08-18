@@ -10,19 +10,31 @@
   returns `{...response, data}` on success, raw `AxiosError` with `.error`
   attached on failure)
 - Package manager: **pnpm**
-- Pages: login, register, password recovery, dashboard (list/add/delete items)
+- Pages: `/login` and `/register` (share `app/(auth)/layout.tsx` route
+  group + `components/auth/AuthCard.tsx` — passwordless email OTP, not a
+  password form; `intent` prop differs the copy between the two),
+  password recovery (vestigial — see `activeContext.md`), dashboard
+  (list/add/delete items)
 - Tests: Jest + Testing Library
 - Auth helpers: `lib/auth-cookies.ts` (cookie forwarding/silent-refresh
   support), `lib/api-errors.ts` (`isUnauthorizedError`) — see
-  `systemPatterns.md` § Frontend auth pattern (#10, uncommitted branch
-  `feature/jwt-frontend-refresh`)
+  `systemPatterns.md` § Frontend auth pattern (#10, merged to `main`)
+- OTP auth: `components/actions/otp-auth-action.ts` (Server Actions),
+  `components/auth/AuthCard.tsx` (the multi-step client component), split
+  logo components in `components/ui/BuscaOficioLogo.tsx`
+  (`BuscaOficioMark` svg-only, `BuscaOficioWordmark` text-only,
+  `BuscaOficioLogo` composite) — see `systemPatterns.md` § Passwordless OTP
+  auth pattern
 
 ### Backend
 - FastAPI (async) + Uvicorn / Starlette
 - Pydantic v2 + pydantic-settings
-- Auth: fastapi-users (JWT, register, verify, reset, user CRUD)
+- Auth: fastapi-users (JWT + user CRUD) fronting a custom passwordless
+  email-OTP flow (`app/otp_manager.py`) — password-based register/login
+  routes were removed 2026-08-18; verify/reset routes remain but are
+  vestigial. See `systemPatterns.md` § Passwordless OTP auth pattern.
 - Domain API: Items CRUD + fastapi-pagination
-- Email: fastapi-mail + templates; local SMTP via MailHog
+- Email: fastapi-mail + templates (`otp_code.html`, `password_reset.html`); local SMTP via MailHog
 - Python 3.12, deps via **uv**
 - Tests: pytest / pytest-asyncio, coverage → Coveralls
 
@@ -30,7 +42,7 @@
 - PostgreSQL 17 (Docker)
 - SQLAlchemy 2 + asyncpg
 - Migrations: Alembic (async)
-- Models: `User` (UUID, fastapi-users) ↔ `Item` (name, description, quantity, FK user, cascade delete); `RefreshToken` (hash, fingerprint hash, expiry, revoked_at, FK user — merged to `main`, see `systemPatterns.md` § JWT refresh token rotation)
+- Models: `User` (UUID, fastapi-users) ↔ `Item` (name, description, quantity, FK user, cascade delete); `RefreshToken` (hash, fingerprint hash, expiry, revoked_at, FK user — merged to `main`, see `systemPatterns.md` § JWT refresh token rotation); `EmailOtp` (`email_otps` table, migration `a067ad066d81` — `email`, `code_hash`, `attempts`, `expires_at`, `consumed_at`, `created_ip`; keyed by email, not `user_id`, since the account may not exist yet — see `systemPatterns.md` § Passwordless OTP auth pattern)
 - Separate test DB: `db_test`
 - Engine uses **NullPool** (serverless / Vercel friendly)
 
@@ -93,6 +105,11 @@ Not “E2W”. End-to-end type safety means:
 - `ACCESS_TOKEN_EXPIRE_SECONDS` (default 900 = 15 min, was 3600),
   `REFRESH_TOKEN_EXPIRE_SECONDS` (default 2592000 = 30 days, new) — see
   `systemPatterns.md` § Auth pattern for the refresh-token-rotation flow
+- `REGISTRATION_TOKEN_SECRET_KEY` (signs the short-lived token proving OTP
+  ownership between `/otp/verify` and `/register/*/otp`),
+  `OTP_CODE_EXPIRE_SECONDS` (default 600 = 10 min),
+  `REGISTRATION_TOKEN_EXPIRE_SECONDS` (default 900 = 15 min) — see
+  `systemPatterns.md` § Passwordless OTP auth pattern
 - `OPENAPI_OUTPUT_FILE`
 - `CORS_ORIGINS`, `FRONTEND_URL`
 - Mail settings (`MAIL_*`)

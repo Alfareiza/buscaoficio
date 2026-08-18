@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from fastapi_users import schemas
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from uuid import UUID
 
 from .enums import EstadoVerificacionProfesional, TipoDocumento
@@ -62,10 +62,6 @@ class ClienteRead(ClienteBase):
     model_config = {"from_attributes": True}
 
 
-class ClienteRegisterCreate(UserCreate, ClienteBase):
-    pass
-
-
 class ProfesionalBase(BaseModel):
     documento_tipo: TipoDocumento
     documento_numero: str
@@ -100,5 +96,29 @@ class ProfesionalRead(ProfesionalBase):
     model_config = {"from_attributes": True}
 
 
-class ProfesionalRegisterCreate(UserCreate, ProfesionalBase):
-    pass
+class OtpRequestIn(BaseModel):
+    email: EmailStr
+
+
+class OtpVerifyIn(BaseModel):
+    email: EmailStr
+    code: str
+
+
+class ClienteRegisterOtpCreate(ClienteBase):
+    """Payload for passwordless cliente registration — no password; email
+    ownership is proven by a short-lived registration_token from
+    /auth/otp/verify instead."""
+
+    registration_token: str
+    nombre_completo: str
+    whatsapp: str | None = None
+
+
+class ProfesionalRegisterOtpCreate(ProfesionalBase):
+    """Payload for passwordless profesional registration. See
+    ClienteRegisterOtpCreate for the general pattern."""
+
+    registration_token: str
+    nombre_completo: str
+    whatsapp: str | None = None

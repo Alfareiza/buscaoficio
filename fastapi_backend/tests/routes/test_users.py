@@ -4,6 +4,7 @@ import uuid
 
 import pytest
 from fastapi import status
+from fastapi_users.password import PasswordHelper
 from fastapi_users.router.common import ErrorCode
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -183,10 +184,15 @@ class TestPatchMe:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_updates_password(
-        self, test_client: AsyncClient, authenticated_user: dict
+        self, test_client: AsyncClient, db_session, authenticated_user: dict
     ):
-        """Accept a valid new password and reject the previous one at login."""
-        email = authenticated_user["user"].email
+        """Accept a valid new password and persist a hash that only it verifies against.
+
+        There's no password-login route to re-authenticate through anymore
+        (passwordless OTP is the only login flow — see docs/auth.md), so this
+        checks the stored hash directly instead of round-tripping via login.
+        """
+        user_id = authenticated_user["user"].id
 
         response = await test_client.patch(
             "/api/v1/users/me",
@@ -195,18 +201,13 @@ class TestPatchMe:
         )
         assert response.status_code == status.HTTP_200_OK
 
-        new_login = await test_client.post(
-            "/api/v1/auth/jwt/login",
-            data={"username": email, "password": NEW_PASSWORD},
-        )
-        assert new_login.status_code == status.HTTP_200_OK
-        assert "access_token" in new_login.json()
-
-        old_login = await test_client.post(
-            "/api/v1/auth/jwt/login",
-            data={"username": email, "password": DEFAULT_USER_PASSWORD},
-        )
-        assert old_login.status_code == status.HTTP_400_BAD_REQUEST
+        result = await db_session.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one()
+        password_helper = PasswordHelper()
+        assert password_helper.verify_and_update(NEW_PASSWORD, user.hashed_password)[0]
+        assert not password_helper.verify_and_update(
+            DEFAULT_USER_PASSWORD, user.hashed_password
+        )[0]
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_cannot_escalate_to_superuser(

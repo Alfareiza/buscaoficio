@@ -69,6 +69,11 @@ async def get_user_manager(user_db: SQLAlchemyUserDatabase = Depends(get_user_db
     yield UserManager(user_db)
 
 
+# tokenUrl only feeds Swagger's OAuth2 "Authorize" password-flow widget in
+# /docs — it does not affect actual bearer-token validation. There's no
+# password-login route to point it at anymore (removed with password auth,
+# see docs/auth.md), so that specific widget is inert; pasting a token
+# obtained via OTP login directly into "Authorize" still works normally.
 bearer_transport = BearerTransport(
     tokenUrl=f"{API_V1_PREFIX.lstrip('/')}/{AUTH_URL_PATH}/jwt/login"
 )

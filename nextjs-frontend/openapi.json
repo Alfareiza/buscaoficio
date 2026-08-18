@@ -5,46 +5,6 @@
     "version": "0.1.0"
   },
   "paths": {
-    "/api/v1/auth/jwt/login": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Login \u2192 JWT",
-        "description": "Authenticate user and return access token + set refresh token cookie.\n\nGenerates a short-lived access token (returned in response body) and a\nlong-lived refresh token (set as HttpOnly cookie). Also sets a\nfingerprint cookie for CSRF/XSS protection.\n\nReturns:\n    JSON response with access_token, token_type, and expires_in.",
-        "operationId": "auth:jwt.login",
-        "requestBody": {
-          "content": {
-            "application/x-www-form-urlencoded": {
-              "schema": {
-                "$ref": "#/components/schemas/login"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/auth/jwt/logout": {
       "post": {
         "tags": [
@@ -70,6 +30,86 @@
         ]
       }
     },
+    "/api/v1/auth/otp/request": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Request a passwordless login code",
+        "description": "Send a 6-digit code to `email`, valid for OTP_CODE_EXPIRE_SECONDS.\n\nWorks identically whether the email belongs to an existing user or not \u2014\naccount creation happens later, in POST /auth/register/{cliente,\nprofesional}/otp, after the code is verified. Always responds 202\nregardless of outcome (anti-enumeration, same pattern as\n/auth/forgot-password) \u2014 a resend within the cooldown window is silently\na no-op.",
+        "operationId": "auth:otp.request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OtpRequestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/otp/verify": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Verify a passwordless login code",
+        "description": "Verify a code requested via POST /auth/otp/request.\n\nIf `email` already has an account, logs it in (access token +\nrefresh/fingerprint cookies, via build_session_response). Otherwise\nreturns a short-lived registration_token proving the email was verified,\nto be used with POST /auth/register/cliente/otp or POST\n/auth/register/profesional/otp.",
+        "operationId": "auth:otp.verify",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OtpVerifyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/jwt/refresh": {
       "post": {
         "tags": [
@@ -90,32 +130,30 @@
         }
       }
     },
-    "/api/v1/auth/register": {
+    "/api/v1/auth/register/cliente/otp": {
       "post": {
         "tags": [
           "auth"
         ],
-        "summary": "Create user",
-        "description": "Create user.\n\nNext: POST /auth/request-verify-token, POST /auth/verify, then\nPOST /auth/jwt/login.",
-        "operationId": "register:register",
+        "summary": "Complete passwordless registration as cliente",
+        "description": "Create a usuario + cliente profile from an OTP-verified email, then\nlog the new user in.\n\nProof of email ownership is the registration_token from POST\n/auth/otp/verify, not a password. A random, never-disclosed password is\nstored so the account still satisfies the underlying fastapi-users\nschema \u2014 it can never actually be used to log in.",
+        "operationId": "register:register_cliente_otp",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UserCreate"
+                "$ref": "#/components/schemas/ClienteRegisterOtpCreate"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "201": {
+          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserRead"
-                }
+                "schema": {}
               }
             }
           },
@@ -132,74 +170,30 @@
         }
       }
     },
-    "/api/v1/auth/register/cliente": {
+    "/api/v1/auth/register/profesional/otp": {
       "post": {
         "tags": [
           "auth"
         ],
-        "summary": "Register as cliente",
-        "description": "Create a usuario and its cliente profile in one request.\n\nCombines POST /auth/register + POST /users/me/cliente. Next:\nPOST /auth/request-verify-token, POST /auth/verify, then\nPOST /auth/jwt/login.",
-        "operationId": "register:register_cliente",
+        "summary": "Complete passwordless registration as profesional",
+        "description": "Create a usuario + profesional profile from an OTP-verified email,\nthen log the new user in. See register_cliente_otp for the general\npasswordless-registration pattern (random unusable password, is_verified\nset immediately). Starts as estado_verificacion=pendiente; verification\nreview happens out of band.",
+        "operationId": "register:register_profesional_otp",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ClienteRegisterCreate"
+                "$ref": "#/components/schemas/ProfesionalRegisterOtpCreate"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "201": {
+          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserRead"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/auth/register/profesional": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Register as profesional",
-        "description": "Create a usuario and its profesional profile in one request.\n\nCombines POST /auth/register + POST /users/me/profesional. Starts as\nestado_verificacion=pendiente; verification review happens out of band.\nNext: POST /auth/request-verify-token, POST /auth/verify, then\nPOST /auth/jwt/login.",
-        "operationId": "register:register_profesional",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProfesionalRegisterCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserRead"
-                }
+                "schema": {}
               }
             }
           },
@@ -222,7 +216,7 @@
           "auth"
         ],
         "summary": "Start reset (sends email)",
-        "description": "Start reset and send email.\n\nComplete with POST /auth/reset-password, then sign in with\nPOST /auth/jwt/login.",
+        "description": "Start reset and send email.\n\nComplete with POST /auth/reset-password. Note: there is no password-based\nsign-in route anymore (see docs/auth.md) \u2014 these routes are unlinked in\nthe frontend and kept only for password-based accounts, if any exist.",
         "operationId": "reset:forgot_password",
         "requestBody": {
           "content": {
@@ -262,7 +256,7 @@
           "auth"
         ],
         "summary": "Complete reset with token",
-        "description": "Complete reset with the emailed token.\n\nStart with POST /auth/forgot-password, then POST /auth/jwt/login.",
+        "description": "Complete reset with the emailed token.\n\nStart with POST /auth/forgot-password.",
         "operationId": "reset:reset_password",
         "requestBody": {
           "content": {
@@ -302,7 +296,7 @@
           "auth"
         ],
         "summary": "Request verification email",
-        "description": "Request verification email.\n\nThen POST /auth/verify, then POST /auth/jwt/login.",
+        "description": "Request verification email.\n\nThen POST /auth/verify.",
         "operationId": "verify:request-token",
         "requestBody": {
           "content": {
@@ -342,7 +336,7 @@
           "auth"
         ],
         "summary": "Verify email with token",
-        "description": "Verify email with token.\n\nRequest it with POST /auth/request-verify-token, then\nPOST /auth/jwt/login.",
+        "description": "Verify email with token.\n\nRequest it with POST /auth/request-verify-token.",
         "operationId": "verify:verify",
         "requestBody": {
           "content": {
@@ -1373,7 +1367,7 @@
         ],
         "title": "ClienteRead"
       },
-      "ClienteRegisterCreate": {
+      "ClienteRegisterOtpCreate": {
         "properties": {
           "direccion_default": {
             "anyOf": [
@@ -1398,50 +1392,9 @@
             ],
             "title": "Referido Por Id"
           },
-          "email": {
+          "registration_token": {
             "type": "string",
-            "format": "email",
-            "title": "Email"
-          },
-          "password": {
-            "type": "string",
-            "title": "Password"
-          },
-          "is_active": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Active",
-            "default": true
-          },
-          "is_superuser": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Superuser",
-            "default": false
-          },
-          "is_verified": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Verified",
-            "default": false
+            "title": "Registration Token"
           },
           "nombre_completo": {
             "type": "string",
@@ -1461,11 +1414,11 @@
         },
         "type": "object",
         "required": [
-          "email",
-          "password",
+          "registration_token",
           "nombre_completo"
         ],
-        "title": "ClienteRegisterCreate"
+        "title": "ClienteRegisterOtpCreate",
+        "description": "Passwordless equivalent of ClienteRegisterCreate \u2014 no password, proven\nemail ownership via a short-lived registration_token from /auth/otp/verify\ninstead."
       },
       "ClienteUpdate": {
         "properties": {
@@ -1588,6 +1541,39 @@
           "user_id"
         ],
         "title": "ItemRead"
+      },
+      "OtpRequestIn": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "OtpRequestIn"
+      },
+      "OtpVerifyIn": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "code"
+        ],
+        "title": "OtpVerifyIn"
       },
       "Page_ItemRead_": {
         "properties": {
@@ -1836,7 +1822,7 @@
         ],
         "title": "ProfesionalRead"
       },
-      "ProfesionalRegisterCreate": {
+      "ProfesionalRegisterOtpCreate": {
         "properties": {
           "documento_tipo": {
             "$ref": "#/components/schemas/TipoDocumento"
@@ -1867,50 +1853,9 @@
             ],
             "title": "Foto Perfil Url"
           },
-          "email": {
+          "registration_token": {
             "type": "string",
-            "format": "email",
-            "title": "Email"
-          },
-          "password": {
-            "type": "string",
-            "title": "Password"
-          },
-          "is_active": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Active",
-            "default": true
-          },
-          "is_superuser": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Superuser",
-            "default": false
-          },
-          "is_verified": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Verified",
-            "default": false
+            "title": "Registration Token"
           },
           "nombre_completo": {
             "type": "string",
@@ -1932,11 +1877,11 @@
         "required": [
           "documento_tipo",
           "documento_numero",
-          "email",
-          "password",
+          "registration_token",
           "nombre_completo"
         ],
-        "title": "ProfesionalRegisterCreate"
+        "title": "ProfesionalRegisterOtpCreate",
+        "description": "Passwordless equivalent of ProfesionalRegisterCreate."
       },
       "ProfesionalUpdate": {
         "properties": {
@@ -1982,77 +1927,6 @@
         ],
         "title": "TipoDocumento",
         "description": "Each member carries a human-readable Spanish label alongside its code\n(e.g. TipoDocumento.CC.label == \"C\u00e9dula de Ciudadan\u00eda\"), used to render\nadmin dropdown options \u2014 the codes alone aren't self-explanatory."
-      },
-      "UserCreate": {
-        "properties": {
-          "email": {
-            "type": "string",
-            "format": "email",
-            "title": "Email"
-          },
-          "password": {
-            "type": "string",
-            "title": "Password"
-          },
-          "is_active": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Active",
-            "default": true
-          },
-          "is_superuser": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Superuser",
-            "default": false
-          },
-          "is_verified": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Verified",
-            "default": false
-          },
-          "nombre_completo": {
-            "type": "string",
-            "title": "Nombre Completo"
-          },
-          "whatsapp": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Whatsapp"
-          }
-        },
-        "type": "object",
-        "required": [
-          "email",
-          "password",
-          "nombre_completo"
-        ],
-        "title": "UserCreate"
       },
       "UserRead": {
         "properties": {
@@ -2221,63 +2095,6 @@
           "type"
         ],
         "title": "ValidationError"
-      },
-      "login": {
-        "properties": {
-          "grant_type": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "password"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Grant Type"
-          },
-          "username": {
-            "type": "string",
-            "title": "Username"
-          },
-          "password": {
-            "type": "string",
-            "title": "Password"
-          },
-          "scope": {
-            "type": "string",
-            "title": "Scope",
-            "default": ""
-          },
-          "client_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Client Id"
-          },
-          "client_secret": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Client Secret"
-          }
-        },
-        "type": "object",
-        "required": [
-          "username",
-          "password"
-        ],
-        "title": "Body_auth-auth:jwt.login"
       }
     },
     "securitySchemes": {

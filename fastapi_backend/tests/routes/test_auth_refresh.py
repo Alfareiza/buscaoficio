@@ -1,4 +1,12 @@
-"""Integration tests for the login -> refresh -> logout flow with refresh token rotation."""
+"""Integration tests for the login -> refresh -> logout flow with refresh token rotation.
+
+Login here goes through the OTP flow (POST /otp/request + /otp/verify) since
+that's the only login route the app has — password-based /jwt/login was
+removed once the frontend fully switched to passwordless auth (see
+docs/auth.md). Refresh/logout behavior is otherwise agnostic to how the
+session started: /otp/verify calls the same build_session_response() that
+password login used to.
+"""
 
 from collections.abc import Awaitable, Callable
 
@@ -10,14 +18,19 @@ from app.config import settings
 from app.models import RefreshToken, User
 from app.refresh_token_manager import RefreshTokenManager
 
-DEFAULT_PASSWORD = "TestPassword123#"
+
+@pytest.fixture(autouse=True)
+def mock_send_otp_email(mocker):
+    """Never hit real SMTP in tests; capture the code that would've been sent."""
+    return mocker.patch("app.routes.auth.send_otp_code_email", mocker.AsyncMock())
 
 
-async def _login(test_client, email: str, password: str = DEFAULT_PASSWORD):
-    """Log in and return the httpx response (with cookies set on the client)."""
+async def _login(test_client, email: str, mock_send_otp_email):
+    """Log in via OTP and return the httpx response (with cookies set on the client)."""
+    await test_client.post("/api/v1/auth/otp/request", json={"email": email})
+    code = mock_send_otp_email.call_args[0][1]
     return await test_client.post(
-        "/api/v1/auth/jwt/login",
-        data={"username": email, "password": password},
+        "/api/v1/auth/otp/verify", json={"email": email, "code": code}
     )
 
 
@@ -26,10 +39,13 @@ class TestLoginIssuesRefreshToken:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_login_returns_access_token(
-        self, test_client, create_user: Callable[..., Awaitable[User]]
+        self,
+        test_client,
+        create_user: Callable[..., Awaitable[User]],
+        mock_send_otp_email,
     ) -> None:
         user = await create_user()
-        response = await _login(test_client, user.email)
+        response = await _login(test_client, user.email, mock_send_otp_email)
 
         assert response.status_code == status.HTTP_200_OK
         body = response.json()
@@ -38,11 +54,14 @@ class TestLoginIssuesRefreshToken:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_login_expires_in_reflects_access_token_lifetime(
-        self, test_client, create_user: Callable[..., Awaitable[User]]
+        self,
+        test_client,
+        create_user: Callable[..., Awaitable[User]],
+        mock_send_otp_email,
     ) -> None:
         """Regression test: expires_in must describe the access token, not the refresh token."""
         user = await create_user()
-        response = await _login(test_client, user.email)
+        response = await _login(test_client, user.email, mock_send_otp_email)
 
         body = response.json()
         assert body["expires_in"] == settings.ACCESS_TOKEN_EXPIRE_SECONDS
@@ -50,10 +69,13 @@ class TestLoginIssuesRefreshToken:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_login_sets_refresh_and_fingerprint_cookies(
-        self, test_client, create_user: Callable[..., Awaitable[User]]
+        self,
+        test_client,
+        create_user: Callable[..., Awaitable[User]],
+        mock_send_otp_email,
     ) -> None:
         user = await create_user()
-        response = await _login(test_client, user.email)
+        response = await _login(test_client, user.email, mock_send_otp_email)
 
         assert "refreshToken" in response.cookies
         assert "fingerprintToken" in response.cookies
@@ -64,9 +86,10 @@ class TestLoginIssuesRefreshToken:
         test_client,
         db_session,
         create_user: Callable[..., Awaitable[User]],
+        mock_send_otp_email,
     ) -> None:
         user = await create_user()
-        await _login(test_client, user.email)
+        await _login(test_client, user.email, mock_send_otp_email)
 
         result = await db_session.execute(
             select(RefreshToken).where(RefreshToken.user_id == user.id)
@@ -77,14 +100,21 @@ class TestLoginIssuesRefreshToken:
         assert tokens[0].revoked_at is None
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_login_bad_credentials_does_not_create_refresh_token(
+    async def test_login_with_invalid_code_does_not_create_refresh_token(
         self,
         test_client,
         db_session,
         create_user: Callable[..., Awaitable[User]],
+        mock_send_otp_email,
     ) -> None:
         user = await create_user()
-        response = await _login(test_client, user.email, password="WrongPassword1#")
+        await test_client.post("/api/v1/auth/otp/request", json={"email": user.email})
+        real_code = mock_send_otp_email.call_args[0][1]
+        wrong_code = str((int(real_code) + 1) % 1_000_000).zfill(len(real_code))
+
+        response = await test_client.post(
+            "/api/v1/auth/otp/verify", json={"email": user.email, "code": wrong_code}
+        )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -99,10 +129,13 @@ class TestRefreshEndpoint:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_refresh_with_valid_cookies_returns_new_access_token(
-        self, test_client, create_user: Callable[..., Awaitable[User]]
+        self,
+        test_client,
+        create_user: Callable[..., Awaitable[User]],
+        mock_send_otp_email,
     ) -> None:
         user = await create_user()
-        await _login(test_client, user.email)
+        await _login(test_client, user.email, mock_send_otp_email)
 
         refresh_response = await test_client.post("/api/v1/auth/jwt/refresh")
 
@@ -113,11 +146,14 @@ class TestRefreshEndpoint:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_refresh_expires_in_reflects_access_token_lifetime(
-        self, test_client, create_user: Callable[..., Awaitable[User]]
+        self,
+        test_client,
+        create_user: Callable[..., Awaitable[User]],
+        mock_send_otp_email,
     ) -> None:
         """Regression test: expires_in must describe the access token, not the refresh token."""
         user = await create_user()
-        await _login(test_client, user.email)
+        await _login(test_client, user.email, mock_send_otp_email)
 
         refresh_response = await test_client.post("/api/v1/auth/jwt/refresh")
 
@@ -127,10 +163,13 @@ class TestRefreshEndpoint:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_refresh_rotates_cookies(
-        self, test_client, create_user: Callable[..., Awaitable[User]]
+        self,
+        test_client,
+        create_user: Callable[..., Awaitable[User]],
+        mock_send_otp_email,
     ) -> None:
         user = await create_user()
-        login_response = await _login(test_client, user.email)
+        login_response = await _login(test_client, user.email, mock_send_otp_email)
         old_refresh_cookie = login_response.cookies.get("refreshToken")
 
         refresh_response = await test_client.post("/api/v1/auth/jwt/refresh")
@@ -151,10 +190,11 @@ class TestRefreshEndpoint:
         test_client,
         db_session,
         create_user: Callable[..., Awaitable[User]],
+        mock_send_otp_email,
     ) -> None:
         """Simulates theft detection: an old (already-rotated) refresh token is reused."""
         user = await create_user()
-        await _login(test_client, user.email)
+        await _login(test_client, user.email, mock_send_otp_email)
 
         old_cookies = dict(test_client.cookies)
 
@@ -174,10 +214,11 @@ class TestRefreshEndpoint:
         test_client,
         db_session,
         create_user: Callable[..., Awaitable[User]],
+        mock_send_otp_email,
     ) -> None:
         """Theft detection should kill ALL active sessions for the user, not just the reused one."""
         user = await create_user()
-        await _login(test_client, user.email)
+        await _login(test_client, user.email, mock_send_otp_email)
         old_cookies = dict(test_client.cookies)
 
         await test_client.post("/api/v1/auth/jwt/refresh")
@@ -195,10 +236,13 @@ class TestRefreshEndpoint:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_refresh_with_wrong_fingerprint_returns_401(
-        self, test_client, create_user: Callable[..., Awaitable[User]]
+        self,
+        test_client,
+        create_user: Callable[..., Awaitable[User]],
+        mock_send_otp_email,
     ) -> None:
         user = await create_user()
-        await _login(test_client, user.email)
+        await _login(test_client, user.email, mock_send_otp_email)
 
         test_client.cookies.set("fingerprintToken", "tampered-fingerprint-value")
 
@@ -216,9 +260,10 @@ class TestLogoutInvalidation:
         test_client,
         db_session,
         create_user: Callable[..., Awaitable[User]],
+        mock_send_otp_email,
     ) -> None:
         user = await create_user()
-        login_response = await _login(test_client, user.email)
+        login_response = await _login(test_client, user.email, mock_send_otp_email)
         access_token = login_response.json()["access_token"]
 
         await test_client.post(
@@ -235,10 +280,13 @@ class TestLogoutInvalidation:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_refresh_after_logout_returns_401(
-        self, test_client, create_user: Callable[..., Awaitable[User]]
+        self,
+        test_client,
+        create_user: Callable[..., Awaitable[User]],
+        mock_send_otp_email,
     ) -> None:
         user = await create_user()
-        login_response = await _login(test_client, user.email)
+        login_response = await _login(test_client, user.email, mock_send_otp_email)
         access_token = login_response.json()["access_token"]
 
         await test_client.post(
@@ -256,15 +304,16 @@ class TestLogoutInvalidation:
         test_client,
         db_session,
         create_user: Callable[..., Awaitable[User]],
+        mock_send_otp_email,
     ) -> None:
         """Simulates multi-device logout: Device A logs out, Device B's refresh token dies too."""
         user = await create_user()
 
-        login_device_a = await _login(test_client, user.email)
+        login_device_a = await _login(test_client, user.email, mock_send_otp_email)
         device_a_access_token = login_device_a.json()["access_token"]
 
         test_client.cookies.clear()
-        await _login(test_client, user.email)
+        await _login(test_client, user.email, mock_send_otp_email)
         device_b_cookies = dict(test_client.cookies)
 
         await test_client.post(

@@ -1,5 +1,9 @@
 "use server";
 
+// Dormant since 2026-08-18 — BuscaOficio moved to passwordless (email OTP)
+// login. Kept in case password-based login returns as a fallback; not
+// called from any linked UI (see /login's AuthCard for the current flow).
+
 import * as Sentry from "@sentry/nextjs";
 
 import { resetForgotPassword, resetResetPassword } from "@/app/clientService";

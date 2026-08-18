@@ -21,14 +21,34 @@ export const passwordResetConfirmSchema = z
     path: ["passwordConfirm"],
   });
 
-export const registerSchema = z.object({
-  password: passwordSchema,
-  email: z.string().email({ message: "Invalid email address" }),
+export const otpRequestSchema = z.object({
+  email: z.string().email({ message: "Correo electrónico inválido" }),
 });
 
-export const loginSchema = z.object({
-  password: z.string().min(1, { message: "Password is required" }),
-  username: z.string().min(1, { message: "Username is required" }),
+export const otpVerifySchema = z.object({
+  email: z.string().email({ message: "Correo electrónico inválido" }),
+  code: z
+    .string()
+    .length(6, { message: "El código debe tener 6 dígitos" })
+    .regex(/^\d+$/, { message: "El código solo debe contener números" }),
+});
+
+export const onboardingClienteSchema = z.object({
+  registration_token: z.string().min(1),
+  nombre_completo: z.string().min(1),
+  whatsapp: z.string().optional(),
+});
+
+export const onboardingProfesionalSchema = z.object({
+  registration_token: z.string().min(1),
+  nombre_completo: z.string().min(1),
+  whatsapp: z.string().optional(),
+  documento_tipo: z
+    .string()
+    .min(1, { message: "El tipo de documento es requerido" }),
+  documento_numero: z
+    .string()
+    .min(1, { message: "El número de documento es requerido" }),
 });
 
 export const itemSchema = z.object({

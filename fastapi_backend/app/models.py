@@ -162,3 +162,19 @@ class RefreshToken(TimestampMixin, Base):
     created_ip = Column(String, nullable=True)
 
     user = relationship("User")
+
+
+class EmailOtp(TimestampMixin, Base):
+    """One-time passwordless login/registration codes, keyed by email rather
+    than user_id — the email may not have an account yet (registration
+    happens after a successful verify, not before)."""
+
+    __tablename__ = "email_otps"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    email = Column(String, nullable=False, index=True)
+    code_hash = Column(String, nullable=False)
+    attempts = Column(Integer, default=0, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    created_ip = Column(String, nullable=True)

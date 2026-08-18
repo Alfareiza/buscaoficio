@@ -1,12 +1,21 @@
 # Progress
 
 ## What works (template baseline)
-- FastAPI auth (JWT register/login/verify/reset) + users router
+- FastAPI auth: **passwordless email OTP** login/registration is the only
+  linked flow (`/otp/request`, `/otp/verify`, `/register/{cliente,
+  profesional}/otp`) — password-based `/jwt/login`/`/register*` were
+  removed 2026-08-18, **uncommitted**, see Session log below and
+  `systemPatterns.md` § Passwordless OTP auth pattern. `/jwt/refresh`,
+  `/jwt/logout`, and the users router are unaffected by which flow created
+  the session.
 - JWT refresh token rotation with DB-backed revocation + double-submit
-  fingerprint cookie — **merged to `main` via PR #11** (issue #9)
+  fingerprint cookie — **merged to `main`** (`0a8376b`, issue #9)
 - Frontend cookie forwarding + middleware-based silent refresh + reactive
-  401 fallback (branch `feature/jwt-frontend-refresh`, **fully implemented
-  and tested, not yet committed** — see Session log below and issue #10)
+  401 fallback — **merged to `main`** (`4d75bde`, issue #10)
+- `AuthCard` component (`components/auth/AuthCard.tsx`) drives the OTP
+  flow on both `/login` and `/register`, which now share a route-group
+  layout (`app/(auth)/layout.tsx`) so toggling between them feels instant
+  (soft RSC nav, not a page reload) — **uncommitted**, 2026-08-18
 - Items CRUD + pagination
 - Next.js auth pages + dashboard
 - OpenAPI → typed FE client generation
@@ -32,13 +41,24 @@
 
 ## What's left / unknown
 - [ ] **Decide frontend architecture** (server-mediated vs. SPA vs. hybrid —
-  see `activeContext.md`) — blocks whether #10 ships as-is or needs rework
-- [ ] Commit + push `feature/jwt-frontend-refresh` and open PR for #10
-  (waiting on explicit go-ahead — do not commit/push without it — and on
-  the architecture decision above)
-- [ ] Close issue #8 (parent) once #10 is merged
-- [ ] Cleanup job for expired/revoked `refresh_tokens` rows (not started, not
-  urgent at current scale)
+  see `activeContext.md`) — #9/#10 are already merged regardless, but this
+  still shapes future features (live status, messaging)
+- [ ] Commit + push the current working tree (OTP migration, auth UX
+  polish, password-auth removal — all 2026-08-18) once given explicit
+  go-ahead — do not commit/push without it
+- [ ] Close issue #8 (parent) once the architecture question above is settled
+- [ ] Re-evaluate issue #1 (email verification) — OTP accounts are already
+  `is_verified=true` at creation and the password registration path that
+  could produce an unverified account is gone; decide whether to close #1,
+  rescope it, or remove `/request-verify-token`/`/verify` too (not done yet)
+- [ ] Decide the fate of `/forgot-password`/`/reset-password` (backend) and
+  `/password-recovery` (frontend) — same vestigial status as #1 above, not
+  acted on in the 2026-08-18 cleanup
+- [ ] Cosmetic: many unrelated route docstrings (`items.py`, user/cliente/
+  profesional CRUD) still say "Requires POST /auth/jwt/login" — harmless
+  Swagger text, not a functional bug, left for a future sweep
+- [ ] Cleanup job for expired/revoked `refresh_tokens` **and `email_otps`**
+  rows (not started, not urgent at current scale)
 - [ ] Confirm DBs restarted and migrations applied after port change
 - [ ] Domain product features for "busca oficio" (not started)
 - [ ] Production email provider (beyond MailHog)
@@ -46,8 +66,8 @@
   DSN + `SENTRY_ENVIRONMENT=production` + frontend `SENTRY_AUTH_TOKEN`
 - [ ] Confirm a real error from the running app lands in Sentry (not done yet)
 - [ ] Optional: replace MailHog with Mailpit
-- [ ] Email verification flow — backend email + template + frontend page (GitHub issue #1)
-- [ ] `createsuperuser` management command
+- [ ] `createsuperuser` management command (workaround now: sign up via the
+  app's OTP flow, or FastAdmin, then promote via SQL)
 
 ## Known issues / gotchas
 - Changing `models.py` alone does **not** update OpenAPI client or DB schema.
@@ -83,6 +103,21 @@
   explicit `return redirect(...)`, or execution falls through past it under
   test (and can end up calling a downstream function with an undefined
   token).
+- `jest.mock("...")` needs a **relative** path, not `@/` — the SWC alias
+  rewrite only applies to real `import` statements, not string arguments to
+  `jest.mock()`. Every test file in this repo mocks via relative paths for
+  this reason; a `@/`-aliased `jest.mock()` fails with a confusing "Cannot
+  find module" pointing at the wrong line.
+- After an HTTP call through the backend's `test_client`, `await
+  db_session.refresh(some_object)` raises `InvalidRequestError: Instance
+  ... is not persistent` — `conftest.py`'s `override_get_user_db` closes
+  the session after each request. Re-query with `db_session.execute(select(...))`
+  instead; that still works fine post-request.
+- A backend HTTP route being unused by the current frontend does **not**
+  make it "dead code" the way an unreferenced function is — it's still
+  public API surface until you've confirmed no other client calls it.
+  Worth an explicit question to the user rather than inferring from grep
+  results alone before deleting a route (see the 2026-08-18 removal below).
 
 ## Session log (2026-08-10 / 2026-08-11)
 - Indexed codebase; reviewed stack by section (FE/BE/DB/DevOps).
@@ -171,3 +206,61 @@
   (cookie forwarding, silent refresh, reactive fallback, cross-tab
   reasoning, `expires_in` fix) — no additional doc changes needed this
   session, just this memory-bank sync.
+- **#9 and #10 have since been committed to `main`** (`0a8376b`, `4d75bde`)
+  — confirmed via `git log` in the 2026-08-18 session below; this file's
+  earlier "not yet committed" language was stale until this update.
+
+## Session log (2026-08-18) — passwordless OTP migration + auth UX polish
+- Somewhere before this conversation picked up (context was compacted/reset
+  mid-session, so exact turn-by-turn history isn't available), password
+  auth was fully replaced with passwordless email OTP as the frontend's
+  only login/registration flow: backend `OtpManager`
+  (`app/otp_manager.py`), `email_otps` table (migration `a067ad066d81`),
+  routes `/otp/request`, `/otp/verify`, `/register/{cliente,profesional}/otp`;
+  frontend `otp-auth-action.ts` + `AuthCard.tsx`. `docs/auth.md` gained the
+  full design writeup (§ "0 · Passwordless login"). See `systemPatterns.md`
+  § Passwordless OTP auth pattern and `activeContext.md` for what's known.
+- Picked up mid-session (disk-full error interrupted the prior attempt;
+  resumed after the user freed space) fixing test fallout from that
+  migration: `registerPage.test.tsx`/`loginPage.test.tsx` were still
+  testing the old password forms that no longer render; rewrote them for
+  the redirect/AuthCard reality. Added `AuthCard.test.tsx` (had no coverage
+  before). Fixed `register.test.ts` for a new required `nombre_completo`
+  field. Fixed a real `SubmitButton` type bug (`className` typed required
+  despite a default value) found via `tsc` in the process.
+- **Auth pages UX polish**, per user request referencing a Dribbble sign-in
+  page as inspiration: split `BuscaOficioLogo` into `BuscaOficioMark`/
+  `BuscaOficioWordmark`; added `AuthCard`'s `intent` prop (login/register
+  copy + toggle link); moved `/login`+`/register` into a shared
+  `app/(auth)/layout.tsx` route group so toggling between them is a soft
+  RSC nav instead of a reload (verified via network trace); `/register`
+  went from a bare redirect back to a real page. Verified the whole flow
+  live via `playwright-cli` (Chrome extension wasn't connected) — email →
+  OTP → dashboard, plus the login↔register toggle. Had to restart the dev
+  server (port 3000) after deleting `.next/` mid-run.
+- **Removed the now-fully-dead password-based auth**, at the user's
+  request to clean up "unused code in regard to this feature." Investigated
+  via the codebase graph (`codebase-memory-mcp`) plus grep cross-checks
+  (the graph had a few stale orphaned nodes, e.g. a deleted folder that
+  still showed up — don't trust it blindly for deletion decisions). Found
+  a real fork: frontend `login-action.ts`/`register-action.ts` had zero
+  production callers (safe, unambiguous delete), but the backend
+  `/jwt/login`/`/register*` routes were still live, working endpoints
+  explicitly documented as "kept for backward compatibility" — a route
+  being unused by the current frontend isn't the same as dead code; it's
+  still public API surface. Asked the user directly whether anything else
+  calls those routes rather than assuming from the code — confirmed "only
+  this frontend nextjs project" — then removed both frontend and backend.
+  Full list of what was deleted/changed: see `activeContext.md` § Recent
+  changes. Also had to fix two backend tests that used `/jwt/login` as
+  scaffolding rather than testing it directly (`test_auth_refresh.py`'s
+  login helper, `test_users.py::test_updates_password`) — not a coverage
+  loss, since `/otp/verify` calls the exact same `build_session_response()`.
+  Regenerated `openapi.json` + the frontend OpenAPI client so the generated
+  `authJwtLogin`/`registerRegister` bindings are gone too. Backend 103/104
+  (1 pre-existing, unrelated email-subject-text failure from earlier
+  uncommitted work in this branch), frontend 45/45, `tsc`/`eslint`/`ruff`
+  clean.
+- All of the above is **uncommitted** — standing instruction is not to
+  commit/push without explicit go-ahead (see `activeContext.md` § Active
+  decisions).
