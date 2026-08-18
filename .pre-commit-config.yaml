@@ -59,7 +59,13 @@ repos:
         pass_filenames: false
       - id: generate-frontend-client
         name: generate frontend client
-        entry: sh -c 'cd nextjs-frontend && pnpm run generate-client'
+        # OPENAPI_OUTPUT_FILE is set explicitly here (not just left to
+        # nextjs-frontend/.env.local) because CI's job-level env sets it to
+        # ../nextjs-frontend/openapi.json for the backend hook above (correct
+        # from fastapi_backend/'s cwd) — inherited as-is here it changes how
+        # @hey-api/openapi-ts infers ClientOptions.baseURL's type, producing
+        # output that differs from a local run and fails this hook in CI.
+        entry: sh -c 'cd nextjs-frontend && OPENAPI_OUTPUT_FILE=openapi.json pnpm run generate-client'
         language: system
         # Only run frontend client generation if frontend files have changed:
         files: openapi\.json$
