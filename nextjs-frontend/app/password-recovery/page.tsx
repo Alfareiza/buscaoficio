@@ -34,7 +34,8 @@ export default function Page() {
               Recuperación de Contraseña
             </CardTitle>
             <CardDescription className="text-sm text-gray-600 dark:text-gray-400">
-              Introduce tu correo electrónico para recibir instrucciones para restablecer tu contraseña.  
+              Introduce tu correo electrónico para recibir instrucciones para
+              restablecer tu contraseña.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-6 p-6">

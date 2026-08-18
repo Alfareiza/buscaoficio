@@ -15,6 +15,7 @@ jobs:
       ACCESS_SECRET_KEY: test-access-secret
       RESET_PASSWORD_SECRET_KEY: test-reset-secret
       VERIFICATION_SECRET_KEY: test-verification-secret
+      REGISTRATION_TOKEN_SECRET_KEY: test-registration-token-secret
       OPENAPI_OUTPUT_FILE: ../nextjs-frontend/openapi.json
       CORS_ORIGINS: '["*"]'
 

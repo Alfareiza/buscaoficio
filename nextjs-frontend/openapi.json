@@ -1418,7 +1418,7 @@
           "nombre_completo"
         ],
         "title": "ClienteRegisterOtpCreate",
-        "description": "Passwordless equivalent of ClienteRegisterCreate \u2014 no password, proven\nemail ownership via a short-lived registration_token from /auth/otp/verify\ninstead."
+        "description": "Payload for passwordless cliente registration \u2014 no password; email\nownership is proven by a short-lived registration_token from\n/auth/otp/verify instead."
       },
       "ClienteUpdate": {
         "properties": {
@@ -1881,7 +1881,7 @@
           "nombre_completo"
         ],
         "title": "ProfesionalRegisterOtpCreate",
-        "description": "Passwordless equivalent of ProfesionalRegisterCreate."
+        "description": "Payload for passwordless profesional registration. See\nClienteRegisterOtpCreate for the general pattern."
       },
       "ProfesionalUpdate": {
         "properties": {

@@ -41,7 +41,9 @@ async def send_reset_password_email(user: User, token: str):
         fm = FastMail(conf)
         await fm.send_message(message, template_name="password_reset.html")
     except Exception:
-        logger.exception(f"Falló el envío de correo que restablece la contraseña del usuaario {user.id!r}")
+        logger.exception(
+            f"Falló el envío de correo que restablece la contraseña del usuaario {user.id!r}"
+        )
         raise
 
     logger.info(f"Password reset email enviado a usario {user.id!r}")

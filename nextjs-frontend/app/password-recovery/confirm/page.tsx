@@ -43,12 +43,28 @@ function ResetPasswordForm() {
         </CardHeader>
         <CardContent className="grid gap-6 p-6">
           <div className="grid gap-2">
-            <Label htmlFor="password" className="text-gray-700 dark:text-gray-300">Password</Label>
-            <Input id="password" name="password" type="password" required className="border-gray-300 dark:border-gray-600" />
+            <Label
+              htmlFor="password"
+              className="text-gray-700 dark:text-gray-300"
+            >
+              Password
+            </Label>
+            <Input
+              id="password"
+              name="password"
+              type="password"
+              required
+              className="border-gray-300 dark:border-gray-600"
+            />
           </div>
           <FieldError state={state} field="password" />
           <div className="grid gap-2">
-            <Label htmlFor="passwordConfirm" className="text-gray-700 dark:text-gray-300">Password Confirm</Label>
+            <Label
+              htmlFor="passwordConfirm"
+              className="text-gray-700 dark:text-gray-300"
+            >
+              Password Confirm
+            </Label>
             <Input
               id="passwordConfirm"
               name="passwordConfirm"
