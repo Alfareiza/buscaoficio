@@ -23,9 +23,14 @@ class Settings(BaseSettings):
     ACCESS_SECRET_KEY: str
     RESET_PASSWORD_SECRET_KEY: str
     VERIFICATION_SECRET_KEY: str
+    REGISTRATION_TOKEN_SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_SECONDS: int = 900  # 15 minutes
     REFRESH_TOKEN_EXPIRE_SECONDS: int = 2592000  # 30 days
+
+    # Passwordless (email OTP) auth
+    OTP_CODE_EXPIRE_SECONDS: int = 600  # 10 minutes
+    REGISTRATION_TOKEN_EXPIRE_SECONDS: int = 900  # 15 minutes
 
     # Email
     MAIL_USERNAME: str | None = None
@@ -33,7 +38,7 @@ class Settings(BaseSettings):
     MAIL_FROM: str | None = None
     MAIL_SERVER: str | None = None
     MAIL_PORT: int | None = None
-    MAIL_FROM_NAME: str = "FastAPI template"
+    MAIL_FROM_NAME: str = "Busca oficio"
     MAIL_STARTTLS: bool = True
     MAIL_SSL_TLS: bool = False
     USE_CREDENTIALS: bool = True

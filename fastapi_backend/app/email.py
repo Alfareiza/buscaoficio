@@ -31,7 +31,7 @@ async def send_reset_password_email(user: User, token: str):
     encoded_params = urllib.parse.urlencode(params)
     link = f"{base_url}{encoded_params}"
     message = MessageSchema(
-        subject="Password recovery",
+        subject="🔒 Recuperar Contraseña - Busca oficio",
         recipients=[email],
         template_body={"username": email, "link": link},
         subtype=MessageType.html,
@@ -41,7 +41,29 @@ async def send_reset_password_email(user: User, token: str):
         fm = FastMail(conf)
         await fm.send_message(message, template_name="password_reset.html")
     except Exception:
-        logger.exception(f"Failed to send password reset email user_id={user.id}")
+        logger.exception(f"Falló el envío de correo que restablece la contraseña del usuaario {user.id!r}")
         raise
 
-    logger.info(f"Password reset email sent user_id={user.id}")
+    logger.info(f"Password reset email enviado a usario {user.id!r}")
+
+
+async def send_otp_code_email(email: str, code: str):
+    """Send a passwordless-login OTP code. Unlike send_reset_password_email,
+    there is no User object yet — the email may belong to a not-yet-created
+    account (see docs/auth.md § passwordless auth)."""
+    conf = get_email_config()
+    message = MessageSchema(
+        subject="🔑 Tu código de acceso - Busca oficio",
+        recipients=[email],
+        template_body={"code": code},
+        subtype=MessageType.html,
+    )
+
+    try:
+        fm = FastMail(conf)
+        await fm.send_message(message, template_name="otp_code.html")
+    except Exception:
+        logger.exception(f"Falló el envío del código OTP a {email!r}")
+        raise
+
+    logger.info(f"Código OTP enviado a {email!r}")

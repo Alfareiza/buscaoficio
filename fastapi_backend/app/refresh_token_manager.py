@@ -4,11 +4,15 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from fastapi_users.authentication import Strategy
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import settings
-from .models import RefreshToken
+from .models import RefreshToken, User
+from .utils import get_client_ip
 
 
 class RefreshTokenManager:
@@ -146,3 +150,57 @@ class RefreshTokenManager:
             token.revoked_at = datetime.now(timezone.utc)
 
         await db.commit()
+
+
+async def build_session_response(
+    user: User,
+    strategy: Strategy,
+    db: AsyncSession,
+    request: Request,
+    extra: Optional[dict] = None,
+) -> JSONResponse:
+    """Issue a full session for `user`: access token in the body, refresh +
+    fingerprint tokens as HttpOnly cookies. Shared by every route that logs a
+    user in — OTP verify (existing user) and OTP-backed registration
+    (cliente/profesional) — so the cookie-setting logic exists in exactly
+    one place. `extra` merges additional fields into the response body (e.g.
+    OTP verify's `status`/`has_role`)."""
+    access_token = await strategy.write_token(user)
+    (
+        refresh_token_raw,
+        fingerprint_token_raw,
+        refresh_hash,
+        fingerprint_hash,
+    ) = RefreshTokenManager.generate_tokens()
+    await RefreshTokenManager.store_refresh_token(
+        db, user.id, refresh_hash, fingerprint_hash, get_client_ip(request)
+    )
+    await db.commit()
+
+    response = JSONResponse(
+        content={
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": settings.ACCESS_TOKEN_EXPIRE_SECONDS,
+            **(extra or {}),
+        }
+    )
+    response.set_cookie(
+        "refreshToken",
+        refresh_token_raw,
+        max_age=RefreshTokenManager.REFRESH_TOKEN_LIFETIME,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        path="/api/v1/auth/jwt/refresh",
+    )
+    response.set_cookie(
+        "fingerprintToken",
+        fingerprint_token_raw,
+        max_age=RefreshTokenManager.REFRESH_TOKEN_LIFETIME,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        path="/api/v1/auth/jwt/refresh",
+    )
+    return response

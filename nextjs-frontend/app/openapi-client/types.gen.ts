@@ -89,9 +89,12 @@ export type ClienteRead = {
 };
 
 /**
- * ClienteRegisterCreate
+ * ClienteRegisterOtpCreate
+ * Passwordless equivalent of ClienteRegisterCreate — no password, proven
+ * email ownership via a short-lived registration_token from /auth/otp/verify
+ * instead.
  */
-export type ClienteRegisterCreate = {
+export type ClienteRegisterOtpCreate = {
   /**
    * Direccion Default
    */
@@ -101,25 +104,9 @@ export type ClienteRegisterCreate = {
    */
   referido_por_id?: string | null;
   /**
-   * Email
+   * Registration Token
    */
-  email: string;
-  /**
-   * Password
-   */
-  password: string;
-  /**
-   * Is Active
-   */
-  is_active?: boolean | null;
-  /**
-   * Is Superuser
-   */
-  is_superuser?: boolean | null;
-  /**
-   * Is Verified
-   */
-  is_verified?: boolean | null;
+  registration_token: string;
   /**
    * Nombre Completo
    */
@@ -201,6 +188,30 @@ export type ItemRead = {
    * User Id
    */
   user_id: string;
+};
+
+/**
+ * OtpRequestIn
+ */
+export type OtpRequestIn = {
+  /**
+   * Email
+   */
+  email: string;
+};
+
+/**
+ * OtpVerifyIn
+ */
+export type OtpVerifyIn = {
+  /**
+   * Email
+   */
+  email: string;
+  /**
+   * Code
+   */
+  code: string;
 };
 
 /**
@@ -313,9 +324,10 @@ export type ProfesionalRead = {
 };
 
 /**
- * ProfesionalRegisterCreate
+ * ProfesionalRegisterOtpCreate
+ * Passwordless equivalent of ProfesionalRegisterCreate.
  */
-export type ProfesionalRegisterCreate = {
+export type ProfesionalRegisterOtpCreate = {
   documento_tipo: TipoDocumento;
   /**
    * Documento Numero
@@ -330,25 +342,9 @@ export type ProfesionalRegisterCreate = {
    */
   foto_perfil_url?: string | null;
   /**
-   * Email
+   * Registration Token
    */
-  email: string;
-  /**
-   * Password
-   */
-  password: string;
-  /**
-   * Is Active
-   */
-  is_active?: boolean | null;
-  /**
-   * Is Superuser
-   */
-  is_superuser?: boolean | null;
-  /**
-   * Is Verified
-   */
-  is_verified?: boolean | null;
+  registration_token: string;
   /**
    * Nombre Completo
    */
@@ -390,40 +386,6 @@ export type TipoDocumento =
   | "CN"
   | "PT"
   | "SC";
-
-/**
- * UserCreate
- */
-export type UserCreate = {
-  /**
-   * Email
-   */
-  email: string;
-  /**
-   * Password
-   */
-  password: string;
-  /**
-   * Is Active
-   */
-  is_active?: boolean | null;
-  /**
-   * Is Superuser
-   */
-  is_superuser?: boolean | null;
-  /**
-   * Is Verified
-   */
-  is_verified?: boolean | null;
-  /**
-   * Nombre Completo
-   */
-  nombre_completo: string;
-  /**
-   * Whatsapp
-   */
-  whatsapp?: string | null;
-};
 
 /**
  * UserRead
@@ -511,59 +473,6 @@ export type ValidationError = {
   type: string;
 };
 
-/**
- * Body_auth-auth:jwt.login
- */
-export type Login = {
-  /**
-   * Grant Type
-   */
-  grant_type?: string | null;
-  /**
-   * Username
-   */
-  username: string;
-  /**
-   * Password
-   */
-  password: string;
-  /**
-   * Scope
-   */
-  scope?: string;
-  /**
-   * Client Id
-   */
-  client_id?: string | null;
-  /**
-   * Client Secret
-   */
-  client_secret?: string | null;
-};
-
-export type AuthJwtLoginData = {
-  body: Login;
-  path?: never;
-  query?: never;
-  url: "/api/v1/auth/jwt/login";
-};
-
-export type AuthJwtLoginErrors = {
-  /**
-   * Validation Error
-   */
-  422: HttpValidationError;
-};
-
-export type AuthJwtLoginError = AuthJwtLoginErrors[keyof AuthJwtLoginErrors];
-
-export type AuthJwtLoginResponses = {
-  /**
-   * Successful Response
-   */
-  200: unknown;
-};
-
 export type AuthJwtLogoutData = {
   body?: never;
   path?: never;
@@ -578,86 +487,114 @@ export type AuthJwtLogoutResponses = {
   200: unknown;
 };
 
-export type RegisterRegisterData = {
-  body: UserCreate;
+export type AuthOtpRequestData = {
+  body: OtpRequestIn;
   path?: never;
   query?: never;
-  url: "/api/v1/auth/register";
+  url: "/api/v1/auth/otp/request";
 };
 
-export type RegisterRegisterErrors = {
+export type AuthOtpRequestErrors = {
   /**
    * Validation Error
    */
   422: HttpValidationError;
 };
 
-export type RegisterRegisterError =
-  RegisterRegisterErrors[keyof RegisterRegisterErrors];
+export type AuthOtpRequestError =
+  AuthOtpRequestErrors[keyof AuthOtpRequestErrors];
 
-export type RegisterRegisterResponses = {
+export type AuthOtpRequestResponses = {
   /**
    * Successful Response
    */
-  201: UserRead;
+  202: unknown;
 };
 
-export type RegisterRegisterResponse =
-  RegisterRegisterResponses[keyof RegisterRegisterResponses];
-
-export type RegisterRegisterClienteData = {
-  body: ClienteRegisterCreate;
+export type AuthOtpVerifyData = {
+  body: OtpVerifyIn;
   path?: never;
   query?: never;
-  url: "/api/v1/auth/register/cliente";
+  url: "/api/v1/auth/otp/verify";
 };
 
-export type RegisterRegisterClienteErrors = {
+export type AuthOtpVerifyErrors = {
   /**
    * Validation Error
    */
   422: HttpValidationError;
 };
 
-export type RegisterRegisterClienteError =
-  RegisterRegisterClienteErrors[keyof RegisterRegisterClienteErrors];
+export type AuthOtpVerifyError = AuthOtpVerifyErrors[keyof AuthOtpVerifyErrors];
 
-export type RegisterRegisterClienteResponses = {
+export type AuthOtpVerifyResponses = {
   /**
    * Successful Response
    */
-  201: UserRead;
+  200: unknown;
 };
 
-export type RegisterRegisterClienteResponse =
-  RegisterRegisterClienteResponses[keyof RegisterRegisterClienteResponses];
-
-export type RegisterRegisterProfesionalData = {
-  body: ProfesionalRegisterCreate;
+export type AuthJwtRefreshData = {
+  body?: never;
   path?: never;
   query?: never;
-  url: "/api/v1/auth/register/profesional";
+  url: "/api/v1/auth/jwt/refresh";
 };
 
-export type RegisterRegisterProfesionalErrors = {
+export type AuthJwtRefreshResponses = {
+  /**
+   * Successful Response
+   */
+  200: unknown;
+};
+
+export type RegisterRegisterClienteOtpData = {
+  body: ClienteRegisterOtpCreate;
+  path?: never;
+  query?: never;
+  url: "/api/v1/auth/register/cliente/otp";
+};
+
+export type RegisterRegisterClienteOtpErrors = {
   /**
    * Validation Error
    */
   422: HttpValidationError;
 };
 
-export type RegisterRegisterProfesionalError =
-  RegisterRegisterProfesionalErrors[keyof RegisterRegisterProfesionalErrors];
+export type RegisterRegisterClienteOtpError =
+  RegisterRegisterClienteOtpErrors[keyof RegisterRegisterClienteOtpErrors];
 
-export type RegisterRegisterProfesionalResponses = {
+export type RegisterRegisterClienteOtpResponses = {
   /**
    * Successful Response
    */
-  201: UserRead;
+  200: unknown;
 };
 
-export type RegisterRegisterProfesionalResponse =
-  RegisterRegisterProfesionalResponses[keyof RegisterRegisterProfesionalResponses];
+export type RegisterRegisterProfesionalOtpData = {
+  body: ProfesionalRegisterOtpCreate;
+  path?: never;
+  query?: never;
+  url: "/api/v1/auth/register/profesional/otp";
+};
+
+export type RegisterRegisterProfesionalOtpErrors = {
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type RegisterRegisterProfesionalOtpError =
+  RegisterRegisterProfesionalOtpErrors[keyof RegisterRegisterProfesionalOtpErrors];
+
+export type RegisterRegisterProfesionalOtpResponses = {
+  /**
+   * Successful Response
+   */
+  200: unknown;
+};
 
 export type ResetForgotPasswordData = {
   body: BodyAuthResetForgotPassword;

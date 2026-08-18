@@ -9,7 +9,10 @@ This repo is based on Vinta Software’s **Next.js FastAPI Template** (`vintasof
 - Support local Docker Compose development and Vercel deployment.
 
 ## Scope (current template)
-- JWT authentication (register, login, verify, password reset).
+- JWT authentication — passwordless email OTP for login/registration (the
+  only linked flow since 2026-08-18), refresh token rotation with a
+  double-submit fingerprint cookie. Password-based login/register were
+  removed; password reset/email verification remain but are vestigial.
 - User management via fastapi-users.
 - Items CRUD with pagination behind an authenticated dashboard.
 - Docs via MkDocs Material.

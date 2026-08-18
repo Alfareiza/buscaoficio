@@ -1,13 +1,20 @@
 # Active Context
 
 ## Current focus
-- JWT session hardening: backend refresh token rotation
-  ([#9](https://github.com/Alfareiza/buscaoficio/issues/9)) is **merged to
-  `main`** via PR #11 (commit `0a8376b`). Frontend side
-  ([#10](https://github.com/Alfareiza/buscaoficio/issues/10) — cookie
-  forwarding, silent refresh, reactive 401 fallback) is **fully implemented
-  and tested on branch `feature/jwt-frontend-refresh`, intentionally left
-  uncommitted** pending explicit go-ahead.
+- JWT session hardening: both backend refresh token rotation
+  ([#9](https://github.com/Alfareiza/buscaoficio/issues/9), commit
+  `0a8376b`) and frontend cookie forwarding/silent refresh
+  ([#10](https://github.com/Alfareiza/buscaoficio/issues/10), commit
+  `4d75bde`) are **merged to `main`**. `feature/jwt-frontend-refresh` is no
+  longer an open branch — this superseded the "intentionally left
+  uncommitted" note from earlier sessions.
+- **Passwordless email OTP is now the only linked login/registration flow**
+  (since 2026-08-18) — password-based `/jwt/login`, `/register`,
+  `/register/cliente`, `/register/profesional` were built, used briefly,
+  then **removed entirely** the same day once OTP was confirmed as the sole
+  client-facing flow. See "Recent changes" below for both the OTP build and
+  the removal — this is the most consequential recent change and the memory
+  bank was out of sync with it until this update.
 - **Open architecture question, unresolved:** whether to keep the current
   server-mediated frontend (Server Actions + Edge middleware — what #10 was
   built on), move toward a client-side SPA calling FastAPI directly, or a
@@ -21,12 +28,100 @@
   This choice determines whether the already-built #10 work is the right
   long-term foundation or needs rework. See Active decisions below for the
   provisional lean.
-- FastAdmin branding (site name + logo) is wired; auth gaps (email
-  verification, #1) are still open behind the JWT work above.
+- FastAdmin branding (site name + logo) is wired; issue #1 (email
+  verification) is open but its premise likely changed now that OTP
+  accounts are auto-verified and password registration is gone — see Next
+  steps.
 
 ## Recent changes
-- **JWT refresh token rotation frontend (#10, branch
-  `feature/jwt-frontend-refresh`, based on merged `main`, not committed):**
+- **Removed password-based auth (backend + frontend), 2026-08-18.** The
+  Next.js frontend was the only client of the password-based routes, and
+  since the passwordless OTP flow (`docs/auth.md` § "Passwordless login")
+  became the only linked flow, they were dead weight:
+  - Backend: deleted `POST /jwt/login`, `/register`, `/register/cliente`,
+    `/register/profesional` from `app/routes/auth.py`; deleted the
+    now-unused `ClienteRegisterCreate`/`ProfesionalRegisterCreate` schemas.
+    `/forgot-password`/`/reset-password`/`/request-verify-token`/`/verify`
+    were kept (still exist, still unlinked in the frontend) but are now
+    vestigial — see `docs/auth.md` for why.
+  - Backend tests: deleted `tests/main/test_main.py` (100% about the
+    removed routes). `tests/routes/test_auth_refresh.py`'s login helper now
+    goes through OTP (`/otp/request` + `/otp/verify`) instead of
+    `/jwt/login` — refresh/logout/rotation behavior is agnostic to how the
+    session started, so this is a like-for-like swap, not a coverage loss.
+    `tests/routes/test_users.py::test_updates_password` now verifies the
+    new password hash directly (via `PasswordHelper`) instead of
+    round-tripping through the now-gone login route.
+  - Frontend: deleted `login-action.ts`, `register-action.ts` (both already
+    marked "Dormant since 2026-08-18" and had zero production callers —
+    only their own dedicated tests called them) and those tests; deleted
+    the now-orphaned `loginSchema`/`registerSchema` (and a pre-existing
+    unused `onboardingNameSchema` found in the same pass) from
+    `lib/definitions.ts`. Regenerated `openapi.json` and the frontend
+    OpenAPI client (`app/openapi-client/*`) so the generated `authJwtLogin`/
+    `registerRegister` bindings are gone too.
+  - `docs/auth.md` updated throughout to drop "kept for backward
+    compatibility" language for the removed routes and fix now-dangling
+    `/jwt/login` references in surviving routes' docstrings/FAQ.
+  - **Not done / known follow-ups:** many *unrelated* route docstrings
+    across the backend (`items.py`, user/cliente/profesional CRUD, etc.)
+    still say "Requires POST /auth/jwt/login" as generic boilerplate for
+    "you need to be authenticated" — cosmetic only (Swagger descriptions),
+    left alone as out of scope for this cleanup. Also didn't touch
+    `/password-recovery` frontend pages or the backend
+    forgot/reset/verify routes themselves, even though they're now
+    functionally vestigial too (no password-login route left to use a
+    reset password with) — that's a separate, unconfirmed scope expansion
+    the user didn't ask for.
+- **Auth pages UX polish (login/register), 2026-08-18, uncommitted.** Built
+  on top of the OTP migration below:
+  - `components/ui/BuscaOficioLogo.tsx` split into standalone
+    `BuscaOficioMark` (svg only) and `BuscaOficioWordmark` (text only,
+    "Busca" in `text-azul` / "Oficio" in `text-naranja`) — `BuscaOficioLogo`
+    kept as a composite of the two for the two `/password-recovery` pages
+    that still use the combined form.
+  - `AuthCard` gained an `intent?: "login" | "register"` prop controlling
+    the subtitle copy and a bottom toggle link ("No tengo cuenta.
+    Registrarme" ↔ "Ya tengo una cuenta. Iniciar Sesión"), plus a legal
+    line ("Al continuar, aceptas nuestros Términos y Política de
+    Privacidad.") below the Continuar button — Términos/Política are plain
+    text, not links, since those pages don't exist yet.
+  - `/login` and `/register` moved into a shared `app/(auth)/layout.tsx`
+    route group. The outer shell (background, card frame, side image) now
+    lives in the layout instead of each page, so navigating between the two
+    via the toggle link is a soft RSC navigation (confirmed via network
+    trace: `GET /register?_rsc=...`, not a full document load) that doesn't
+    remount the frame — this is what makes the login↔register toggle feel
+    instant instead of a page reload.
+  - `/register/page.tsx` changed from a bare `redirect("/login")` to
+    actually rendering `<AuthCard intent="register" />` — it's a real page
+    again, just sharing the same component and layout as `/login`.
+  - Finding while doing this: **`jest.mock()` string arguments must use
+    relative paths, not the `@/` alias** — Next's SWC transform rewrites
+    `@/`-aliased imports at parse time in real `import` statements, but not
+    inside a `jest.mock("@/...")` call, so it fails to resolve. Every test
+    file in this repo already mocks via relative paths (`"../components/..."`)
+    for this reason; keep following that convention.
+- **Passwordless email OTP migration (backend + frontend), 2026-08-18,
+  uncommitted.** Replaced password-based login/registration as the
+  frontend's only flow (see `docs/auth.md` § "Passwordless login" for the
+  full design writeup). Backend: `OtpManager` (`app/otp_manager.py`,
+  modeled on `RefreshTokenManager`) + `email_otps` table (migration
+  `a067ad066d81`) for 6-digit codes (10-min expiry, 5 attempts, 30s resend
+  cooldown, hashed not stored raw); new routes `POST /otp/request`,
+  `/otp/verify`, `/register/cliente/otp`, `/register/profesional/otp`; a
+  short-lived signed `registration_token` proves OTP ownership between
+  verify and registration so an abandoned signup never leaves a ghost
+  account; OTP-created accounts get a random never-disclosed password
+  (fastapi-users requires `hashed_password` non-null) and `is_verified=true`
+  immediately. Frontend: `otp-auth-action.ts` (Server Actions calling the
+  new routes) and `AuthCard.tsx` (multi-step client component: email → code
+  → name → role, used in both `mode="page"` on `/login`/`/register` and
+  presumably `mode="modal"` elsewhere). `docs/auth.md` gained the full "0 ·
+  Passwordless login" section. This is what made the password-based routes
+  removable a few hours later — see the removal entry above.
+- **JWT refresh token rotation frontend (#10, merged to `main`,
+  commit `4d75bde`):**
   - `lib/auth-cookies.ts` (new): `forwardAuthCookies`, `setAccessTokenCookie`,
     `clearAuthCookies`, `decodeJwtExpiryMs` — re-applies backend `Set-Cookie`
     headers onto the Next.js server's own response, since server-to-server
@@ -125,8 +220,12 @@
   Logout revokes *all* sessions for the user, not just the current device —
   chosen deliberately over a narrower "revoke this session only" approach.
 - Do not commit or push work-in-progress branches without explicit
-  go-ahead — `feature/jwt-frontend-refresh` is fully implemented and tested
-  but intentionally left uncommitted per this rule.
+  go-ahead. `feature/jwt-frontend-refresh` (#10) was eventually committed to
+  `main` (`4d75bde`) once given the go-ahead. The current uncommitted
+  working tree — the OTP passwordless migration, the auth pages UX polish,
+  and the password-based auth removal (all 2026-08-18, see Recent changes)
+  — is sitting under the same rule: implemented and tested, not committed,
+  waiting on explicit go-ahead.
 - Frontend architecture (server-mediated vs. SPA vs. hybrid): **not yet
   decided**, actively being discussed with the user (see Current focus).
   Provisional lean (not agreed): **hybrid** — keep auth server-mediated
@@ -139,6 +238,22 @@
   third-party API consumer that would justify a full SPA rewrite, and the
   #10 work already built is exactly the auth foundation a hybrid model
   needs (nothing built so far would need to be redone under this option).
+- **Login is passwordless email OTP, not password auth** — decided and
+  built 2026-08-18. Login and signup share one screen; the backend doesn't
+  know which the user "meant" until the OTP is verified (see `docs/auth.md`
+  § 0). This was a full replacement, not an addition — password-based
+  `/jwt/login`/`/register*` were removed the same day (see below), not kept
+  as a parallel option.
+- **Scope of the password-auth removal, confirmed with the user
+  2026-08-18:** asked explicitly whether anything besides the Next.js
+  frontend calls the password-based backend routes before deleting them —
+  user confirmed "my only client is this frontend nextjs project." That's
+  why it was safe to delete the *backend* routes (`/jwt/login`,
+  `/register`, `/register/cliente`, `/register/profesional`), not just the
+  dead frontend Server Actions that called them — a backend HTTP route
+  isn't "unused code" in the same sense as a function with no callers,
+  since it's part of the public API contract regardless of what the current
+  frontend does; needed an explicit answer, not an inference from the code.
 - Stay on template patterns (Makefile + watchers for OpenAPI sync).
 - Keep Vercel as intended deploy target (serverless, not containers).
 - MailHog remains for local email; Mailpit is a known alternative if we replace later.
@@ -155,27 +270,54 @@
   `tunnelRoute` unless we explicitly decide to.
 
 ## Next steps (suggested)
-1. **Resolve the frontend architecture question** (server-mediated vs. SPA
-   vs. hybrid — see Current focus / Active decisions) before deciding what
-   to do with `feature/jwt-frontend-refresh`. If server-mediated or hybrid
-   is chosen, the branch as-built needs no rework. If full SPA is chosen,
-   #10 needs a redesign (cookies would need to become JS-readable or a
-   token-issuance endpoint would need adding) and issue #10 would need
-   rewriting a third time.
-2. Once resolved: get explicit go-ahead, then commit/push
-   `feature/jwt-frontend-refresh`, open the PR for #10, wait for CI/rebase
-   the same way #9/PR #11 was handled.
-3. Close out issue #8 (parent) once #10's actual scope is settled and merged.
-4. Implement email verification flow (GitHub issue #1).
-5. Add `createsuperuser` management command under `commands/`.
-6. If deploying: set Sentry env vars on Vercel (`SENTRY_ENVIRONMENT=production`)
+1. Get explicit go-ahead, then commit/push the current working tree: the
+   OTP passwordless migration, the auth pages UX polish, and the
+   password-based auth removal (all 2026-08-18, uncommitted — see Recent
+   changes). Consider whether these should be one PR or split (migration +
+   removal is arguably one logical change; the UX polish is separable).
+2. **Resolve the frontend architecture question** (server-mediated vs. SPA
+   vs. hybrid — see Current focus / Active decisions). Now somewhat
+   independent of #10 (already merged) but still relevant to how future
+   features (live status, messaging) get built.
+3. Close out issue #8 (parent) once the architecture question above is settled.
+4. **Re-evaluate GitHub issue #1 (email verification)** — its premise may
+   have changed: OTP-created accounts are already `is_verified=true` at
+   creation (receiving the code already proves mailbox ownership), and the
+   password-based registration flow that could produce an unverified
+   account was just removed. `/request-verify-token`/`/verify` still exist
+   in the code but nothing in the current flow produces an account they'd
+   act on — worth deciding whether to close #1 as no-longer-applicable,
+   scope it down, or actually remove those routes too (not done in this
+   session — see the removal entry's "Not done" note).
+5. Decide the fate of `/forgot-password`/`/reset-password` and the
+   frontend `/password-recovery` pages — same vestigial status as #4 above
+   (no password-login route left to use a reset password with), flagged
+   but not acted on.
+6. Add `createsuperuser` management command under `commands/` — the
+   go-to instruction for this changed from "`POST /auth/register` then
+   promote in SQL" to "sign up via the app's OTP flow, or FastAdmin, then
+   promote in SQL" (see `docs/auth.md`), but the underlying gap is the same.
+7. If deploying: set Sentry env vars on Vercel (`SENTRY_ENVIRONMENT=production`)
    and add `SENTRY_AUTH_TOKEN` for frontend source maps.
-7. Decide whether to evolve toward domain "busca oficio" features.
+8. Decide whether to evolve toward domain "busca oficio" features.
+9. Optional cosmetic cleanup: many unrelated route docstrings (`items.py`,
+   user/cliente/profesional CRUD) still say "Requires POST /auth/jwt/login"
+   as generic authenticated-request boilerplate — harmless (Swagger text
+   only) but worth a sweep to say `/otp/verify` instead, next time someone
+   is in those files.
 
 ## Open considerations
+- `email_otps` rows are never purged either — same known gap as
+  `refresh_tokens` below, now duplicated across two tables.
 - `refresh_tokens` rows are never purged — no cleanup job yet for
   expired/revoked rows (fine at current scale, worth a follow-up ticket
   later).
+- `/forgot-password`, `/reset-password`, `/request-verify-token`, `/verify`
+  (backend) and `/password-recovery` (frontend) are now functionally
+  vestigial — still work, still exist, but nothing in the current OTP-only
+  flow can reach an account they'd meaningfully act on. Not removed in the
+  2026-08-18 cleanup (unconfirmed scope), but worth a deliberate decision
+  rather than leaving them as silent dead weight indefinitely.
 - Whether to migrate MailHog → Mailpit.
 - Whether `$PORT` / container deploy will ever be needed (not required for Vercel path).
 - Product domain requirements not yet defined beyond the template MVP.

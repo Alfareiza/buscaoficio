@@ -42,74 +42,40 @@ When registering or resetting a password the following rules are enforced:
 
 ## Available flows
 
-### 1 · Register → verify → log in (happy path)
+### 0 · Passwordless login (primary flow, since 2026-08-18)
 
-This is the normal path for a new user.
-
-```
-POST /api/v1/auth/register               → creates the account
-POST /api/v1/auth/request-verify-token   → triggers the verification hook (see note below)
-POST /api/v1/auth/verify                 → marks the account as verified using the token
-POST /api/v1/auth/jwt/login              → returns a JWT
-```
-
-> **Why the verification step?** It confirms the user controls the email address they registered with. An unverified account can still log in — `is_verified` is informational unless you add a guard.
-
-#### Registering as cliente or profesional
-
-Buscaoficio users register with one of two roles (a user can hold both).
-Each role's registration is a single request that creates the `usuarios`
-row and the role's `clientes`/`profesionales` row together — no separate
-call to `POST /auth/register` first.
+The frontend's `/login` page uses **email OTP**, not password + register forms. Login and signup are the same screen — the backend doesn't know which the user "meant" until the OTP is verified.
 
 ```
-POST /api/v1/auth/register/cliente       → creates the account + cliente profile
-POST /api/v1/auth/register/profesional   → creates the account + profesional profile
+POST /api/v1/auth/otp/request              → {email} → sends a 6-digit code, always 202
+POST /api/v1/auth/otp/verify               → {email, code} → branches:
+  · email already has an account  → logs in (access token + refresh/fingerprint
+                                      cookies), {status: "existing_user", has_role}
+  · email is new                  → {status: "new_user", registration_token}
+
+# only reached for a "new_user" response above:
+POST /api/v1/auth/register/cliente/otp     → {registration_token, nombre_completo, ...} → creates account + logs in
+POST /api/v1/auth/register/profesional/otp → {registration_token, nombre_completo, documento_tipo, documento_numero, ...} → creates account + logs in
 ```
 
-Each accepts the same fields as `POST /api/v1/auth/register` (`email`,
-`password`, `nombre_completo`, optional `whatsapp`) plus the role's own
-fields (`direccion_default`/`referido_por_id` for cliente;
-`documento_tipo`/`documento_numero`/`anos_experiencia`/`foto_perfil_url`
-for profesional). Both return `UserRead` and follow with the same
-verify → log in steps above.
+Design notes:
+- **No account is created by `/otp/request` or `/otp/verify`.** A brand-new email only gets a short-lived signed `registration_token` (proves OTP ownership, ~15 min, see `OtpManager.issue_registration_token`) — the `usuarios` row is created later, atomically with its `clientes`/`profesionales` row, in the `/register/*/otp` call. This means an abandoned signup (user closes the tab after seeing the code) never leaves a ghost account.
+- **Role selection is mandatory**, unlike a generic passwordless flow — `Cliente` needs no extra fields, but `Profesional` requires `documento_tipo`/`documento_numero` (real ID document data), so the frontend's role-choice step collects those two fields inline before calling `/register/profesional/otp`.
+- OTP-created accounts get a **random, never-disclosed password** (`secrets.token_urlsafe(32)`, hashed the normal way) purely to satisfy the underlying fastapi-users schema (`hashed_password` is `NOT NULL`) — it can never actually be used, since nobody (including the user) knows it. `is_verified` is set `true` immediately, since receiving and entering the code already proves mailbox ownership — the separate `request-verify-token`/`verify` flow below is redundant for these accounts.
+- Session issuance (access token + refresh/fingerprint cookies) is shared code — `build_session_response()` in `app/refresh_token_manager.py` — used by OTP verify (existing user) and both OTP-backed registration routes, so the cookie-setting logic exists in exactly one place.
+- Codes: 6 digits, 10-minute expiry (`OTP_CODE_EXPIRE_SECONDS`), max 5 verify attempts, 30s resend cooldown. Storage/validation lives in `OtpManager` (`app/otp_manager.py`), modeled on `RefreshTokenManager` — codes are hashed (SHA-256), never stored raw, in the `email_otps` table.
+- **What is NOT implemented:** real rate-limiting infra (only the basic cooldown/attempt-cap above — no IP-level throttling or CAPTCHA), and cleanup of expired `email_otps` rows (same known gap as `refresh_tokens`).
+- **Known gap:** there is currently no REST endpoint to add the *second* role to an account that already registered with one — `/api/v1/users/me/cliente` and `/api/v1/users/me/profesional` are GET/PATCH/DELETE only (there's no POST). An admin can still attach the second role via the FastAdmin panel (`/admin`). If self-service dual-role upgrade is needed, a `POST /api/v1/users/me/cliente` (or `/profesional`)-style endpoint would need to be added.
+- **Password-based login and registration were removed** (`/jwt/login`, `/register`, `/register/cliente`, `/register/profesional` — this was the frontend's only client, and nothing else called them; see git history around 2026-08-18 for the removal). `/forgot-password`/`/reset-password` and `/request-verify-token`/`/verify` still exist in the code but are now vestigial: there is no password-login route left to sign in with a reset password, and OTP-created accounts are already `is_verified=true` at creation, so nothing in the current flow ever produces an account these routes need to act on. See `nextjs-frontend`'s `/password-recovery` pages for the same "kept but unlinked" state on the frontend side.
 
-> **Known gap:** there is currently no REST endpoint to add the *second*
-> role to an account that already registered with one — `/api/v1/users/me/cliente`
-> and `/api/v1/users/me/profesional` are GET/PATCH/DELETE only now (the POST
-> variants were removed when registration consolidated into the two
-> endpoints above). An admin can still attach the second role via the
-> FastAdmin panel (`/admin`). If self-service dual-role upgrade is needed,
-> a `POST /api/v1/users/me/cliente` (or `/profesional`)-style endpoint
-> would need to be reintroduced.
-
-#### How the verification token reaches the user
-
-**This is not fully implemented yet.** When `POST /auth/request-verify-token` is called, fastapi-users generates a signed token and calls the `on_after_request_verify` hook in `UserManager`. Right now that hook only prints the token to the server log:
-
-```python
-# app/users.py
-async def on_after_request_verify(self, user, token, request=None):
-    print(f"Verification requested for user {user.id}. Verification token: {token}")
-```
-
-No email is sent for verification. To complete the flow during development you can copy the token from the server output and post it manually to `POST /auth/verify`.
-
-Compare this with password reset, which **is** fully wired up: `on_after_forgot_password` calls `send_reset_password_email`, which sends an HTML email containing a link to `{FRONTEND_URL}/password-recovery/confirm?token=<token>`. The frontend page reads that query parameter and posts it to `POST /auth/reset-password` on behalf of the user.
-
-The verification flow needs the same treatment: implement `send_verification_email` in `app/email.py` and call it from `on_after_request_verify`. The frontend would then need a `/verify?token=<token>` page that posts to `POST /auth/verify`.
-
----
-
-### 2 · Log in / refresh / log out
+### 1 · Log in / refresh / log out
 
 ```
-POST /api/v1/auth/jwt/login     → email + password → access token + refresh cookies
 POST /api/v1/auth/jwt/refresh   → rotates the refresh token, returns a new access token
 POST /api/v1/auth/jwt/logout    → revokes all refresh tokens for the user
 ```
 
-The login endpoint expects `application/x-www-form-urlencoded` with `username` (the email) and `password`. This matches the OAuth2 convention used by the interactive docs at `/docs`.
+There is no password-based login route — sessions are created by `POST /api/v1/auth/otp/verify` (section 0 above) or by the OTP-backed registration routes, both of which call the same `build_session_response()` that used to back `/jwt/login`. `/jwt/refresh` and `/jwt/logout` are unchanged by which route created the session.
 
 ---
 
@@ -127,7 +93,7 @@ Buscaoficio uses **rotating refresh tokens with database-backed revocation and a
 
 ### How it works
 
-1. **Login** (`POST /auth/jwt/login`) generates:
+1. **Login** (`POST /auth/otp/verify`, existing user — see [Passwordless login](#0--passwordless-login-primary-flow-since-2026-08-18)) generates, via `build_session_response()`:
    - A JWT access token (returned in the response body)
    - A random refresh token + a random fingerprint token (both set as HttpOnly cookies, path-scoped to `/api/v1/auth/jwt/refresh` so they are never sent to other endpoints)
    - Both raw tokens are hashed (SHA-256) and the hashes are stored in the `refresh_tokens` table, tied to the user and the request's IP
@@ -170,7 +136,7 @@ All rotation/validation/revocation logic lives in `RefreshTokenManager` (`fastap
 
 ### The cookie-forwarding problem
 
-When a Server Action calls the backend (e.g. `login-action.ts` calling `authJwtLogin()`), that request is made by the **Next.js server**, not the browser. FastAPI's `Set-Cookie` response headers for `refreshToken`/`fingerprintToken` land on that server-to-server response — they do not reach the browser automatically the way they would on a direct browser→backend call. The Next.js server has to explicitly re-set them on its own response for the browser to ever see them.
+When a Server Action calls the backend (e.g. `otp-auth-action.ts` calling `authOtpVerify()`), that request is made by the **Next.js server**, not the browser. FastAPI's `Set-Cookie` response headers for `refreshToken`/`fingerprintToken` land on that server-to-server response — they do not reach the browser automatically the way they would on a direct browser→backend call. The Next.js server has to explicitly re-set them on its own response for the browser to ever see them.
 
 `lib/auth-cookies.ts` provides the shared helpers:
 - `forwardAuthCookies(setCookieHeaders, cookieWriter)` — parses the raw `Set-Cookie` strings from a backend response (`response.headers["set-cookie"]` on the axios-based generated client) and re-applies each as a cookie on the Next.js response, with `httpOnly: true`, `sameSite: "strict"`, `path: "/"`, and `secure` gated on `NODE_ENV === "production"` (hardcoding `secure: true` would silently break these cookies in local dev over `http://localhost:3000` — the same class of issue as the `https://` fix needed in the backend's own test client).
@@ -193,13 +159,33 @@ If the access token is missing `refreshToken`/`fingerprintToken` cookies at all 
 
 Middleware covers the common case (page loads and same-route Server Action POSTs), but as a narrower safety net, `items-action.ts` checks each backend call's result with `isUnauthorizedError()` (`lib/api-errors.ts`) — if a call still comes back 401 (e.g. a token revoked between the middleware's check and the actual backend call), the action clears cookies and redirects to `/login` instead of surfacing a generic error.
 
+### How page protection actually works — and how to add a new protected page
+
+There is exactly **one** gate, and it is not per-page code. `proxy.ts` only runs on routes matching its `config.matcher`:
+
+```ts
+export const config = {
+  matcher: ["/dashboard/:path*"],
+};
+```
+
+Any route matching that pattern gets the full treatment before it renders: no `accessToken` cookie → redirect to `/login`; token expired or near-expiry → silent refresh (see above) or redirect if that fails; token present but rejected by the backend → redirect. Any route that does **not** match — `/`, `/login`, `/register`, `/password-recovery`, or any brand-new top-level page you add — gets **none of this**. There is no auth check inside `app/dashboard/layout.tsx` or any other layout; the layout is UI chrome only. The middleware's `matcher` is the entire mechanism.
+
+**If a new page needs a logged-in user:**
+- Put it under `/dashboard/...` (e.g. `app/dashboard/requests/page.tsx`) — it's covered automatically, no changes needed anywhere else.
+- If it must live outside `/dashboard` for routing reasons, add its path to the `matcher` array in `proxy.ts`, e.g. `["/dashboard/:path*", "/requests/:path*"]`.
+
+**If a new page must stay public**, no action is needed — just don't put it under `/dashboard` and don't add it to `matcher`.
+
+This also means Server Action POSTs are only protected when their route matches the same pattern — a Server Action file itself has no way to opt in or out of middleware coverage on its own; it inherits whatever protection the page/route it's called from has. The narrower, request-level backstop for a call that slips through (e.g. a token revoked mid-request) is the reactive `isUnauthorizedError()` check described above, not the middleware.
+
 ### Cross-tab logout — no active sync needed
 
 Unlike a typical SPA storing tokens in `localStorage` or in-memory state, these are cookies — the browser already shares them across every tab for the same origin. There's no separate client-side session state that can go stale independently per tab. The only gap is a tab with already-rendered "logged in" UI not knowing a session ended until its next navigation or action — which is exactly when `proxy.ts` (or the Server Action fallback above) would catch it and redirect. No `BroadcastChannel` or `storage`-event based sync is implemented, since it would be solving a problem this cookie-based architecture doesn't actually have.
 
 ---
 
-### 3 · Password reset
+### 2 · Password reset (vestigial — see note above)
 
 For users who have forgotten their password. Requires that email is configured.
 
@@ -208,7 +194,7 @@ POST /api/v1/auth/forgot-password   → sends a reset link to the email address
 POST /api/v1/auth/reset-password    → uses the token from the email to set a new password
 ```
 
-After resetting, the user logs in normally via `POST /api/v1/auth/jwt/login`.
+These routes still work and are still unlinked in the frontend (see the note at the end of [Passwordless login](#0--passwordless-login-primary-flow-since-2026-08-18)) — but since password-based `/jwt/login` was removed, there is no longer any route to actually sign in with the password this flow sets.
 
 > The API intentionally does not reveal whether the email exists in the database. Both valid and unknown emails receive the same empty response to avoid leaking user information.
 
@@ -251,7 +237,7 @@ async def admin_route(user: User = Depends(current_superuser)):
 
 ## Creating a superuser
 
-There is no `createsuperuser` CLI command yet. The current workaround is to create a user via `POST /api/v1/auth/register` and then promote it directly in the database:
+There is no `createsuperuser` CLI command yet. The current workaround is to create a user through the app's sign-up flow (email OTP — see [Passwordless login](#0--passwordless-login-primary-flow-since-2026-08-18)) or via the FastAdmin panel (`/admin`), then promote it directly in the database:
 
 ```sql
 UPDATE usuarios SET is_superuser = true WHERE email = 'you@example.com';
@@ -275,10 +261,10 @@ All routes live under the `/api/v1/auth` prefix and are defined in `fastapi_back
 
 | Method | Path | Who can call it |
 |--------|------|-----------------|
-| POST | `/api/v1/auth/register` | Anyone |
-| POST | `/api/v1/auth/register/cliente` | Anyone |
-| POST | `/api/v1/auth/register/profesional` | Anyone |
-| POST | `/api/v1/auth/jwt/login` | Anyone |
+| POST | `/api/v1/auth/otp/request` | Anyone |
+| POST | `/api/v1/auth/otp/verify` | Anyone with a valid, unexpired code |
+| POST | `/api/v1/auth/register/cliente/otp` | Anyone with a valid `registration_token` |
+| POST | `/api/v1/auth/register/profesional/otp` | Anyone with a valid `registration_token` |
 | POST | `/api/v1/auth/jwt/refresh` | Anyone with a valid refresh + fingerprint cookie pair |
 | POST | `/api/v1/auth/jwt/logout` | Authenticated user |
 | POST | `/api/v1/auth/forgot-password` | Anyone |
@@ -297,8 +283,11 @@ Interactive docs with a built-in "Authorize" button: **http://localhost:8001/doc
 | `ACCESS_SECRET_KEY` | Signs JWT access tokens |
 | `RESET_PASSWORD_SECRET_KEY` | Signs password-reset tokens |
 | `VERIFICATION_SECRET_KEY` | Signs email-verification tokens |
+| `REGISTRATION_TOKEN_SECRET_KEY` | Signs the short-lived token proving an email passed OTP verification, used by `/register/*/otp` |
 | `ACCESS_TOKEN_EXPIRE_SECONDS` | Access token lifetime in seconds (default: 900 = 15 minutes) |
 | `REFRESH_TOKEN_EXPIRE_SECONDS` | Refresh token lifetime in seconds (default: 2592000 = 30 days) |
+| `OTP_CODE_EXPIRE_SECONDS` | Email OTP code lifetime in seconds (default: 600 = 10 minutes) |
+| `REGISTRATION_TOKEN_EXPIRE_SECONDS` | Registration token lifetime in seconds (default: 900 = 15 minutes) |
 
 Generate secrets locally with:
 
@@ -320,7 +309,10 @@ A: Yes, for now. The verification email is not implemented yet. The token is pri
 A: Locally, emails are caught by MailHog at `http://localhost:8025`. Make sure the MailHog container is running (`make docker-up-mailhog`) and that your `.env` points to it. Note that password reset emails are sent; verification emails are not yet.
 
 **Q: How do I know which token to use where?**  
-A: The access token from `/api/v1/auth/jwt/login` (or `/api/v1/auth/jwt/refresh`) is used as `Authorization: Bearer <token>` on every protected request. The refresh and fingerprint tokens are cookies — you never read or send them manually; the browser attaches them automatically on calls to `/api/v1/auth/jwt/refresh` because they're scoped to that path.
+A: The access token from `/api/v1/auth/otp/verify` (or `/api/v1/auth/jwt/refresh`) is used as `Authorization: Bearer <token>` on every protected request. The refresh and fingerprint tokens are cookies — you never read or send them manually; the browser attaches them automatically on calls to `/api/v1/auth/jwt/refresh` because they're scoped to that path.
+
+**Q: I added a new page — how do I make it require login?**  
+A: Put it under `/dashboard/...` and it's automatically protected — no extra code. If it has to live at a different top-level path, add that path to the `matcher` array in `proxy.ts`. There's no per-page auth check to remember; the only thing that decides whether a route is protected is whether it matches `proxy.ts`'s `matcher`. See [How page protection actually works](#how-page-protection-actually-works--and-how-to-add-a-new-protected-page).
 
 **Q: My access token expired — what do I do?**  
 A: Call `POST /api/v1/auth/jwt/refresh` (no body needed; it reads the refresh/fingerprint cookies automatically) to get a new access token. If that also returns 401, the refresh token has expired, been revoked, or reuse was detected — the user needs to log in again.

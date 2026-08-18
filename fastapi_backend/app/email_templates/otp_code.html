@@ -26,6 +26,7 @@
     .logo-text.on-dark{color:#fff}
     .logo-text.on-dark b{color:var(--naranja-claro)}
     .naranja-text {color: var(--naranja-hover)}
+    .otp-code{font-size:32px;letter-spacing:8px;font-weight:800;color:var(--azul);background:var(--durazno-pale);border:1px solid var(--durazno);border-radius:8px;padding:16px 20px;text-align:center;margin:0 0 20px 0}
 </style>
 </head>
 <body>
@@ -43,7 +44,7 @@
                               <circle class="cL" cx="24" cy="18" r="12.5" fill="#F55F20"></circle>
                               <circle class="cR" cx="24" cy="30" r="12.5" fill="#1A3C6E" fill-opacity=".5"></circle>
                               <path class="chk" data-draw="" pathLength="120" d="M19.5 24l3.4 3.4 6-6.6" stroke="#fff" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
-                            </svg>                           
+                            </svg>
                             <span class="logo-text">Busca<b>Oficio</b></span>
                           </a>
                         </td>
@@ -54,10 +55,11 @@
                   <tbody>
                      <tr>
                         <td>
-                           <p style="margin-top:0;margin-bottom:20px">Hola&nbsp;{{ username }},</p>
-                           <p style="margin-top:0;margin-bottom:10px">Recibimos una solicitud para restablecer su contraseña. Puede restablecer su contraseña haciendo clic en el siguiente enlace.<br></p>
-                           <p style="margin-top:0;margin-bottom:10px"><a href="{{ link }}" class="naranja-text" target="_blank" style="text-decoration:none"><b>Restablecer Contraseña</b></a><br></p>
-                           <p style="margin-top:0;margin-bottom:15px">Gracias,<br>Buscaoficio</p>
+                           <p style="margin-top:0;margin-bottom:20px">Hola,</p>
+                           <p style="margin-top:0;margin-bottom:16px">Usa este código para continuar con tu inicio de sesión en BuscaOficio:</p>
+                           <div class="otp-code">{{ code }}</div>
+                           <p style="margin-top:0;margin-bottom:10px">Este código vence en 10 minutos. Si no solicitaste este código, puedes ignorar este correo.</p>
+                           <p style="margin-top:0;margin-bottom:15px">Gracias,<br>BuscaOficio</p>
                            <p style="margin-top:0;margin-bottom:0px;font-size:11px">Descargo de responsabilidad: este correo electrónico y cualquier archivo transmitido con el son confidenciales y están destinados únicamente para el uso del individuo o entidad a quien están dirigidos.</p>
                         </td>
                      </tr>
@@ -69,4 +71,4 @@
    </table>
 </div>
 </body>
-</html> 
+</html>

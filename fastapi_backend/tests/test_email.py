@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 from fastapi_mail import ConnectionConfig, MessageSchema
-from app.email import get_email_config, send_reset_password_email
+from app.email import get_email_config, send_otp_code_email, send_reset_password_email
 from app.models import User
 
 
@@ -72,7 +72,7 @@ async def test_send_reset_password_email(mock_settings, mock_user, mocker):
     # Verify the message schema
     message_arg = mock_fastmail_instance.send_message.call_args[0][0]
     assert isinstance(message_arg, MessageSchema)
-    assert message_arg.subject == "Password recovery"
+    assert message_arg.subject == "🔒 Recuperar Contraseña - Busca oficio"
     assert message_arg.recipients == [mock_user.email]
 
     # Verify template body contains correct data
@@ -87,3 +87,24 @@ async def test_send_reset_password_email(mock_settings, mock_user, mocker):
     # Verify template name
     template_name = mock_fastmail_instance.send_message.call_args[1]["template_name"]
     assert template_name == "password_reset.html"
+
+
+@pytest.mark.asyncio
+async def test_send_otp_code_email(mock_settings, mocker):
+    mock_fastmail = mocker.patch("app.email.FastMail")
+    mock_fastmail_instance = mock_fastmail.return_value
+    mock_fastmail_instance.send_message = mocker.AsyncMock()
+
+    await send_otp_code_email("user@example.com", "123456")
+
+    mock_fastmail.assert_called_once()
+    mock_fastmail_instance.send_message.assert_called_once()
+
+    message_arg = mock_fastmail_instance.send_message.call_args[0][0]
+    assert isinstance(message_arg, MessageSchema)
+    assert message_arg.subject == "🔑 Tu código de acceso - Busca oficio"
+    assert message_arg.recipients == ["user@example.com"]
+    assert message_arg.template_body == {"code": "123456"}
+
+    template_name = mock_fastmail_instance.send_message.call_args[1]["template_name"]
+    assert template_name == "otp_code.html"
