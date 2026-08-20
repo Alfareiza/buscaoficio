@@ -12,9 +12,18 @@
   (since 2026-08-18) — password-based `/jwt/login`, `/register`,
   `/register/cliente`, `/register/profesional` were built, used briefly,
   then **removed entirely** the same day once OTP was confirmed as the sole
-  client-facing flow. See "Recent changes" below for both the OTP build and
-  the removal — this is the most consequential recent change and the memory
-  bank was out of sync with it until this update.
+  client-facing flow. **Merged to `main` via PR #14** (rebase-merged
+  2026-08-18, commits `950f51d`/`ad1cdce`/`f4b4b2e`) after fixing three CI
+  failures (missing `REGISTRATION_TOKEN_SECRET_KEY` env var, a ruff version
+  mismatch, and the `generate-frontend-client` pre-commit hook inheriting
+  the wrong `OPENAPI_OUTPUT_FILE`). See "Recent changes" below for both the
+  OTP build and the removal.
+- **OTP UX polish batch, 2026-08-20** (issue
+  [#15](https://github.com/Alfareiza/buscaoficio/issues/15), branch
+  `otp-ux-polish-required-whatsapp`, pushed, **not yet PR'd**): multi-box
+  `OtpCodeInput`, a real `OtpManager` resend-cooldown bug fix, inline PNG
+  logo in OTP emails, and a required WhatsApp field in onboarding. See
+  Recent changes below.
 - **Open architecture question, unresolved:** whether to keep the current
   server-mediated frontend (Server Actions + Edge middleware — what #10 was
   built on), move toward a client-side SPA calling FastAPI directly, or a
@@ -34,6 +43,56 @@
   steps.
 
 ## Recent changes
+- **OTP auth UX polish batch, 2026-08-20 (issue #15, branch
+  `otp-ux-polish-required-whatsapp`, pushed, not yet PR'd).** Built on top
+  of the merged OTP migration below:
+  - New `OtpCodeInput` component (`components/auth/OtpCodeInput.tsx`):
+    6 individual `<input maxLength=1>` boxes replacing the old single text
+    field — keyboard nav (arrows/backspace), paste-splitting across boxes,
+    auto-focus-advance, auto-submit on the 6th digit, shake animation
+    (`otp-shake` keyframe added to `tailwind.config.js`) on a failed verify,
+    remounted via a `key` bump to reset cleanly between attempts.
+  - `AuthCard.tsx`: added a real resend-cooldown countdown (60s, matching
+    `OtpManager.RESEND_COOLDOWN_SECONDS`) and an `isVerifying` state that
+    hides the resend control and shows "Verificando…" while a code is being
+    checked.
+  - **Fixed a real `OtpManager` bug**: the resend-cooldown check compared
+    elapsed code age against `OTP_LIFETIME - RESEND_COOLDOWN_SECONDS`
+    instead of `RESEND_COOLDOWN_SECONDS` directly — with the old 30s
+    cooldown constant and a 600s `OTP_LIFETIME`, this silently blocked
+    resend for ~570s instead of 30s. Fixed the check and raised the
+    constant to a straight 60s cooldown (`fastapi_backend/app/otp_manager.py`).
+    New regression tests in `tests/test_otp_manager.py` and
+    `tests/routes/test_auth_otp.py::test_resend_within_cooldown_still_returns_202_but_does_not_email`.
+  - Replaced the OTP email's inline SVG mark (CSS custom properties,
+    unsupported by most email clients) with a CID-attached PNG
+    (`app/static/images/logo/busca-oficio-mark.png`, 1024×1024 RGBA),
+    inlined via `fastapi-mail`'s `multipart/related` + `Content-ID`
+    attachment support (`email.py::_inline_logo_attachment`). Source SVG
+    kept alongside as design provenance, not referenced by code.
+  - **Made WhatsApp required** (was optional) in the onboarding-name step:
+    label dropped "(opcional)", `handleContinueName` validates it exactly
+    like the name field, and the Continuar button stays disabled until it's
+    a valid Colombian mobile number (`isValidColombianMobile` /
+    `lib/colombian-mobile.ts`, extracted from the earlier onboarding work).
+  - **Reverted a debug bypass** found in `AuthCard.tsx::handleVerifyOtp`
+    (`setStep("onboarding-name"); return;` at the top of the function,
+    added during the user's own manual testing) that made real OTP
+    verification unreachable dead code — no code was actually checked,
+    existing-user login never redirected, and `registrationToken` was never
+    captured. Restored the real verify-then-branch-on-`new_user`/
+    `existing_user` flow. Caught via 6 failing `AuthCard.test.tsx` tests;
+    confirmed with the user before reverting (their own recent edit) rather
+    than assuming it was safe to undo silently.
+  - `.CLAUDE.md` (root/backend/frontend) and `docs/auth.md` rewritten with
+    current stack tables, directory maps, and testing-gotcha sections —
+    largely written in an earlier part of this session, committed together
+    with this batch.
+  - Backend 20/20 targeted tests green; frontend `AuthCard.test.tsx` 17/17;
+    `tsc`/`eslint`/`ruff`/`pre-commit run --all-files` all clean (one
+    transient `generate-frontend-client` failure was a race with the
+    locally-running `watcher.js`/`next dev` processes, not a real issue —
+    passed on retry).
 - **Removed password-based auth (backend + frontend), 2026-08-18.** The
   Next.js frontend was the only client of the password-based routes, and
   since the passwordless OTP flow (`docs/auth.md` § "Passwordless login")
@@ -73,8 +132,8 @@
     functionally vestigial too (no password-login route left to use a
     reset password with) — that's a separate, unconfirmed scope expansion
     the user didn't ask for.
-- **Auth pages UX polish (login/register), 2026-08-18, uncommitted.** Built
-  on top of the OTP migration below:
+- **Auth pages UX polish (login/register), 2026-08-18, merged in PR #14.**
+  Built on top of the OTP migration below:
   - `components/ui/BuscaOficioLogo.tsx` split into standalone
     `BuscaOficioMark` (svg only) and `BuscaOficioWordmark` (text only,
     "Busca" in `text-azul` / "Oficio" in `text-naranja`) — `BuscaOficioLogo`
@@ -103,7 +162,7 @@
     file in this repo already mocks via relative paths (`"../components/..."`)
     for this reason; keep following that convention.
 - **Passwordless email OTP migration (backend + frontend), 2026-08-18,
-  uncommitted.** Replaced password-based login/registration as the
+  merged in PR #14.** Replaced password-based login/registration as the
   frontend's only flow (see `docs/auth.md` § "Passwordless login" for the
   full design writeup). Backend: `OtpManager` (`app/otp_manager.py`,
   modeled on `RefreshTokenManager`) + `email_otps` table (migration
@@ -220,12 +279,12 @@
   Logout revokes *all* sessions for the user, not just the current device —
   chosen deliberately over a narrower "revoke this session only" approach.
 - Do not commit or push work-in-progress branches without explicit
-  go-ahead. `feature/jwt-frontend-refresh` (#10) was eventually committed to
-  `main` (`4d75bde`) once given the go-ahead. The current uncommitted
-  working tree — the OTP passwordless migration, the auth pages UX polish,
-  and the password-based auth removal (all 2026-08-18, see Recent changes)
-  — is sitting under the same rule: implemented and tested, not committed,
-  waiting on explicit go-ahead.
+  go-ahead. `feature/jwt-frontend-refresh` (#10) was committed to `main`
+  (`4d75bde`); the OTP passwordless migration, auth pages UX polish, and
+  password-based auth removal (all 2026-08-18) were committed and merged
+  via PR #14 once given the go-ahead. The 2026-08-20 OTP UX polish batch
+  (issue #15, branch `otp-ux-polish-required-whatsapp`) was committed and
+  pushed once explicitly requested — not yet opened as a PR.
 - Frontend architecture (server-mediated vs. SPA vs. hybrid): **not yet
   decided**, actively being discussed with the user (see Current focus).
   Provisional lean (not agreed): **hybrid** — keep auth server-mediated
@@ -270,11 +329,8 @@
   `tunnelRoute` unless we explicitly decide to.
 
 ## Next steps (suggested)
-1. Get explicit go-ahead, then commit/push the current working tree: the
-   OTP passwordless migration, the auth pages UX polish, and the
-   password-based auth removal (all 2026-08-18, uncommitted — see Recent
-   changes). Consider whether these should be one PR or split (migration +
-   removal is arguably one logical change; the UX polish is separable).
+1. Open a PR for branch `otp-ux-polish-required-whatsapp` (issue #15,
+   pushed 2026-08-20) once ready for review.
 2. **Resolve the frontend architecture question** (server-mediated vs. SPA
    vs. hybrid — see Current focus / Active decisions). Now somewhat
    independent of #10 (already merged) but still relevant to how future
