@@ -1,9 +1,31 @@
 from pathlib import Path
 import urllib.parse
 
-from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
-from .config import logger, settings
+from fastapi_mail import (
+    ConnectionConfig,
+    FastMail,
+    MessageSchema,
+    MessageType,
+    MultipartSubtypeEnum,
+)
+
+from .config import STATIC_DIR, logger, settings
 from .models import User
+
+OTP_MARK_CID = "buscaoficio-mark.png"
+OTP_MARK_PATH = STATIC_DIR / "images" / "logo" / "busca-oficio-mark.png"
+
+
+def _inline_logo_attachment() -> dict:
+    return {
+        "file": str(OTP_MARK_PATH),
+        "headers": {
+            "Content-ID": f"<{OTP_MARK_CID}>",
+            "Content-Disposition": f'inline; filename="{OTP_MARK_CID}"',
+        },
+        "mime_type": "image",
+        "mime_subtype": "png",
+    }
 
 
 def get_email_config():
@@ -57,8 +79,10 @@ async def send_otp_code_email(email: str, code: str):
     message = MessageSchema(
         subject="🔑 Tu código de acceso - Busca oficio",
         recipients=[email],
-        template_body={"code": code},
+        template_body={"code": code, "frontend_url": settings.FRONTEND_URL},
         subtype=MessageType.html,
+        multipart_subtype=MultipartSubtypeEnum.related,
+        attachments=[_inline_logo_attachment()],
     )
 
     try:

@@ -107,7 +107,7 @@
   frontend's only flow (see `docs/auth.md` § "Passwordless login" for the
   full design writeup). Backend: `OtpManager` (`app/otp_manager.py`,
   modeled on `RefreshTokenManager`) + `email_otps` table (migration
-  `a067ad066d81`) for 6-digit codes (10-min expiry, 5 attempts, 30s resend
+  `a067ad066d81`) for 6-digit codes (10-min expiry, 5 attempts, 60s resend
   cooldown, hashed not stored raw); new routes `POST /otp/request`,
   `/otp/verify`, `/register/cliente/otp`, `/register/profesional/otp`; a
   short-lived signed `registration_token` proves OTP ownership between

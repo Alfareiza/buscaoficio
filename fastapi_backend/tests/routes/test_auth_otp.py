@@ -43,6 +43,20 @@ class TestOtpRequest:
         assert len(code) == OtpManager.CODE_LENGTH
         assert code.isdigit()
 
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_resend_within_cooldown_still_returns_202_but_does_not_email(
+        self, test_client, mock_send_otp_email
+    ) -> None:
+        await _request_and_capture_code(test_client, mock_send_otp_email, NEW_EMAIL)
+        mock_send_otp_email.reset_mock()
+
+        response = await test_client.post(
+            "/api/v1/auth/otp/request", json={"email": NEW_EMAIL}
+        )
+
+        assert response.status_code == status.HTTP_202_ACCEPTED
+        mock_send_otp_email.assert_not_awaited()
+
 
 class TestOtpVerifyNewEmail:
     @pytest.mark.asyncio(loop_scope="function")

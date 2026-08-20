@@ -18,6 +18,18 @@ module.exports = {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      keyframes: {
+        "otp-shake": {
+          "0%, 100%": { transform: "translateX(0)" },
+          "20%": { transform: "translateX(-8px)" },
+          "40%": { transform: "translateX(8px)" },
+          "60%": { transform: "translateX(-6px)" },
+          "80%": { transform: "translateX(6px)" },
+        },
+      },
+      animation: {
+        "otp-shake": "otp-shake 0.45s ease-in-out",
+      },
       colors: {
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",

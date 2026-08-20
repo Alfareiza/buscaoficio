@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+import {
+  isValidColombianMobile,
+  sanitizeColombianMobileInput,
+  toE164ColombianMobile,
+} from "@/lib/colombian-mobile";
+
 const passwordSchema = z
   .string()
   .min(8, "Password should be at least 8 characters.") // Minimum length validation
@@ -33,16 +39,28 @@ export const otpVerifySchema = z.object({
     .regex(/^\d+$/, { message: "El código solo debe contener números" }),
 });
 
+const whatsappSchema = z
+  .string()
+  .optional()
+  .transform((val) => {
+    if (!val) return undefined;
+    const digits = sanitizeColombianMobileInput(val);
+    return isValidColombianMobile(digits) ? toE164ColombianMobile(digits) : val;
+  })
+  .refine((val) => val === undefined || /^\+573\d{9}$/.test(val), {
+    message: "Ingresa un número celular 10 dígitos",
+  });
+
 export const onboardingClienteSchema = z.object({
   registration_token: z.string().min(1),
   nombre_completo: z.string().min(1),
-  whatsapp: z.string().optional(),
+  whatsapp: whatsappSchema,
 });
 
 export const onboardingProfesionalSchema = z.object({
   registration_token: z.string().min(1),
   nombre_completo: z.string().min(1),
-  whatsapp: z.string().optional(),
+  whatsapp: whatsappSchema,
   documento_tipo: z
     .string()
     .min(1, { message: "El tipo de documento es requerido" }),

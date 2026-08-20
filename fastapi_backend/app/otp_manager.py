@@ -21,7 +21,7 @@ class OtpManager:
 
     CODE_LENGTH = 6
     MAX_ATTEMPTS = 5
-    RESEND_COOLDOWN_SECONDS = 30
+    RESEND_COOLDOWN_SECONDS = 60
     OTP_LIFETIME = settings.OTP_CODE_EXPIRE_SECONDS
 
     @staticmethod
@@ -49,9 +49,8 @@ class OtpManager:
         outstanding = result.scalars().all()
 
         for row in outstanding:
-            if row.expires_at > now and (now - row.creado_en).total_seconds() < (
-                cls.OTP_LIFETIME - cls.RESEND_COOLDOWN_SECONDS
-            ):
+            age_seconds = (now - row.creado_en).total_seconds()
+            if row.expires_at > now and age_seconds < cls.RESEND_COOLDOWN_SECONDS:
                 return None
             row.consumed_at = now  # invalidate stale/replaced codes
 
