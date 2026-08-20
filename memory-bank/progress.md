@@ -4,10 +4,10 @@
 - FastAPI auth: **passwordless email OTP** login/registration is the only
   linked flow (`/otp/request`, `/otp/verify`, `/register/{cliente,
   profesional}/otp`) — password-based `/jwt/login`/`/register*` were
-  removed 2026-08-18, **uncommitted**, see Session log below and
-  `systemPatterns.md` § Passwordless OTP auth pattern. `/jwt/refresh`,
-  `/jwt/logout`, and the users router are unaffected by which flow created
-  the session.
+  removed 2026-08-18 and **merged to `main` via PR #14**, see Session log
+  below and `systemPatterns.md` § Passwordless OTP auth pattern.
+  `/jwt/refresh`, `/jwt/logout`, and the users router are unaffected by
+  which flow created the session.
 - JWT refresh token rotation with DB-backed revocation + double-submit
   fingerprint cookie — **merged to `main`** (`0a8376b`, issue #9)
 - Frontend cookie forwarding + middleware-based silent refresh + reactive
@@ -15,7 +15,11 @@
 - `AuthCard` component (`components/auth/AuthCard.tsx`) drives the OTP
   flow on both `/login` and `/register`, which now share a route-group
   layout (`app/(auth)/layout.tsx`) so toggling between them feels instant
-  (soft RSC nav, not a page reload) — **uncommitted**, 2026-08-18
+  (soft RSC nav, not a page reload) — **merged to `main` via PR #14**,
+  2026-08-18. A follow-up UX polish batch (multi-box code input, cooldown
+  bug fix, inline PNG email logo, required WhatsApp) is on branch
+  `otp-ux-polish-required-whatsapp` (issue #15, pushed 2026-08-20, not yet
+  PR'd) — see Session log below.
 - Items CRUD + pagination
 - Next.js auth pages + dashboard
 - OpenAPI → typed FE client generation
@@ -43,9 +47,8 @@
 - [ ] **Decide frontend architecture** (server-mediated vs. SPA vs. hybrid —
   see `activeContext.md`) — #9/#10 are already merged regardless, but this
   still shapes future features (live status, messaging)
-- [ ] Commit + push the current working tree (OTP migration, auth UX
-  polish, password-auth removal — all 2026-08-18) once given explicit
-  go-ahead — do not commit/push without it
+- [ ] Open a PR for branch `otp-ux-polish-required-whatsapp` (issue #15,
+  pushed 2026-08-20) once ready for review
 - [ ] Close issue #8 (parent) once the architecture question above is settled
 - [ ] Re-evaluate issue #1 (email verification) — OTP accounts are already
   `is_verified=true` at creation and the password registration path that
@@ -261,6 +264,47 @@
   (1 pre-existing, unrelated email-subject-text failure from earlier
   uncommitted work in this branch), frontend 45/45, `tsc`/`eslint`/`ruff`
   clean.
-- All of the above is **uncommitted** — standing instruction is not to
-  commit/push without explicit go-ahead (see `activeContext.md` § Active
-  decisions).
+- All of the above was committed and merged to `main` via **PR #14**
+  (rebase-merged 2026-08-18) once given explicit go-ahead, after fixing
+  three CI failures — see the 2026-08-20 session log below for the
+  follow-up UX polish batch.
+
+## Session log (2026-08-20) — OTP UX polish: multi-box input, cooldown fix, required WhatsApp
+- Picked up a second, larger batch of uncommitted OTP UX work sitting
+  directly on `main` from an earlier interrupted session: a multi-box
+  `OtpCodeInput` component, a real resend-cooldown countdown + "Verificando…"
+  state in `AuthCard.tsx`, a CID-inlined PNG logo replacing inline SVG/CSS
+  vars in the OTP email template, and a real `OtpManager` bug fix (the
+  resend-cooldown check compared elapsed time against `OTP_LIFETIME -
+  RESEND_COOLDOWN_SECONDS` instead of `RESEND_COOLDOWN_SECONDS` directly,
+  silently blocking resend for ~570s instead of the intended 30s — fixed
+  and the cooldown constant raised to a straight 60s). Verified all of it
+  (backend 20/20 targeted tests, `ruff`, frontend `tsc`/`eslint`) and, along
+  the way, found and fixed a 335s real-timer bug in `AuthCard.test.tsx`
+  (the resend countdown's real `setTimeout` chain ran in wall-clock time
+  under test; fixed with `jest.useFakeTimers()`) and removed an accidental
+  duplicate `busca-oficio-logo-principal copy.svg` file.
+- User asked to make the **WhatsApp field required** (not optional) in the
+  onboarding-name step. Updated `AuthCard.tsx`: label, `handleContinueName`
+  validation, and the Continuar button's disabled state all now treat
+  WhatsApp like the required name field. Updated `AuthCard.test.tsx`
+  accordingly (empty/invalid WhatsApp blocks Continuar; valid WhatsApp is
+  sent as E.164 on submit).
+- While fixing the WhatsApp tests, found `AuthCard.tsx::handleVerifyOtp`
+  had a hard-coded `setStep("onboarding-name"); return;` at the top —
+  added during the user's own manual testing — that made the real
+  `verifyOtpAction` call, the `new_user`/`existing_user` branch, and
+  `setRegistrationToken` all unreachable dead code. This broke real OTP
+  login/verification and 6 tests. Flagged it to the user via
+  `AskUserQuestion` rather than assuming it was safe to touch (it was their
+  own recent edit); they confirmed reverting it. All 17 `AuthCard.test.tsx`
+  tests green afterward.
+- No open GitHub issue covered this batch — opened
+  [#15](https://github.com/Alfareiza/buscaoficio/issues/15). Branched
+  `otp-ux-polish-required-whatsapp` from an up-to-date `main`, staged
+  everything feature-related (left out `.claude/settings.json`, a personal
+  Claude Code hook config unrelated to the feature), ran
+  `pre-commit run --all-files` (one `generate-frontend-client` failure was
+  a transient race with the locally-running `watcher.js`/`next dev`
+  processes — passed cleanly on retry), committed, and pushed. **Not yet
+  opened as a PR.**
