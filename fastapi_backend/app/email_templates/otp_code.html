@@ -1,74 +1,53 @@
+<!DOCTYPE html>
+<html lang="es" xmlns="http://www.w3.org/1999/xhtml">
 <head>
-<meta name='viewport' content='width=device-width, initial-scale=1.0'>
-<style>
-  :root{
-    --naranja:#F55F20;
-    --naranja-hover:#E04F12;
-    --naranja-claro:#FF8C42;
-    --durazno:#FBCBA4;
-    --durazno-pale:#FEF1E4;
-    --azul:#1A3C6E;
-    --azul-oscuro:#122B50;
-    --azul-pale:#EFF6FF;
-    --verde:#059669;
-    --verde-pale:#ECFDF5;
-    --hueso:#F8F6F2;
-    --hueso-borde:#E2DED8;
-    --blanco:#FFFFFF;
-  }
-    .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
-    .nav{display:flex;align-items:center;justify-content:space-between;height:72px}
-    .bo-mark{display:block;overflow:visible}
-    .logo{display:flex;align-items:center;gap:11px}
-    .logo .bo-mark{width:38px;height:38px;flex-shrink:0}
-    .logo-text{font-size:21px;letter-spacing:-.01em;color:var(--azul);font-weight:600}
-    .logo-text b{font-weight:800;color:var(--naranja)}
-    .logo-text.on-dark{color:#fff}
-    .logo-text.on-dark b{color:var(--naranja-claro)}
-    .naranja-text {color: var(--naranja-hover)}
-    .otp-code{font-size:32px;letter-spacing:8px;font-weight:800;color:var(--azul);background:var(--durazno-pale);border:1px solid var(--durazno);border-radius:8px;padding:16px 20px;text-align:center;margin:0 0 20px 0}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>Tu código de acceso</title>
 </head>
-<body>
-<div style="background-color:#ffffff;margin-top:20px;margin-right:10px;margin-bottom:20px">
-   <table style="margin:0px auto" cellpadding="25">
-      <tbody>
-         <tr>
-            <td>
-               <table style="margin:0 auto;max-width:584px;background-color:#f1f2f6;border:1px solid #f1f2f6" width="584px" cellpadding="24">
-                  <tbody>
-                     <tr>
-                        <td class="wrap nav">
-                          <a href="#" class="logo" style="text-decoration: none;" aria-label="BuscaOficio — inicio">
-                            <svg class="bo-mark" viewBox="0 0 48 48">
-                              <circle class="cL" cx="24" cy="18" r="12.5" fill="#F55F20"></circle>
-                              <circle class="cR" cx="24" cy="30" r="12.5" fill="#1A3C6E" fill-opacity=".5"></circle>
-                              <path class="chk" data-draw="" pathLength="120" d="M19.5 24l3.4 3.4 6-6.6" stroke="#fff" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
-                            </svg>
-                            <span class="logo-text">Busca<b>Oficio</b></span>
-                          </a>
-                        </td>
-                     </tr>
-                  </tbody>
-               </table>
-               <table style="background:#fff;border:1px solid #f1f2f6;width:584px;border-top:none;color:#373e54;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px" cellpadding="24">
-                  <tbody>
-                     <tr>
-                        <td>
-                           <p style="margin-top:0;margin-bottom:20px">Hola,</p>
-                           <p style="margin-top:0;margin-bottom:16px">Usa este código para continuar con tu inicio de sesión en BuscaOficio:</p>
-                           <div class="otp-code">{{ code }}</div>
-                           <p style="margin-top:0;margin-bottom:10px">Este código vence en 10 minutos. Si no solicitaste este código, puedes ignorar este correo.</p>
-                           <p style="margin-top:0;margin-bottom:15px">Gracias,<br>BuscaOficio</p>
-                           <p style="margin-top:0;margin-bottom:0px;font-size:11px">Descargo de responsabilidad: este correo electrónico y cualquier archivo transmitido con el son confidenciales y están destinados únicamente para el uso del individuo o entidad a quien están dirigidos.</p>
-                        </td>
-                     </tr>
-                  </tbody>
-               </table>
+<body style="margin:0;padding:0;background-color:#ffffff;">
+  <div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
+    Tu código es {{ code }}. Vence en 10 minutos.
+  </div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#ffffff;">
+    <tr>
+      <td align="center" style="padding:20px 10px;">
+        <table role="presentation" width="584" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:584px;">
+          <tr>
+            <td style="background-color:#f1f2f6;border:1px solid #f1f2f6;padding:24px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td valign="middle" style="padding-right:11px;">
+                    <a href="{{ frontend_url }}" style="text-decoration:none;" aria-label="BuscaOficio — inicio">
+                      <img src="cid:buscaoficio-mark.png" width="38" height="38" alt="BuscaOficio" style="display:block;border:0;outline:none;text-decoration:none;width:38px;height:38px;">
+                    </a>
+                  </td>
+                  <td valign="middle" style="font-family:Arial,Helvetica,sans-serif;font-size:21px;line-height:24px;font-weight:600;color:#1A3C6E;letter-spacing:-0.01em;">
+                    <a href="{{ frontend_url }}" style="text-decoration:none;color:#1A3C6E;">Busca<span style="font-weight:800;color:#F55F20;">Oficio</span></a>
+                  </td>
+                </tr>
+              </table>
             </td>
-         </tr>
-      </tbody>
-   </table>
-</div>
+          </tr>
+          <tr>
+            <td style="background-color:#ffffff;border:1px solid #f1f2f6;border-top:none;padding:24px;color:#373e54;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;">
+              <p style="margin:0 0 20px 0;">Hola,</p>
+              <p style="margin:0 0 16px 0;">Usa este código para continuar con tu inicio de sesión en BuscaOficio:</p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px 0;">
+                <tr>
+                  <td align="center" style="background-color:#FEF1E4;border:1px solid #FBCBA4;border-radius:8px;padding:16px 20px;font-family:Arial,Helvetica,sans-serif;font-size:32px;line-height:40px;font-weight:800;letter-spacing:8px;color:#1A3C6E;">
+                    {{ code }}
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0 0 10px 0;">Este código vence en 10 minutos. Si no solicitaste este código, puedes ignorar este correo.</p>
+              <p style="margin:20px 0 0 0;font-size:11px;line-height:16px;">Descargo de responsabilidad: este correo electrónico y cualquier archivo transmitido con el son confidenciales y están destinados únicamente para el uso del individuo o entidad a quien están dirigidos.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>

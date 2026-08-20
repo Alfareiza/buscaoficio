@@ -1,7 +1,16 @@
-import pytest
 from pathlib import Path
-from fastapi_mail import ConnectionConfig, MessageSchema
-from app.email import get_email_config, send_otp_code_email, send_reset_password_email
+import struct
+
+import pytest
+from fastapi_mail import ConnectionConfig, MessageSchema, MultipartSubtypeEnum
+from jinja2 import Environment, FileSystemLoader
+
+from app.email import (
+    OTP_MARK_PATH,
+    get_email_config,
+    send_otp_code_email,
+    send_reset_password_email,
+)
 from app.models import User
 
 
@@ -104,7 +113,41 @@ async def test_send_otp_code_email(mock_settings, mocker):
     assert isinstance(message_arg, MessageSchema)
     assert message_arg.subject == "🔑 Tu código de acceso - Busca oficio"
     assert message_arg.recipients == ["user@example.com"]
-    assert message_arg.template_body == {"code": "123456"}
+    assert message_arg.template_body == {
+        "code": "123456",
+        "frontend_url": "http://test-frontend.com",
+    }
+    assert message_arg.multipart_subtype == MultipartSubtypeEnum.related
+    assert len(message_arg.attachments) == 1
+    assert OTP_MARK_PATH.is_file()
 
     template_name = mock_fastmail_instance.send_message.call_args[1]["template_name"]
     assert template_name == "otp_code.html"
+
+
+def test_otp_template_uses_inline_png_mark():
+    templates = Path(__file__).resolve().parents[1] / "app" / "email_templates"
+    html = (
+        Environment(loader=FileSystemLoader(templates))
+        .get_template("otp_code.html")
+        .render(code="488098", frontend_url="https://buscaoficio.co")
+    )
+
+    assert "<svg" not in html.lower()
+    assert "var(--" not in html
+    assert "display:flex" not in html
+    assert 'src="cid:buscaoficio-mark.png"' in html
+    assert 'width="38"' in html
+    assert 'height="38"' in html
+    assert "488098" in html
+    assert "letter-spacing:8px" in html
+    assert "https://buscaoficio.co" in html
+
+
+def test_otp_mark_png_is_square_transparent_and_high_res():
+    data = OTP_MARK_PATH.read_bytes()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    width, height = struct.unpack(">II", data[16:24])
+    color_type = data[25]
+    assert width == height == 1024
+    assert color_type == 6  # RGBA, keeps the transparent background

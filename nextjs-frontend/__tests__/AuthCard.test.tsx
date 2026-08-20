@@ -24,11 +24,19 @@ const push = jest.fn();
 const refresh = jest.fn();
 
 beforeEach(() => {
+  // AuthCard's resend-cooldown countdown uses a real 1s setTimeout loop
+  // (60 ticks). Without fake timers, every test that reaches the OTP step
+  // lets that countdown run in real wall-clock time in the background,
+  // ballooning this file's run time by minutes. Nothing here asserts on the
+  // countdown reaching a later value, just its initial "60s" state, so
+  // fake timers (which waitFor auto-advances) are a safe, drop-in fix.
+  jest.useFakeTimers();
   (useRouter as jest.Mock).mockReturnValue({ push, refresh });
 });
 
 afterEach(() => {
   jest.clearAllMocks();
+  jest.useRealTimers();
 });
 
 async function goToOtpStep(email = "test@example.com") {
@@ -42,8 +50,26 @@ async function goToOtpStep(email = "test@example.com") {
 
   await waitFor(() => {
     expect(
-      screen.getByLabelText(/código de verificación/i),
+      screen.getByRole("group", { name: /código de verificación/i }),
     ).toBeInTheDocument();
+  });
+}
+
+function fillOtp(code: string) {
+  fireEvent.change(screen.getByLabelText(/dígito 1 de 6/i), {
+    target: { value: code },
+  });
+}
+
+async function goToOnboardingName() {
+  await goToOtpStep();
+  (verifyOtpAction as jest.Mock).mockResolvedValue({
+    ok: true,
+    data: { status: "new_user", registrationToken: "reg-token-123" },
+  });
+  fillOtp("654321");
+  await waitFor(() => {
+    expect(screen.getByLabelText(/nombre completo/i)).toBeInTheDocument();
   });
 }
 
@@ -73,7 +99,7 @@ describe("AuthCard", () => {
       ).toBeInTheDocument();
     });
     expect(
-      screen.queryByLabelText(/código de verificación/i),
+      screen.queryByRole("group", { name: /código de verificación/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -84,10 +110,7 @@ describe("AuthCard", () => {
       data: { status: "existing_user", hasRole: true },
     });
 
-    fireEvent.change(screen.getByLabelText(/código de verificación/i), {
-      target: { value: "123456" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    fillOtp("123456");
 
     await waitFor(() => {
       expect(push).toHaveBeenCalledWith("/dashboard");
@@ -106,7 +129,7 @@ describe("AuthCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     await waitFor(() =>
       expect(
-        screen.getByLabelText(/código de verificación/i),
+        screen.getByRole("group", { name: /código de verificación/i }),
       ).toBeInTheDocument(),
     );
 
@@ -114,10 +137,7 @@ describe("AuthCard", () => {
       ok: true,
       data: { status: "existing_user", hasRole: true },
     });
-    fireEvent.change(screen.getByLabelText(/código de verificación/i), {
-      target: { value: "123456" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    fillOtp("123456");
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
     expect(push).not.toHaveBeenCalled();
@@ -130,17 +150,24 @@ describe("AuthCard", () => {
       data: { status: "new_user", registrationToken: "reg-token-123" },
     });
 
-    fireEvent.change(screen.getByLabelText(/código de verificación/i), {
-      target: { value: "654321" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    fillOtp("654321");
 
     await waitFor(() => {
       expect(screen.getByLabelText(/nombre completo/i)).toBeInTheDocument();
     });
 
-    // Required field: continuing with an empty name shows an error and does
-    // not advance to the role step.
+    // Required field: continuing without a WhatsApp number leaves the button
+    // disabled and does not advance to the role step.
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
+    expect(
+      screen.queryByText(/busco un profesional para un trabajo/i),
+    ).not.toBeInTheDocument();
+
+    // Required field: with a valid WhatsApp but an empty name, continuing
+    // shows an error and still does not advance to the role step.
+    fireEvent.change(screen.getByLabelText(/whatsapp/i), {
+      target: { value: "3001234567" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     expect(
       screen.getByText("El nombre completo es requerido"),
@@ -175,10 +202,86 @@ describe("AuthCard", () => {
       expect(registerClienteOtpAction).toHaveBeenCalledWith({
         registration_token: "reg-token-123",
         nombre_completo: "Ana Pérez",
-        whatsapp: undefined,
+        whatsapp: "+573001234567",
       });
     });
     expect(push).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("strips +57 from WhatsApp, shows a check when valid, and sends E.164 on register", async () => {
+    await goToOnboardingName();
+
+    const whatsapp = screen.getByLabelText(/whatsapp/i);
+    fireEvent.change(whatsapp, { target: { value: "+57 300 123 4567" } });
+    expect(whatsapp).toHaveValue("3001234567");
+    expect(screen.getByText("Número de WhatsApp válido")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/nombre completo/i), {
+      target: { value: "Ana Pérez" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await waitFor(() => {
+      expect(
+        screen.getByText(/busco un profesional para un trabajo/i),
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText(/busco un profesional para un trabajo/i));
+    (registerClienteOtpAction as jest.Mock).mockResolvedValue({
+      ok: true,
+      data: { status: "existing_user", hasRole: true },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /crear cuenta/i }));
+
+    await waitFor(() => {
+      expect(registerClienteOtpAction).toHaveBeenCalledWith({
+        registration_token: "reg-token-123",
+        nombre_completo: "Ana Pérez",
+        whatsapp: "+573001234567",
+      });
+    });
+  });
+
+  it("blocks continue when WhatsApp is filled but not a Colombian mobile", async () => {
+    await goToOnboardingName();
+
+    fireEvent.change(screen.getByLabelText(/nombre completo/i), {
+      target: { value: "Ana Pérez" },
+    });
+    fireEvent.change(screen.getByLabelText(/whatsapp/i), {
+      target: { value: "2001234567" },
+    });
+    expect(
+      screen.queryByText("Número de WhatsApp válido"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Ingresa un celular colombiano de 10 dígitos"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
+  });
+
+  it("disables Continuar and hints to finish an incomplete WhatsApp number", async () => {
+    await goToOnboardingName();
+
+    fireEvent.change(screen.getByLabelText(/nombre completo/i), {
+      target: { value: "Ana Pérez" },
+    });
+    fireEvent.change(screen.getByLabelText(/whatsapp/i), {
+      target: { value: "300123" },
+    });
+
+    expect(screen.getByText("Completa los 10 dígitos")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
+  });
+
+  it("disables Continuar when WhatsApp is left empty", async () => {
+    await goToOnboardingName();
+
+    fireEvent.change(screen.getByLabelText(/nombre completo/i), {
+      target: { value: "Ana Pérez" },
+    });
+
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
   });
 
   it("keeps the create-account button disabled for a profesional until the document fields are filled", async () => {
@@ -187,13 +290,13 @@ describe("AuthCard", () => {
       ok: true,
       data: { status: "new_user", registrationToken: "reg-token-123" },
     });
-    fireEvent.change(screen.getByLabelText(/código de verificación/i), {
-      target: { value: "654321" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    fillOtp("654321");
     await waitFor(() => screen.getByLabelText(/nombre completo/i));
     fireEvent.change(screen.getByLabelText(/nombre completo/i), {
       target: { value: "Ana Pérez" },
+    });
+    fireEvent.change(screen.getByLabelText(/whatsapp/i), {
+      target: { value: "3001234567" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     await waitFor(() =>
@@ -207,6 +310,99 @@ describe("AuthCard", () => {
     expect(
       screen.getByRole("button", { name: /crear cuenta/i }),
     ).toBeDisabled();
+  });
+
+  it("does not show a Continuar button on the code step and verifies as soon as six digits are entered", async () => {
+    await goToOtpStep();
+    (verifyOtpAction as jest.Mock).mockResolvedValue({
+      ok: true,
+      data: { status: "existing_user", hasRole: true },
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Continuar" }),
+    ).not.toBeInTheDocument();
+
+    fillOtp("123456");
+
+    await waitFor(() => {
+      expect(verifyOtpAction).toHaveBeenCalledWith(
+        "test@example.com",
+        "123456",
+      );
+    });
+  });
+
+  it("shows El código es incorrecto, clears the boxes, and stays on the code step when verification fails", async () => {
+    await goToOtpStep();
+    (verifyOtpAction as jest.Mock).mockResolvedValue({
+      ok: false,
+      error: "Código inválido o expirado",
+    });
+
+    fillOtp("000000");
+
+    await waitFor(() => {
+      expect(screen.getByText("El código es incorrecto")).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText(/dígito 1 de 6/i)).toHaveValue("");
+    expect(screen.getByLabelText(/dígito 6 de 6/i)).toHaveValue("");
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("moves focus to the next box after a digit is entered", async () => {
+    await goToOtpStep();
+
+    fireEvent.change(screen.getByLabelText(/dígito 1 de 6/i), {
+      target: { value: "4" },
+    });
+
+    expect(screen.getByLabelText(/dígito 2 de 6/i)).toHaveFocus();
+    expect(screen.getByLabelText(/dígito 1 de 6/i)).toHaveClass("bg-gray-100");
+  });
+
+  it("disables Reenviar during the resend cooldown after a code is sent", async () => {
+    // First successful /otp/request starts a 60s frontend timer that matches
+    // OtpManager.RESEND_COOLDOWN_SECONDS. A click inside that window still
+    // gets HTTP 202 (anti-enumeration) but the backend sends no email — so
+    // the button must stay disabled and show the remaining seconds instead
+    // of looking like a successful resend.
+    await goToOtpStep();
+
+    const resend = screen.getByRole("button", { name: /reenviar/i });
+    expect(resend).toBeDisabled();
+    expect(resend).toHaveTextContent(/reenviar en 60s/i);
+  });
+
+  it("hides Reenviar and shows Verificando while the code is being checked", async () => {
+    await goToOtpStep();
+    let resolveVerify: (value: {
+      ok: true;
+      data: { status: "existing_user"; hasRole: boolean };
+    }) => void = () => {};
+    (verifyOtpAction as jest.Mock).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveVerify = resolve;
+        }),
+    );
+
+    fillOtp("123456");
+
+    await waitFor(() => {
+      expect(screen.getByText("Verificando…")).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole("button", { name: /reenviar/i }),
+    ).not.toBeInTheDocument();
+
+    resolveVerify({
+      ok: true,
+      data: { status: "existing_user", hasRole: true },
+    });
+    await waitFor(() => {
+      expect(push).toHaveBeenCalledWith("/dashboard");
+    });
   });
 
   it("shows the legal notice and a Registrarme link to /register by default (login intent)", () => {
