@@ -110,6 +110,146 @@
         }
       }
     },
+    "/api/v1/auth/google/authorize": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Start Google Sign-In",
+        "description": "Redirect the browser to Google's consent screen.\n\nThis is a real browser navigation (the \"Continuar con Google\" button is\na plain link, not a fetch call) \u2014 the whole Authorization Code flow\ndepends on the browser bouncing through Google, so it can't go through a\nNext.js Server Action the way every other auth call in this app does.",
+        "operationId": "auth:google.authorize",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/google/callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Google Sign-In callback",
+        "description": "Google redirects here after the user accepts/rejects consent.\n\nThis route only ever redirects the browser onward \u2014 it never sets\nsession cookies itself, since those must be set by the Next.js server on\nits own origin (see GoogleOAuthManager.issue_session_token's docstring).\nExisting users get a short-lived google_session_token to complete login\nvia POST /auth/google/session; new emails get the same registration_token\nthe OTP flow already uses, so /register/{cliente,profesional}/otp handles\naccount creation identically regardless of how the email was proven.",
+        "operationId": "auth:google.callback",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/google/session": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Complete Google Sign-In (exchange session token for a session)",
+        "description": "Called by a Next.js Server Action, not directly by the browser.\n\nExchanges the short-lived token from GET /auth/google/callback's\nredirect for a real session (access token + refresh/fingerprint\ncookies), via the same build_session_response used by OTP verify and\nOTP-backed registration \u2014 so cookie-setting logic still exists in\nexactly one place. The response also carries `nombre_completo`/`email`/\n`picture` (unlike OTP verify, which doesn't need to \u2014 the frontend\nalready has the email from what the user typed there) so the frontend\ncan cache them for the \"Welcome back\" card show after a future session\nexpiry. `picture` is only ever included for a Google-established\nsession \u2014 its presence in the response is the frontend's signal that\nthis login was Google-backed.",
+        "operationId": "auth:google.session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/session"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/jwt/refresh": {
       "post": {
         "tags": [
@@ -1916,14 +2056,9 @@
         "enum": [
           "CC",
           "CE",
-          "TI",
-          "RC",
           "PA",
-          "MS",
           "PE",
-          "CN",
-          "PT",
-          "SC"
+          "PT"
         ],
         "title": "TipoDocumento",
         "description": "Each member carries a human-readable Spanish label alongside its code\n(e.g. TipoDocumento.CC.label == \"C\u00e9dula de Ciudadan\u00eda\"), used to render\nadmin dropdown options \u2014 the codes alone aren't self-explanatory."
@@ -2095,6 +2230,19 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "session": {
+        "properties": {
+          "google_session_token": {
+            "type": "string",
+            "title": "Google Session Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "google_session_token"
+        ],
+        "title": "Body_auth-auth:google.session"
       }
     },
     "securitySchemes": {

@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     OTP_CODE_EXPIRE_SECONDS: int = 600  # 10 minutes
     REGISTRATION_TOKEN_EXPIRE_SECONDS: int = 900  # 15 minutes
 
+    # Google Sign-In (OAuth 2.0 authorization code flow)
+    GOOGLE_OAUTH_CLIENT_ID: str | None = None
+    GOOGLE_OAUTH_CLIENT_SECRET: str | None = None
+    GOOGLE_OAUTH_STATE_EXPIRE_SECONDS: int = 600  # 10 minutes
+    GOOGLE_SESSION_TOKEN_EXPIRE_SECONDS: int = 120  # 2 minutes
+
     # Email
     MAIL_USERNAME: str | None = None
     MAIL_PASSWORD: str | None = None
@@ -47,6 +53,13 @@ class Settings(BaseSettings):
 
     # Frontend
     FRONTEND_URL: str = "http://localhost:3000"
+
+    # Backend's own public base URL — needed to build the Google OAuth
+    # redirect_uri (must match exactly what's registered in Google Cloud
+    # Console and what's sent on both the authorize and token-exchange
+    # legs). Not derived from the incoming request, since that would depend
+    # on trusting proxy headers correctly behind Caddy in production.
+    BACKEND_URL: str = "http://localhost:8001"
 
     # CORS
     CORS_ORIGINS: Set[str]

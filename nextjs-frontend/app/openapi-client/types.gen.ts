@@ -376,17 +376,7 @@ export type ProfesionalUpdate = {
  * (e.g. TipoDocumento.CC.label == "Cédula de Ciudadanía"), used to render
  * admin dropdown options — the codes alone aren't self-explanatory.
  */
-export type TipoDocumento =
-  | "CC"
-  | "CE"
-  | "TI"
-  | "RC"
-  | "PA"
-  | "MS"
-  | "PE"
-  | "CN"
-  | "PT"
-  | "SC";
+export type TipoDocumento = "CC" | "CE" | "PA" | "PE" | "PT";
 
 /**
  * UserRead
@@ -474,6 +464,16 @@ export type ValidationError = {
   type: string;
 };
 
+/**
+ * Body_auth-auth:google.session
+ */
+export type Session = {
+  /**
+   * Google Session Token
+   */
+  google_session_token: string;
+};
+
 export type AuthJwtLogoutData = {
   body?: never;
   path?: never;
@@ -529,6 +529,81 @@ export type AuthOtpVerifyErrors = {
 export type AuthOtpVerifyError = AuthOtpVerifyErrors[keyof AuthOtpVerifyErrors];
 
 export type AuthOtpVerifyResponses = {
+  /**
+   * Successful Response
+   */
+  200: unknown;
+};
+
+export type AuthGoogleAuthorizeData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/auth/google/authorize";
+};
+
+export type AuthGoogleAuthorizeResponses = {
+  /**
+   * Successful Response
+   */
+  200: unknown;
+};
+
+export type AuthGoogleCallbackData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Code
+     */
+    code?: string | null;
+    /**
+     * State
+     */
+    state?: string | null;
+    /**
+     * Error
+     */
+    error?: string | null;
+  };
+  url: "/api/v1/auth/google/callback";
+};
+
+export type AuthGoogleCallbackErrors = {
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type AuthGoogleCallbackError =
+  AuthGoogleCallbackErrors[keyof AuthGoogleCallbackErrors];
+
+export type AuthGoogleCallbackResponses = {
+  /**
+   * Successful Response
+   */
+  200: unknown;
+};
+
+export type AuthGoogleSessionData = {
+  body: Session;
+  path?: never;
+  query?: never;
+  url: "/api/v1/auth/google/session";
+};
+
+export type AuthGoogleSessionErrors = {
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type AuthGoogleSessionError =
+  AuthGoogleSessionErrors[keyof AuthGoogleSessionErrors];
+
+export type AuthGoogleSessionResponses = {
   /**
    * Successful Response
    */

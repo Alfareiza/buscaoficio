@@ -116,6 +116,7 @@ celerybeat.pid
 
 # Environments
 .env
+client_secret*.json
 .venv
 env/
 venv/
@@ -155,3 +156,7 @@ cython_debug/
 .idea/
 .DS_Store
 .cursorrules
+
+# Claude
+.claude/
+.agents/

@@ -50,7 +50,10 @@ describe("forwardAuthCookies", () => {
       "abc123",
       expect.objectContaining({
         httpOnly: true,
-        sameSite: "strict",
+        // lax, not strict — see AUTH_COOKIE_SAME_SITE in lib/auth-cookies.ts.
+        // Strict withholds these on Google Sign-In's cross-site-initiated
+        // redirect back into /dashboard, producing a login loop.
+        sameSite: "lax",
         path: "/",
         maxAge: 2592000,
       }),
@@ -102,7 +105,9 @@ describe("setAccessTokenCookie", () => {
       "the-token",
       expect.objectContaining({
         httpOnly: true,
-        sameSite: "strict",
+        // lax is load-bearing for the Google Sign-In return trip — see the
+        // forwardAuthCookies test above and AUTH_COOKIE_SAME_SITE.
+        sameSite: "lax",
         path: "/",
       }),
     );

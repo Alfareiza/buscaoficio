@@ -68,6 +68,7 @@ class User(SQLAlchemyBaseUserTableUUID, TimestampMixin, Base):
 
     nombre_completo = Column(String, nullable=False)
     whatsapp = Column(String, nullable=True)
+    google_sub = Column(String, unique=True, nullable=True)
 
     items = relationship("Item", back_populates="user", cascade="all, delete-orphan")
     cliente = relationship(

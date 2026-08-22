@@ -68,6 +68,37 @@ Design notes:
 - **Known gap:** there is currently no REST endpoint to add the *second* role to an account that already registered with one — `/api/v1/users/me/cliente` and `/api/v1/users/me/profesional` are GET/PATCH/DELETE only (there's no POST). An admin can still attach the second role via the FastAdmin panel (`/admin`). If self-service dual-role upgrade is needed, a `POST /api/v1/users/me/cliente` (or `/profesional`)-style endpoint would need to be added.
 - **Password-based login and registration were removed** (`/jwt/login`, `/register`, `/register/cliente`, `/register/profesional` — this was the frontend's only client, and nothing else called them; see git history around 2026-08-18 for the removal). `/forgot-password`/`/reset-password` and `/request-verify-token`/`/verify` still exist in the code but are now vestigial: there is no password-login route left to sign in with a reset password, and OTP-created accounts are already `is_verified=true` at creation, so nothing in the current flow ever produces an account these routes need to act on. See `nextjs-frontend`'s `/password-recovery` pages for the same "kept but unlinked" state on the frontend side.
 
+### 0b · Google Sign-In
+
+An alternative to email OTP for proving an email, using Google's OAuth 2.0 **authorization code flow** (server-side redirect — no Google JS ever runs in the browser, consistent with this app being server-mediated). It reaches the exact same fork as OTP verification (existing account → log in; new email → mandatory onboarding, including role selection) rather than being a separate parallel signup path — **role selection (cliente/profesional) and WhatsApp are still required after a Google signup**, Google only supplies a verified email and a name.
+
+```
+GET  /api/v1/auth/google/authorize   → 302 redirect to Google's consent screen
+GET  /api/v1/auth/google/callback    → Google redirects here with ?code&state; this route
+                                         never sets cookies itself — see note below — it always
+                                         redirects onward to the frontend:
+  · new email        → {FRONTEND_URL}/register?registration_token=...&provider=google&name=...
+  · existing account  → {FRONTEND_URL}/api/auth/google/complete?google_session_token=...
+  · any failure       → {FRONTEND_URL}/login?error=google_auth_failed
+POST /api/v1/auth/google/session     → {google_session_token} → logs in (access token +
+                                         refresh/fingerprint cookies), same shape as /otp/verify's
+                                         existing_user response
+```
+
+Design notes:
+- **Why a `google_session_token` round trip instead of setting cookies directly in the callback:** `/google/callback` is hit by the *browser itself* (a top-level navigation Google initiates), not by a Next.js Server Action. But every cookie in this app is set by the **Next.js server on its own origin** (`app.buscaoficio.co`) — see [Frontend: cookie forwarding & silent refresh](#frontend-cookie-forwarding--silent-refresh) — never by FastAPI directly on the browser. If the FastAPI callback set cookies on its own redirect response, they'd land on the wrong origin (`api.buscaoficio.co`) and nothing in the app reads cookies from there. So the callback instead issues a short-lived (2 min), single-purpose `google_session_token` and redirects to it.
+- **The session cookies are `SameSite=Lax`, not `Strict`, and that is load-bearing** (`lib/auth-cookies.ts`). Google returns the browser through a redirect chain that *starts* on `accounts.google.com`; browsers judge SameSite by the chain's initiator, so `Strict` cookies — even though set correctly by the Route Handler — are withheld from the final navigation to `/dashboard`. `proxy.ts` then sees no `accessToken` and redirects to `/login`, where the user clicks Google again: an endless login loop. This only affects the Google flow; the OTP flow is entirely same-site, which is why it never showed the symptom. `Lax` still withholds cookies from cross-site POSTs (the CSRF case that matters), and `/jwt/refresh` additionally requires the paired fingerprint cookie.
+- **Why a Route Handler, not a page** (`nextjs-frontend/app/api/auth/google/complete/route.ts`): the token exchange has to happen *before anything renders*, or the user sees a spinner/blank card flash between Google and the dashboard. A Route Handler runs entirely server-side — it POSTs the token to `/auth/google/session`, sets the session cookies on its own redirect response, and 307s straight to `/dashboard`. The browser's navigation is Google → backend callback → this handler → `/dashboard`, with exactly two document requests and no intermediate screen. A page would have to mount, run an effect, then navigate — which is precisely the visible in-between state this avoids.
+- **The "Continuar como {name}" card** on `/login`: after any Google login or Google-backed registration, a `lastGoogleIdentity` cookie (`lib/google-identity-cookie.ts`) stores the user's name, email and Google photo URL. `/login`'s Server Component reads it during render, so the card is in the first HTML — no client effect, no flash of the blank form. It's a **cookie rather than localStorage** for exactly that reason (a Server Component can't read localStorage), and it deliberately **outlives logout**: a returning user should see their own name whether their session expired or they signed out on purpose. It holds no credential — clicking the card still runs the full OAuth flow — and is never trusted server-side for authorization. Only the first name is shown, matching Google's own "Continue as X"; the full name would overflow the card.
+- **New emails reuse the OTP registration_token machinery.** `/google/callback` calls the same `OtpManager.issue_registration_token()` used by `/otp/verify`, just with two extra optional claims (`google_sub`, `nombre_completo`) threaded through. This means `POST /register/{cliente,profesional}/otp` needed no new routes — it already just needs a valid `registration_token`, and now persists `google_sub` onto the new `User` row if the token carries one.
+- **Account linking is by verified email**, matching how this app already treats email as the canonical identity. If a `usuarios` row already exists for the Google account's email (e.g. it was created via OTP), a Google login logs into that same account and backfills its `google_sub` column on first use — it does not create a second account.
+- **Google identity is a single column, not a separate table**: `usuarios.google_sub` (nullable, unique). Only Google is supported today; a second provider would justify moving to a proper multi-provider `oauth_accounts` table, but that's speculative for now.
+- The Google `id_token` (a signed JWT returned alongside the access token when the `openid` scope is requested) is verified against Google's published JWKS (`GoogleOAuthManager`, `app/google_oauth_manager.py`) rather than calling Google's People API — one HTTP round trip instead of two, and it's the standard OIDC pattern. An unverified email (`email_verified: false` in the token) is rejected outright.
+- The `state` parameter (CSRF protection between `/authorize` and `/callback`) is a signed, short-lived JWT rather than a server-side session lookup — this is a stateless API with no session store.
+- **Not implemented**: linking a *second* OAuth provider to an account, or self-service unlinking of `google_sub`.
+
+---
+
 ### 1 · Log in / refresh / log out
 
 ```
@@ -265,6 +296,9 @@ All routes live under the `/api/v1/auth` prefix and are defined in `fastapi_back
 | POST | `/api/v1/auth/otp/verify` | Anyone with a valid, unexpired code |
 | POST | `/api/v1/auth/register/cliente/otp` | Anyone with a valid `registration_token` |
 | POST | `/api/v1/auth/register/profesional/otp` | Anyone with a valid `registration_token` |
+| GET | `/api/v1/auth/google/authorize` | Anyone |
+| GET | `/api/v1/auth/google/callback` | Google (redirect target, never called directly) |
+| POST | `/api/v1/auth/google/session` | Anyone with a valid `google_session_token` |
 | POST | `/api/v1/auth/jwt/refresh` | Anyone with a valid refresh + fingerprint cookie pair |
 | POST | `/api/v1/auth/jwt/logout` | Authenticated user |
 | POST | `/api/v1/auth/forgot-password` | Anyone |
@@ -288,6 +322,10 @@ Interactive docs with a built-in "Authorize" button: **http://localhost:8001/doc
 | `REFRESH_TOKEN_EXPIRE_SECONDS` | Refresh token lifetime in seconds (default: 2592000 = 30 days) |
 | `OTP_CODE_EXPIRE_SECONDS` | Email OTP code lifetime in seconds (default: 600 = 10 minutes) |
 | `REGISTRATION_TOKEN_EXPIRE_SECONDS` | Registration token lifetime in seconds (default: 900 = 15 minutes) |
+| `BACKEND_URL` | Backend's own public base URL, used to build the Google OAuth `redirect_uri` (must exactly match what's registered in Google Cloud Console) |
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | Google Cloud Console OAuth 2.0 Web application credentials. Leave unset to disable Google Sign-In — `/auth/google/authorize` responds 501 |
+| `GOOGLE_OAUTH_STATE_EXPIRE_SECONDS` | CSRF state token lifetime in seconds (default: 600 = 10 minutes) |
+| `GOOGLE_SESSION_TOKEN_EXPIRE_SECONDS` | `google_session_token` lifetime in seconds (default: 120 = 2 minutes) — only needs to survive one immediate redirect into the Next.js Route Handler |
 
 Generate secrets locally with:
 

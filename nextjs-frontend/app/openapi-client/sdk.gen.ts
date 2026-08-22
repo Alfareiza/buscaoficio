@@ -10,6 +10,14 @@ import type {
   AuthOtpVerifyData,
   AuthOtpVerifyResponses,
   AuthOtpVerifyErrors,
+  AuthGoogleAuthorizeData,
+  AuthGoogleAuthorizeResponses,
+  AuthGoogleCallbackData,
+  AuthGoogleCallbackResponses,
+  AuthGoogleCallbackErrors,
+  AuthGoogleSessionData,
+  AuthGoogleSessionResponses,
+  AuthGoogleSessionErrors,
   AuthJwtRefreshData,
   AuthJwtRefreshResponses,
   RegisterRegisterClienteOtpData,
@@ -181,6 +189,89 @@ export const authOtpVerify = <ThrowOnError extends boolean = false>(
   >({
     responseType: "json",
     url: "/api/v1/auth/otp/verify",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+};
+
+/**
+ * Start Google Sign-In
+ * Redirect the browser to Google's consent screen.
+ *
+ * This is a real browser navigation (the "Continuar con Google" button is
+ * a plain link, not a fetch call) — the whole Authorization Code flow
+ * depends on the browser bouncing through Google, so it can't go through a
+ * Next.js Server Action the way every other auth call in this app does.
+ */
+export const authGoogleAuthorize = <ThrowOnError extends boolean = false>(
+  options?: Options<AuthGoogleAuthorizeData, ThrowOnError>,
+) => {
+  return (options?.client ?? client).get<
+    AuthGoogleAuthorizeResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: "json",
+    url: "/api/v1/auth/google/authorize",
+    ...options,
+  });
+};
+
+/**
+ * Google Sign-In callback
+ * Google redirects here after the user accepts/rejects consent.
+ *
+ * This route only ever redirects the browser onward — it never sets
+ * session cookies itself, since those must be set by the Next.js server on
+ * its own origin (see GoogleOAuthManager.issue_session_token's docstring).
+ * Existing users get a short-lived google_session_token to complete login
+ * via POST /auth/google/session; new emails get the same registration_token
+ * the OTP flow already uses, so /register/{cliente,profesional}/otp handles
+ * account creation identically regardless of how the email was proven.
+ */
+export const authGoogleCallback = <ThrowOnError extends boolean = false>(
+  options?: Options<AuthGoogleCallbackData, ThrowOnError>,
+) => {
+  return (options?.client ?? client).get<
+    AuthGoogleCallbackResponses,
+    AuthGoogleCallbackErrors,
+    ThrowOnError
+  >({
+    responseType: "json",
+    url: "/api/v1/auth/google/callback",
+    ...options,
+  });
+};
+
+/**
+ * Complete Google Sign-In (exchange session token for a session)
+ * Called by a Next.js Server Action, not directly by the browser.
+ *
+ * Exchanges the short-lived token from GET /auth/google/callback's
+ * redirect for a real session (access token + refresh/fingerprint
+ * cookies), via the same build_session_response used by OTP verify and
+ * OTP-backed registration — so cookie-setting logic still exists in
+ * exactly one place. The response also carries `nombre_completo`/`email`/
+ * `picture` (unlike OTP verify, which doesn't need to — the frontend
+ * already has the email from what the user typed there) so the frontend
+ * can cache them for the "Welcome back" card show after a future session
+ * expiry. `picture` is only ever included for a Google-established
+ * session — its presence in the response is the frontend's signal that
+ * this login was Google-backed.
+ */
+export const authGoogleSession = <ThrowOnError extends boolean = false>(
+  options: Options<AuthGoogleSessionData, ThrowOnError>,
+) => {
+  return (options.client ?? client).post<
+    AuthGoogleSessionResponses,
+    AuthGoogleSessionErrors,
+    ThrowOnError
+  >({
+    responseType: "json",
+    url: "/api/v1/auth/google/session",
     ...options,
     headers: {
       "Content-Type": "application/json",
