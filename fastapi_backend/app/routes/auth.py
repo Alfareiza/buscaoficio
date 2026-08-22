@@ -9,10 +9,11 @@ create a superuser.
 """
 
 import secrets
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi_users import exceptions
 from fastapi_users.authentication import Strategy
 from fastapi_users.router.common import ErrorCode
@@ -24,6 +25,7 @@ from sqlalchemy.future import select
 from app.config import logger, settings
 from app.database import get_async_session
 from app.email import send_otp_code_email
+from app.google_oauth_manager import GoogleOAuthError, GoogleOAuthManager
 from app.models import Cliente, Profesional, RefreshToken, User
 from app.otp_manager import OtpManager
 from app.refresh_token_manager import RefreshTokenManager, build_session_response
@@ -38,6 +40,36 @@ from app.users import UserManager, auth_backend, current_user_token, get_user_ma
 from app.utils import get_client_ip
 
 router = APIRouter(tags=["auth"])
+
+
+def _registration_session_extra(user: User, token_payload: dict) -> dict:
+    """Build the extra fields for a just-completed registration's session
+    response. `nombre_completo`/`email`/`picture` are only included when the
+    registration_token was Google-backed (carries `google_sub`) — same
+    "picture present ⇒ Google" signal /google/session uses, so the frontend
+    caches a "Welcome back" identity only for Google signups, not OTP ones."""
+    extra = {"status": "existing_user", "has_role": True}
+    if token_payload.get("google_sub") is not None:
+        extra["nombre_completo"] = user.nombre_completo
+        extra["email"] = user.email
+        extra["picture"] = token_payload.get("picture")
+    return extra
+
+
+async def _user_has_role(db: AsyncSession, user_id: UUID) -> bool:
+    """Whether `user_id` already has a cliente or profesional profile.
+    Shared by every route that logs an existing user in (OTP verify, Google
+    Sign-In) so the `has_role` computation exists in exactly one place."""
+    cliente_row = await db.execute(
+        select(Cliente.usuario_id).where(Cliente.usuario_id == user_id)
+    )
+    profesional_row = await db.execute(
+        select(Profesional.usuario_id).where(Profesional.usuario_id == user_id)
+    )
+    return (
+        cliente_row.scalar_one_or_none() is not None
+        or profesional_row.scalar_one_or_none() is not None
+    )
 
 
 @router.post("/jwt/logout", summary="Logout", name="auth:jwt.logout")
@@ -131,16 +163,7 @@ async def otp_verify(
             detail=ErrorCode.LOGIN_BAD_CREDENTIALS,
         )
 
-    cliente_row = await db.execute(
-        select(Cliente.usuario_id).where(Cliente.usuario_id == user.id)
-    )
-    profesional_row = await db.execute(
-        select(Profesional.usuario_id).where(Profesional.usuario_id == user.id)
-    )
-    has_role = (
-        cliente_row.scalar_one_or_none() is not None
-        or profesional_row.scalar_one_or_none() is not None
-    )
+    has_role = await _user_has_role(db, user.id)
     response = await build_session_response(
         user,
         strategy,
@@ -150,6 +173,182 @@ async def otp_verify(
     )
     await user_manager.on_after_login(user, request, response)
     logger.info(f"User {user.id} logged in via OTP from {get_client_ip(request)}")
+    return response
+
+
+@router.get(
+    "/google/authorize",
+    summary="Start Google Sign-In",
+    name="auth:google.authorize",
+)
+async def google_authorize() -> RedirectResponse:
+    """Redirect the browser to Google's consent screen.
+
+    This is a real browser navigation (the "Continuar con Google" button is
+    a plain link, not a fetch call) — the whole Authorization Code flow
+    depends on the browser bouncing through Google, so it can't go through a
+    Next.js Server Action the way every other auth call in this app does.
+    """
+    if not GoogleOAuthManager.is_configured():
+        logger.warning(
+            "Google Sign-In attempted but not configured "
+            "(missing GOOGLE_OAUTH_CLIENT_ID/GOOGLE_OAUTH_CLIENT_SECRET)"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Google Sign-In is not configured",
+        )
+    state = GoogleOAuthManager.issue_state()
+    url = await GoogleOAuthManager.get_authorization_url(state)
+    return RedirectResponse(url, status_code=status.HTTP_302_FOUND)
+
+
+@router.get(
+    "/google/callback",
+    summary="Google Sign-In callback",
+    name="auth:google.callback",
+)
+async def google_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    user_manager: UserManager = Depends(get_user_manager),
+    db: AsyncSession = Depends(get_async_session),
+) -> RedirectResponse:
+    """Google redirects here after the user accepts/rejects consent.
+
+    This route only ever redirects the browser onward — it never sets
+    session cookies itself, since those must be set by the Next.js server on
+    its own origin (see GoogleOAuthManager.issue_session_token's docstring).
+    Existing users get a short-lived google_session_token to complete login
+    via POST /auth/google/session; new emails get the same registration_token
+    the OTP flow already uses, so /register/{cliente,profesional}/otp handles
+    account creation identically regardless of how the email was proven.
+    """
+    login_url = f"{settings.FRONTEND_URL}/login"
+
+    if error is not None or code is None or state is None:
+        logger.warning(f"Google Sign-In cancelled or malformed callback: error={error}")
+        return RedirectResponse(f"{login_url}?error=google_auth_failed")
+
+    if not GoogleOAuthManager.is_configured() or not GoogleOAuthManager.verify_state(state):
+        logger.warning("Google Sign-In callback with invalid/expired state")
+        return RedirectResponse(f"{login_url}?error=google_auth_failed")
+
+    try:
+        profile = await GoogleOAuthManager.exchange_code_for_profile(code)
+    except GoogleOAuthError:
+        logger.warning("Google Sign-In code exchange failed")
+        return RedirectResponse(f"{login_url}?error=google_auth_failed")
+
+    if not profile.email_verified:
+        logger.warning("Google Sign-In rejected: unverified email")
+        return RedirectResponse(f"{login_url}?error=google_auth_failed")
+
+    user_result = await db.execute(select(User).where(User.google_sub == profile.sub))
+    user = user_result.scalar_one_or_none()
+
+    if user is None:
+        user = await user_manager.user_db.get_by_email(profile.email)
+        if user is not None and user.google_sub is None:
+            # Existing account (created via OTP) signing in with Google for
+            # the first time — link by verified email, matching how this
+            # app already treats email as the canonical identity.
+            user.google_sub = profile.sub
+            db.add(user)
+            await db.commit()
+            await db.refresh(user)
+
+    if user is None:
+        registration_token = OtpManager.issue_registration_token(
+            profile.email,
+            google_sub=profile.sub,
+            nombre_completo=profile.name,
+            picture=profile.picture,
+        )
+        register_url = f"{settings.FRONTEND_URL}/register"
+        params = f"registration_token={registration_token}&provider=google"
+        if profile.name:
+            params += f"&name={quote(profile.name)}"
+        return RedirectResponse(f"{register_url}?{params}")
+
+    if not user.is_active:
+        logger.warning(f"Google Sign-In rejected: user {user.id} is inactive")
+        return RedirectResponse(f"{login_url}?error=google_auth_failed")
+
+    session_token = GoogleOAuthManager.issue_session_token(user.id, picture=profile.picture)
+    logger.info(f"User {user.id} authenticated via Google from {get_client_ip(request)}")
+    # Hands off to a Next.js Route Handler (not a page) so the session is
+    # established server-side and the browser lands straight on /dashboard —
+    # no intermediate screen between Google's consent flow and the app.
+    complete_url = f"{settings.FRONTEND_URL}/api/auth/google/complete"
+    return RedirectResponse(f"{complete_url}?google_session_token={session_token}")
+
+
+@router.post(
+    "/google/session",
+    summary="Complete Google Sign-In (exchange session token for a session)",
+    name="auth:google.session",
+)
+async def google_session(
+    request: Request,
+    google_session_token: str = Body(..., embed=True),
+    user_manager: UserManager = Depends(get_user_manager),
+    strategy: Strategy[User, UUID] = Depends(auth_backend.get_strategy),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Called by a Next.js Server Action, not directly by the browser.
+
+    Exchanges the short-lived token from GET /auth/google/callback's
+    redirect for a real session (access token + refresh/fingerprint
+    cookies), via the same build_session_response used by OTP verify and
+    OTP-backed registration — so cookie-setting logic still exists in
+    exactly one place. The response also carries `nombre_completo`/`email`/
+    `picture` (unlike OTP verify, which doesn't need to — the frontend
+    already has the email from what the user typed there) so the frontend
+    can cache them for the "Welcome back" card show after a future session
+    expiry. `picture` is only ever included for a Google-established
+    session — its presence in the response is the frontend's signal that
+    this login was Google-backed.
+    """
+    payload = GoogleOAuthManager.verify_session_token(google_session_token)
+    if payload is None or "user_id" not in payload:
+        logger.warning(
+            "Google session exchange failed: invalid/expired google_session_token"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="google_session_token inválido o expirado",
+        )
+
+    user = await user_manager.get(UUID(payload["user_id"]))
+    if user is None or not user.is_active:
+        logger.warning(
+            f"Google session exchange failed: user {payload['user_id']} "
+            "not found or inactive"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=ErrorCode.LOGIN_BAD_CREDENTIALS,
+        )
+
+    has_role = await _user_has_role(db, user.id)
+    response = await build_session_response(
+        user,
+        strategy,
+        db,
+        request,
+        extra={
+            "status": "existing_user",
+            "has_role": has_role,
+            "nombre_completo": user.nombre_completo,
+            "email": user.email,
+            "picture": payload.get("picture"),
+        },
+    )
+    await user_manager.on_after_login(user, request, response)
+    logger.info(f"User {user.id} session established via Google from {get_client_ip(request)}")
     return response
 
 
@@ -264,14 +463,17 @@ async def refresh(
     return response
 
 
-def _resolve_registration_email(registration_token: str) -> str:
-    email = OtpManager.verify_registration_token(registration_token)
-    if email is None:
+def _resolve_registration_payload(registration_token: str) -> dict:
+    """Decode a registration_token issued by either POST /auth/otp/verify
+    (email only) or GET /auth/google/callback (email + google_sub +
+    optionally nombre_completo)."""
+    payload = OtpManager.verify_registration_token(registration_token)
+    if payload is None or "email" not in payload:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="registration_token inválido o expirado",
         )
-    return email
+    return payload
 
 
 @router.post(
@@ -294,7 +496,8 @@ async def register_cliente_otp(
     stored so the account still satisfies the underlying fastapi-users
     schema — it can never actually be used to log in.
     """
-    email = _resolve_registration_email(payload.registration_token)
+    token_payload = _resolve_registration_payload(payload.registration_token)
+    email = token_payload["email"]
 
     if await user_manager.user_db.get_by_email(email) is not None:
         logger.warning("Cliente OTP registration failed: user already exists")
@@ -318,7 +521,8 @@ async def register_cliente_otp(
         hashed_password=user_manager.password_helper.hash(secrets.token_urlsafe(32)),
         nombre_completo=payload.nombre_completo,
         whatsapp=payload.whatsapp,
-        is_verified=True,  # the OTP already proved mailbox ownership
+        is_verified=True,  # the OTP/Google verification already proved mailbox ownership
+        google_sub=token_payload.get("google_sub"),
     )
     try:
         db.add(user)
@@ -347,7 +551,11 @@ async def register_cliente_otp(
     logger.info(f"Cliente registered via OTP usuario_id={user.id}")
 
     response = await build_session_response(
-        user, strategy, db, request, extra={"status": "existing_user", "has_role": True}
+        user,
+        strategy,
+        db,
+        request,
+        extra=_registration_session_extra(user, token_payload),
     )
     await user_manager.on_after_login(user, request, response)
     return response
@@ -371,7 +579,8 @@ async def register_profesional_otp(
     set immediately). Starts as estado_verificacion=pendiente; verification
     review happens out of band.
     """
-    email = _resolve_registration_email(payload.registration_token)
+    token_payload = _resolve_registration_payload(payload.registration_token)
+    email = token_payload["email"]
 
     if await user_manager.user_db.get_by_email(email) is not None:
         logger.warning("Profesional OTP registration failed: user already exists")
@@ -397,6 +606,7 @@ async def register_profesional_otp(
         nombre_completo=payload.nombre_completo,
         whatsapp=payload.whatsapp,
         is_verified=True,
+        google_sub=token_payload.get("google_sub"),
     )
     try:
         db.add(user)
@@ -427,7 +637,11 @@ async def register_profesional_otp(
     logger.info(f"Profesional registered via OTP usuario_id={user.id}")
 
     response = await build_session_response(
-        user, strategy, db, request, extra={"status": "existing_user", "has_role": True}
+        user,
+        strategy,
+        db,
+        request,
+        extra=_registration_session_extra(user, token_payload),
     )
     await user_manager.on_after_login(user, request, response)
     return response

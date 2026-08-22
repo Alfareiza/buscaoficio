@@ -5,81 +5,13 @@
     "version": "0.1.0"
   },
   "paths": {
-    "/auth/jwt/login": {
+    "/api/v1/auth/jwt/logout": {
       "post": {
         "tags": [
           "auth"
         ],
-        "summary": "Auth:Jwt.Login",
-        "operationId": "auth:jwt.login",
-        "requestBody": {
-          "content": {
-            "application/x-www-form-urlencoded": {
-              "schema": {
-                "$ref": "#/components/schemas/login"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BearerResponse"
-                },
-                "example": {
-                  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiOTIyMWZmYzktNjQwZi00MzcyLTg2ZDMtY2U2NDJjYmE1NjAzIiwiYXVkIjoiZmFzdGFwaS11c2VyczphdXRoIiwiZXhwIjoxNTcxNTA0MTkzfQ.M10bjOe45I5Ncu_uXvOmVV8QxnL-nZfcH96U90JaocI",
-                  "token_type": "bearer"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
-                },
-                "examples": {
-                  "LOGIN_BAD_CREDENTIALS": {
-                    "summary": "Bad credentials or the user is inactive.",
-                    "value": {
-                      "detail": "LOGIN_BAD_CREDENTIALS"
-                    }
-                  },
-                  "LOGIN_USER_NOT_VERIFIED": {
-                    "summary": "The user is not verified.",
-                    "value": {
-                      "detail": "LOGIN_USER_NOT_VERIFIED"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/jwt/logout": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Auth:Jwt.Logout",
+        "summary": "Logout",
+        "description": "Invalidate all refresh tokens for the user.\n\nRevokes all active refresh tokens (forcing re-login on all devices).\nAlso clears the refresh and fingerprint cookies.",
         "operationId": "auth:jwt.logout",
         "responses": {
           "200": {
@@ -89,9 +21,6 @@
                 "schema": {}
               }
             }
-          },
-          "401": {
-            "description": "Missing token or inactive user."
           }
         },
         "security": [
@@ -101,58 +30,30 @@
         ]
       }
     },
-    "/auth/register": {
+    "/api/v1/auth/otp/request": {
       "post": {
         "tags": [
           "auth"
         ],
-        "summary": "Register:Register",
-        "operationId": "register:register",
+        "summary": "Request a passwordless login code",
+        "description": "Send a 6-digit code to `email`, valid for OTP_CODE_EXPIRE_SECONDS.\n\nWorks identically whether the email belongs to an existing user or not \u2014\naccount creation happens later, in POST /auth/register/{cliente,\nprofesional}/otp, after the code is verified. Always responds 202\nregardless of outcome (anti-enumeration, same pattern as\n/auth/forgot-password) \u2014 a resend within the cooldown window is silently\na no-op.",
+        "operationId": "auth:otp.request",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UserCreate"
+                "$ref": "#/components/schemas/OtpRequestIn"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "201": {
+          "202": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserRead"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
-                },
-                "examples": {
-                  "REGISTER_USER_ALREADY_EXISTS": {
-                    "summary": "A user with this email already exists.",
-                    "value": {
-                      "detail": "REGISTER_USER_ALREADY_EXISTS"
-                    }
-                  },
-                  "REGISTER_INVALID_PASSWORD": {
-                    "summary": "Password validation failed.",
-                    "value": {
-                      "detail": {
-                        "code": "REGISTER_INVALID_PASSWORD",
-                        "reason": "Password should beat least 3 characters"
-                      }
-                    }
-                  }
-                }
+                "schema": {}
               }
             }
           },
@@ -169,12 +70,293 @@
         }
       }
     },
-    "/auth/forgot-password": {
+    "/api/v1/auth/otp/verify": {
       "post": {
         "tags": [
           "auth"
         ],
-        "summary": "Reset:Forgot Password",
+        "summary": "Verify a passwordless login code",
+        "description": "Verify a code requested via POST /auth/otp/request.\n\nIf `email` already has an account, logs it in (access token +\nrefresh/fingerprint cookies, via build_session_response). Otherwise\nreturns a short-lived registration_token proving the email was verified,\nto be used with POST /auth/register/cliente/otp or POST\n/auth/register/profesional/otp.",
+        "operationId": "auth:otp.verify",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OtpVerifyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/google/authorize": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Start Google Sign-In",
+        "description": "Redirect the browser to Google's consent screen.\n\nThis is a real browser navigation (the \"Continuar con Google\" button is\na plain link, not a fetch call) \u2014 the whole Authorization Code flow\ndepends on the browser bouncing through Google, so it can't go through a\nNext.js Server Action the way every other auth call in this app does.",
+        "operationId": "auth:google.authorize",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/google/callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Google Sign-In callback",
+        "description": "Google redirects here after the user accepts/rejects consent.\n\nThis route only ever redirects the browser onward \u2014 it never sets\nsession cookies itself, since those must be set by the Next.js server on\nits own origin (see GoogleOAuthManager.issue_session_token's docstring).\nExisting users get a short-lived google_session_token to complete login\nvia POST /auth/google/session; new emails get the same registration_token\nthe OTP flow already uses, so /register/{cliente,profesional}/otp handles\naccount creation identically regardless of how the email was proven.",
+        "operationId": "auth:google.callback",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/google/session": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Complete Google Sign-In (exchange session token for a session)",
+        "description": "Called by a Next.js Server Action, not directly by the browser.\n\nExchanges the short-lived token from GET /auth/google/callback's\nredirect for a real session (access token + refresh/fingerprint\ncookies), via the same build_session_response used by OTP verify and\nOTP-backed registration \u2014 so cookie-setting logic still exists in\nexactly one place. The response also carries `nombre_completo`/`email`/\n`picture` (unlike OTP verify, which doesn't need to \u2014 the frontend\nalready has the email from what the user typed there) so the frontend\ncan cache them for the \"Welcome back\" card show after a future session\nexpiry. `picture` is only ever included for a Google-established\nsession \u2014 its presence in the response is the frontend's signal that\nthis login was Google-backed.",
+        "operationId": "auth:google.session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/session"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/jwt/refresh": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Refresh Access Token",
+        "description": "Rotate refresh token and issue new access token.\n\nValidates the refresh token + fingerprint cookie, then:\n1. Revokes the old refresh token\n2. Issues a new access token\n3. Sets new refresh + fingerprint tokens as cookies\n\nIf an old token is reused (possible theft), revokes all user sessions.\n\nReturns:\n    JSON response with new access_token, token_type, and expires_in.\n\nRaises:\n    401: If refresh token is invalid, expired, or fingerprint mismatch.",
+        "operationId": "auth:jwt.refresh",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register/cliente/otp": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Complete passwordless registration as cliente",
+        "description": "Create a usuario + cliente profile from an OTP-verified email, then\nlog the new user in.\n\nProof of email ownership is the registration_token from POST\n/auth/otp/verify, not a password. A random, never-disclosed password is\nstored so the account still satisfies the underlying fastapi-users\nschema \u2014 it can never actually be used to log in.",
+        "operationId": "register:register_cliente_otp",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClienteRegisterOtpCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register/profesional/otp": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Complete passwordless registration as profesional",
+        "description": "Create a usuario + profesional profile from an OTP-verified email,\nthen log the new user in. See register_cliente_otp for the general\npasswordless-registration pattern (random unusable password, is_verified\nset immediately). Starts as estado_verificacion=pendiente; verification\nreview happens out of band.",
+        "operationId": "register:register_profesional_otp",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfesionalRegisterOtpCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/forgot-password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Start reset (sends email)",
+        "description": "Start reset and send email.\n\nComplete with POST /auth/reset-password. Note: there is no password-based\nsign-in route anymore (see docs/auth.md) \u2014 these routes are unlinked in\nthe frontend and kept only for password-based accounts, if any exist.",
         "operationId": "reset:forgot_password",
         "requestBody": {
           "content": {
@@ -208,12 +390,13 @@
         }
       }
     },
-    "/auth/reset-password": {
+    "/api/v1/auth/reset-password": {
       "post": {
         "tags": [
           "auth"
         ],
-        "summary": "Reset:Reset Password",
+        "summary": "Complete reset with token",
+        "description": "Complete reset with the emailed token.\n\nStart with POST /auth/forgot-password.",
         "operationId": "reset:reset_password",
         "requestBody": {
           "content": {
@@ -234,33 +417,6 @@
               }
             }
           },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
-                },
-                "examples": {
-                  "RESET_PASSWORD_BAD_TOKEN": {
-                    "summary": "Bad or expired token.",
-                    "value": {
-                      "detail": "RESET_PASSWORD_BAD_TOKEN"
-                    }
-                  },
-                  "RESET_PASSWORD_INVALID_PASSWORD": {
-                    "summary": "Password validation failed.",
-                    "value": {
-                      "detail": {
-                        "code": "RESET_PASSWORD_INVALID_PASSWORD",
-                        "reason": "Password should be at least 3 characters"
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -274,12 +430,13 @@
         }
       }
     },
-    "/auth/request-verify-token": {
+    "/api/v1/auth/request-verify-token": {
       "post": {
         "tags": [
           "auth"
         ],
-        "summary": "Verify:Request-Token",
+        "summary": "Request verification email",
+        "description": "Request verification email.\n\nThen POST /auth/verify.",
         "operationId": "verify:request-token",
         "requestBody": {
           "content": {
@@ -313,12 +470,13 @@
         }
       }
     },
-    "/auth/verify": {
+    "/api/v1/auth/verify": {
       "post": {
         "tags": [
           "auth"
         ],
-        "summary": "Verify:Verify",
+        "summary": "Verify email with token",
+        "description": "Verify email with token.\n\nRequest it with POST /auth/request-verify-token.",
         "operationId": "verify:verify",
         "requestBody": {
           "content": {
@@ -341,30 +499,6 @@
               }
             }
           },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
-                },
-                "examples": {
-                  "VERIFY_USER_BAD_TOKEN": {
-                    "summary": "Bad token, not existing user ornot the e-mail currently set for the user.",
-                    "value": {
-                      "detail": "VERIFY_USER_BAD_TOKEN"
-                    }
-                  },
-                  "VERIFY_USER_ALREADY_VERIFIED": {
-                    "summary": "The user is already verified.",
-                    "value": {
-                      "detail": "VERIFY_USER_ALREADY_VERIFIED"
-                    }
-                  }
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -378,12 +512,13 @@
         }
       }
     },
-    "/users/me": {
+    "/api/v1/users/me": {
       "get": {
         "tags": [
           "users"
         ],
-        "summary": "Users:Current User",
+        "summary": "Current authenticated user",
+        "description": "Return the current authenticated user.\n\nRequires POST /auth/jwt/login.",
         "operationId": "users:current_user",
         "responses": {
           "200": {
@@ -395,9 +530,6 @@
                 }
               }
             }
-          },
-          "401": {
-            "description": "Missing token or inactive user."
           }
         },
         "security": [
@@ -410,7 +542,8 @@
         "tags": [
           "users"
         ],
-        "summary": "Users:Patch Current User",
+        "summary": "Update current user",
+        "description": "Update the current authenticated user.\n\nRequires POST /auth/jwt/login. Superusers can PATCH /users/{id}\ninstead.",
         "operationId": "users:patch_current_user",
         "requestBody": {
           "content": {
@@ -433,36 +566,6 @@
               }
             }
           },
-          "401": {
-            "description": "Missing token or inactive user."
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
-                },
-                "examples": {
-                  "UPDATE_USER_EMAIL_ALREADY_EXISTS": {
-                    "summary": "A user with this email already exists.",
-                    "value": {
-                      "detail": "UPDATE_USER_EMAIL_ALREADY_EXISTS"
-                    }
-                  },
-                  "UPDATE_USER_INVALID_PASSWORD": {
-                    "summary": "Password validation failed.",
-                    "value": {
-                      "detail": {
-                        "code": "UPDATE_USER_INVALID_PASSWORD",
-                        "reason": "Password should beat least 3 characters"
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -481,12 +584,13 @@
         ]
       }
     },
-    "/users/{id}": {
+    "/api/v1/users/{id}": {
       "get": {
         "tags": [
           "users"
         ],
-        "summary": "Users:User",
+        "summary": "Get user by id (superuser)",
+        "description": "Get user by id.\n\nSuperuser only after POST /auth/jwt/login. Use GET /users/me for\nthe current user.",
         "operationId": "users:user",
         "security": [
           {
@@ -515,15 +619,6 @@
               }
             }
           },
-          "401": {
-            "description": "Missing token or inactive user."
-          },
-          "403": {
-            "description": "Not a superuser."
-          },
-          "404": {
-            "description": "The user does not exist."
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -540,7 +635,8 @@
         "tags": [
           "users"
         ],
-        "summary": "Users:Patch User",
+        "summary": "Update user by id (superuser)",
+        "description": "Update user by id.\n\nSuperuser only after POST /auth/jwt/login. Use PATCH /users/me for\nthe current user.",
         "operationId": "users:patch_user",
         "security": [
           {
@@ -579,42 +675,6 @@
               }
             }
           },
-          "401": {
-            "description": "Missing token or inactive user."
-          },
-          "403": {
-            "description": "Not a superuser."
-          },
-          "404": {
-            "description": "The user does not exist."
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "examples": {
-                  "UPDATE_USER_EMAIL_ALREADY_EXISTS": {
-                    "summary": "A user with this email already exists.",
-                    "value": {
-                      "detail": "UPDATE_USER_EMAIL_ALREADY_EXISTS"
-                    }
-                  },
-                  "UPDATE_USER_INVALID_PASSWORD": {
-                    "summary": "Password validation failed.",
-                    "value": {
-                      "detail": {
-                        "code": "UPDATE_USER_INVALID_PASSWORD",
-                        "reason": "Password should beat least 3 characters"
-                      }
-                    }
-                  }
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -631,7 +691,8 @@
         "tags": [
           "users"
         ],
-        "summary": "Users:Delete User",
+        "summary": "Delete user by id (superuser)",
+        "description": "Delete user by id.\n\nSuperuser only after POST /auth/jwt/login. This also removes that\nuser's items.",
         "operationId": "users:delete_user",
         "security": [
           {
@@ -653,14 +714,244 @@
           "204": {
             "description": "Successful Response"
           },
-          "401": {
-            "description": "Missing token or inactive user."
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/me/cliente": {
+      "get": {
+        "tags": [
+          "users",
+          "clientes"
+        ],
+        "summary": "Get current user's cliente profile",
+        "description": "Get the current user's cliente profile.\n\nRequires POST /auth/jwt/login.",
+        "operationId": "clientes:read_me",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteRead"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "users",
+          "clientes"
+        ],
+        "summary": "Delete current user's cliente profile",
+        "description": "Delete the current user's cliente profile.\n\nRequires POST /auth/jwt/login.",
+        "operationId": "clientes:delete_me",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "users",
+          "clientes"
+        ],
+        "summary": "Update current user's cliente profile",
+        "description": "Update the current user's cliente profile.\n\nRequires POST /auth/jwt/login.",
+        "operationId": "clientes:update_me",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClienteUpdate"
+              }
+            }
           },
-          "403": {
-            "description": "Not a superuser."
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteRead"
+                }
+              }
+            }
           },
-          "404": {
-            "description": "The user does not exist."
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/users/{id}/cliente": {
+      "get": {
+        "tags": [
+          "users",
+          "clientes"
+        ],
+        "summary": "Get cliente profile by user id (superuser)",
+        "description": "Get a cliente profile by user id.\n\nSuperuser only after POST /auth/jwt/login. Use GET /users/me/cliente\nfor the current user.",
+        "operationId": "clientes:read",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "users",
+          "clientes"
+        ],
+        "summary": "Update cliente profile by user id (superuser)",
+        "description": "Update a cliente profile by user id.\n\nSuperuser only after POST /auth/jwt/login. Use PATCH /users/me/cliente\nfor the current user.",
+        "operationId": "clientes:update",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClienteAdminUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "users",
+          "clientes"
+        ],
+        "summary": "Delete cliente profile by user id (superuser)",
+        "description": "Delete a cliente profile by user id.\n\nSuperuser only after POST /auth/jwt/login.",
+        "operationId": "clientes:delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -675,12 +966,252 @@
         }
       }
     },
-    "/items/": {
+    "/api/v1/users/me/profesional": {
+      "get": {
+        "tags": [
+          "users",
+          "profesionales"
+        ],
+        "summary": "Get current user's profesional profile",
+        "description": "Get the current user's profesional profile.\n\nRequires POST /auth/jwt/login.",
+        "operationId": "profesionales:read_me",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfesionalRead"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "users",
+          "profesionales"
+        ],
+        "summary": "Delete current user's profesional profile",
+        "description": "Delete the current user's profesional profile.\n\nRequires POST /auth/jwt/login.",
+        "operationId": "profesionales:delete_me",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "users",
+          "profesionales"
+        ],
+        "summary": "Update current user's profesional profile",
+        "description": "Update the current user's profesional profile.\n\nRequires POST /auth/jwt/login. Only self-editable fields\n(anos_experiencia, foto_perfil_url) - verification/contract fields are\nsuperuser-only via PATCH /users/{id}/profesional.",
+        "operationId": "profesionales:update_me",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfesionalUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfesionalRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/users/{id}/profesional": {
+      "get": {
+        "tags": [
+          "users",
+          "profesionales"
+        ],
+        "summary": "Get profesional profile by user id (superuser)",
+        "description": "Get a profesional profile by user id.\n\nSuperuser only after POST /auth/jwt/login. Use GET\n/users/me/profesional for the current user.",
+        "operationId": "profesionales:read",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfesionalRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "users",
+          "profesionales"
+        ],
+        "summary": "Update profesional profile by user id (superuser)",
+        "description": "Update a profesional profile by user id, including verification and\ncontract fields.\n\nSuperuser only after POST /auth/jwt/login. Use PATCH\n/users/me/profesional for self-editable fields only.",
+        "operationId": "profesionales:update",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfesionalAdminUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfesionalRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "users",
+          "profesionales"
+        ],
+        "summary": "Delete profesional profile by user id (superuser)",
+        "description": "Delete a profesional profile by user id.\n\nSuperuser only after POST /auth/jwt/login.",
+        "operationId": "profesionales:delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/items/": {
       "get": {
         "tags": [
           "item"
         ],
-        "summary": "Read Item",
+        "summary": "Paginated list (authenticated)",
+        "description": "Return a paginated list of the current user's items.\n\nRequires POST /auth/jwt/login.",
         "operationId": "read_item",
         "security": [
           {
@@ -743,7 +1274,8 @@
         "tags": [
           "item"
         ],
-        "summary": "Create Item",
+        "summary": "Create item for current user",
+        "description": "Create an item for the current user.\n\nRequires POST /auth/jwt/login.",
         "operationId": "create_item",
         "security": [
           {
@@ -784,12 +1316,13 @@
         }
       }
     },
-    "/items/{item_id}": {
+    "/api/v1/items/{item_id}": {
       "delete": {
         "tags": [
           "item"
         ],
-        "summary": "Delete Item",
+        "summary": "Delete own item",
+        "description": "Delete the current user's item by id.\n\nRequires POST /auth/jwt/login. Returns 404 if missing or not owned.",
         "operationId": "delete_item",
         "security": [
           {
@@ -833,24 +1366,6 @@
   },
   "components": {
     "schemas": {
-      "BearerResponse": {
-        "properties": {
-          "access_token": {
-            "type": "string",
-            "title": "Access Token"
-          },
-          "token_type": {
-            "type": "string",
-            "title": "Token Type"
-          }
-        },
-        "type": "object",
-        "required": [
-          "access_token",
-          "token_type"
-        ],
-        "title": "BearerResponse"
-      },
       "Body_auth-reset_forgot_password": {
         "properties": {
           "email": {
@@ -910,28 +1425,167 @@
         ],
         "title": "Body_auth-verify:verify"
       },
-      "ErrorModel": {
+      "ClienteAdminUpdate": {
         "properties": {
-          "detail": {
+          "direccion_default": {
             "anyOf": [
               {
                 "type": "string"
               },
               {
-                "additionalProperties": {
-                  "type": "string"
-                },
-                "type": "object"
+                "type": "null"
               }
             ],
-            "title": "Detail"
+            "title": "Direccion Default"
+          },
+          "repeat_customer": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repeat Customer"
+          }
+        },
+        "type": "object",
+        "title": "ClienteAdminUpdate"
+      },
+      "ClienteRead": {
+        "properties": {
+          "direccion_default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direccion Default"
+          },
+          "referido_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referido Por Id"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "repeat_customer": {
+            "type": "boolean",
+            "title": "Repeat Customer"
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Creado En"
+          },
+          "actualizado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Actualizado En"
           }
         },
         "type": "object",
         "required": [
-          "detail"
+          "usuario_id",
+          "repeat_customer",
+          "creado_en",
+          "actualizado_en"
         ],
-        "title": "ErrorModel"
+        "title": "ClienteRead"
+      },
+      "ClienteRegisterOtpCreate": {
+        "properties": {
+          "direccion_default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direccion Default"
+          },
+          "referido_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referido Por Id"
+          },
+          "registration_token": {
+            "type": "string",
+            "title": "Registration Token"
+          },
+          "nombre_completo": {
+            "type": "string",
+            "title": "Nombre Completo"
+          },
+          "whatsapp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Whatsapp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "registration_token",
+          "nombre_completo"
+        ],
+        "title": "ClienteRegisterOtpCreate",
+        "description": "Payload for passwordless cliente registration \u2014 no password; email\nownership is proven by a short-lived registration_token from\n/auth/otp/verify instead."
+      },
+      "ClienteUpdate": {
+        "properties": {
+          "direccion_default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direccion Default"
+          }
+        },
+        "type": "object",
+        "title": "ClienteUpdate"
+      },
+      "EstadoVerificacionProfesional": {
+        "type": "string",
+        "enum": [
+          "pendiente",
+          "verificado",
+          "revisar_manual",
+          "rechazado"
+        ],
+        "title": "EstadoVerificacionProfesional"
       },
       "HTTPValidationError": {
         "properties": {
@@ -1028,6 +1682,39 @@
         ],
         "title": "ItemRead"
       },
+      "OtpRequestIn": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "OtpRequestIn"
+      },
+      "OtpVerifyIn": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "code"
+        ],
+        "title": "OtpVerifyIn"
+      },
       "Page_ItemRead_": {
         "properties": {
           "items": {
@@ -1094,60 +1781,287 @@
         ],
         "title": "Page[ItemRead]"
       },
-      "UserCreate": {
+      "ProfesionalAdminUpdate": {
         "properties": {
-          "email": {
+          "anos_experiencia": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anos Experiencia"
+          },
+          "foto_perfil_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Foto Perfil Url"
+          },
+          "estado_verificacion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EstadoVerificacionProfesional"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "score_calificacion": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Calificacion"
+          },
+          "whatsapp_verificado": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Whatsapp Verificado"
+          },
+          "contrato_aceptado": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contrato Aceptado"
+          },
+          "trabajos_gratis_restantes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trabajos Gratis Restantes"
+          }
+        },
+        "type": "object",
+        "title": "ProfesionalAdminUpdate"
+      },
+      "ProfesionalRead": {
+        "properties": {
+          "documento_tipo": {
+            "$ref": "#/components/schemas/TipoDocumento"
+          },
+          "documento_numero": {
             "type": "string",
-            "format": "email",
-            "title": "Email"
+            "title": "Documento Numero"
           },
-          "password": {
+          "anos_experiencia": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anos Experiencia"
+          },
+          "foto_perfil_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Foto Perfil Url"
+          },
+          "usuario_id": {
             "type": "string",
-            "title": "Password"
+            "format": "uuid",
+            "title": "Usuario Id"
           },
-          "is_active": {
+          "estado_verificacion": {
+            "$ref": "#/components/schemas/EstadoVerificacionProfesional"
+          },
+          "score_calificacion": {
             "anyOf": [
               {
-                "type": "boolean"
+                "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Is Active",
-            "default": true
+            "title": "Score Calificacion"
           },
-          "is_superuser": {
+          "whatsapp_verificado": {
+            "type": "boolean",
+            "title": "Whatsapp Verificado"
+          },
+          "contrato_aceptado": {
+            "type": "boolean",
+            "title": "Contrato Aceptado"
+          },
+          "contrato_aceptado_en": {
             "anyOf": [
               {
-                "type": "boolean"
+                "type": "string",
+                "format": "date-time"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Is Superuser",
-            "default": false
+            "title": "Contrato Aceptado En"
           },
-          "is_verified": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Verified",
-            "default": false
+          "trabajos_gratis_restantes": {
+            "type": "integer",
+            "title": "Trabajos Gratis Restantes"
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Creado En"
+          },
+          "actualizado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Actualizado En"
           }
         },
         "type": "object",
         "required": [
-          "email",
-          "password"
+          "documento_tipo",
+          "documento_numero",
+          "usuario_id",
+          "estado_verificacion",
+          "whatsapp_verificado",
+          "contrato_aceptado",
+          "trabajos_gratis_restantes",
+          "creado_en",
+          "actualizado_en"
         ],
-        "title": "UserCreate"
+        "title": "ProfesionalRead"
+      },
+      "ProfesionalRegisterOtpCreate": {
+        "properties": {
+          "documento_tipo": {
+            "$ref": "#/components/schemas/TipoDocumento"
+          },
+          "documento_numero": {
+            "type": "string",
+            "title": "Documento Numero"
+          },
+          "anos_experiencia": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anos Experiencia"
+          },
+          "foto_perfil_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Foto Perfil Url"
+          },
+          "registration_token": {
+            "type": "string",
+            "title": "Registration Token"
+          },
+          "nombre_completo": {
+            "type": "string",
+            "title": "Nombre Completo"
+          },
+          "whatsapp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Whatsapp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "documento_tipo",
+          "documento_numero",
+          "registration_token",
+          "nombre_completo"
+        ],
+        "title": "ProfesionalRegisterOtpCreate",
+        "description": "Payload for passwordless profesional registration. See\nClienteRegisterOtpCreate for the general pattern."
+      },
+      "ProfesionalUpdate": {
+        "properties": {
+          "anos_experiencia": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anos Experiencia"
+          },
+          "foto_perfil_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Foto Perfil Url"
+          }
+        },
+        "type": "object",
+        "title": "ProfesionalUpdate"
+      },
+      "TipoDocumento": {
+        "type": "string",
+        "enum": [
+          "CC",
+          "CE",
+          "PA",
+          "PE",
+          "PT"
+        ],
+        "title": "TipoDocumento",
+        "description": "Each member carries a human-readable Spanish label alongside its code\n(e.g. TipoDocumento.CC.label == \"C\u00e9dula de Ciudadan\u00eda\"), used to render\nadmin dropdown options \u2014 the codes alone aren't self-explanatory."
       },
       "UserRead": {
         "properties": {
@@ -1175,12 +2089,28 @@
             "type": "boolean",
             "title": "Is Verified",
             "default": false
+          },
+          "nombre_completo": {
+            "type": "string",
+            "title": "Nombre Completo"
+          },
+          "whatsapp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Whatsapp"
           }
         },
         "type": "object",
         "required": [
           "id",
-          "email"
+          "email",
+          "nombre_completo"
         ],
         "title": "UserRead"
       },
@@ -1241,6 +2171,28 @@
               }
             ],
             "title": "Is Verified"
+          },
+          "nombre_completo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nombre Completo"
+          },
+          "whatsapp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Whatsapp"
           }
         },
         "type": "object",
@@ -1279,62 +2231,18 @@
         ],
         "title": "ValidationError"
       },
-      "login": {
+      "session": {
         "properties": {
-          "grant_type": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "password"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Grant Type"
-          },
-          "username": {
+          "google_session_token": {
             "type": "string",
-            "title": "Username"
-          },
-          "password": {
-            "type": "string",
-            "title": "Password"
-          },
-          "scope": {
-            "type": "string",
-            "title": "Scope",
-            "default": ""
-          },
-          "client_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Client Id"
-          },
-          "client_secret": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Client Secret"
+            "title": "Google Session Token"
           }
         },
         "type": "object",
         "required": [
-          "username",
-          "password"
+          "google_session_token"
         ],
-        "title": "Body_auth-auth:jwt.login"
+        "title": "Body_auth-auth:google.session"
       }
     },
     "securitySchemes": {
@@ -1343,7 +2251,7 @@
         "flows": {
           "password": {
             "scopes": {},
-            "tokenUrl": "auth/jwt/login"
+            "tokenUrl": "api/v1/auth/jwt/login"
           }
         }
       }

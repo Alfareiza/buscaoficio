@@ -97,26 +97,44 @@ class OtpManager:
         return True
 
     @classmethod
-    def issue_registration_token(cls, email: str) -> str:
-        """Sign a short-lived token proving `email` passed OTP verification,
-        without creating a usuario row — so an abandoned onboarding never
-        leaves a ghost account behind."""
+    def issue_registration_token(
+        cls,
+        email: str,
+        google_sub: Optional[str] = None,
+        nombre_completo: Optional[str] = None,
+        picture: Optional[str] = None,
+    ) -> str:
+        """Sign a short-lived token proving `email` passed verification
+        (OTP or Google), without creating a usuario row — so an abandoned
+        onboarding never leaves a ghost account behind. `google_sub` /
+        `nombre_completo` / `picture` are only set for the Google Sign-In
+        flow (see GoogleOAuthManager), letting the OTP-shaped
+        /register/*/otp routes attach the Google identity, prefill the
+        name, and hand `picture` back in the response for the frontend's
+        "Welcome back" card — without a second signed-token scheme."""
+        payload = {"email": email, "aud": REGISTRATION_TOKEN_AUDIENCE}
+        if google_sub is not None:
+            payload["google_sub"] = google_sub
+        if nombre_completo is not None:
+            payload["nombre_completo"] = nombre_completo
+        if picture is not None:
+            payload["picture"] = picture
         return generate_jwt(
-            {"email": email, "aud": REGISTRATION_TOKEN_AUDIENCE},
+            payload,
             settings.REGISTRATION_TOKEN_SECRET_KEY,
             settings.REGISTRATION_TOKEN_EXPIRE_SECONDS,
         )
 
     @classmethod
-    def verify_registration_token(cls, token: str) -> Optional[str]:
-        """Decode a registration token and return its email claim, or None
-        if the token is invalid, expired, or wrong-audience."""
+    def verify_registration_token(cls, token: str) -> Optional[dict]:
+        """Decode a registration token and return its full claim set
+        (`email`, and optionally `google_sub`/`nombre_completo`), or None if
+        the token is invalid, expired, or wrong-audience."""
         try:
-            payload = decode_jwt(
+            return decode_jwt(
                 token,
                 settings.REGISTRATION_TOKEN_SECRET_KEY,
                 [REGISTRATION_TOKEN_AUDIENCE],
             )
         except PyJWTError:
             return None
-        return payload.get("email")

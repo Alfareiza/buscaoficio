@@ -20,6 +20,8 @@ jest.mock("../components/actions/otp-auth-action", () => ({
   registerProfesionalOtpAction: jest.fn(),
 }));
 
+const GOOGLE_AUTHORIZE_URL = "http://localhost:8001/api/v1/auth/google/authorize";
+
 const push = jest.fn();
 const refresh = jest.fn();
 
@@ -41,7 +43,7 @@ afterEach(() => {
 
 async function goToOtpStep(email = "test@example.com") {
   (requestOtpAction as jest.Mock).mockResolvedValue({ ok: true, data: null });
-  render(<AuthCard mode="page" />);
+  render(<AuthCard mode="page" googleAuthorizeUrl={GOOGLE_AUTHORIZE_URL} />);
 
   fireEvent.change(screen.getByPlaceholderText("correo@ejemplo.com"), {
     target: { value: email },
@@ -86,7 +88,7 @@ describe("AuthCard", () => {
       error: "No pudimos enviar el código. Intenta de nuevo.",
     });
 
-    render(<AuthCard mode="page" />);
+    render(<AuthCard mode="page" googleAuthorizeUrl={GOOGLE_AUTHORIZE_URL} />);
 
     fireEvent.change(screen.getByPlaceholderText("correo@ejemplo.com"), {
       target: { value: "test@example.com" },
@@ -121,7 +123,11 @@ describe("AuthCard", () => {
   it("calls onSuccess instead of navigating when rendered in modal mode", async () => {
     const onSuccess = jest.fn();
     (requestOtpAction as jest.Mock).mockResolvedValue({ ok: true, data: null });
-    render(<AuthCard mode="modal" onSuccess={onSuccess} />);
+    render(<AuthCard
+        mode="modal"
+        googleAuthorizeUrl={GOOGLE_AUTHORIZE_URL}
+        onSuccess={onSuccess}
+      />);
 
     fireEvent.change(screen.getByPlaceholderText("correo@ejemplo.com"), {
       target: { value: "test@example.com" },
@@ -406,7 +412,7 @@ describe("AuthCard", () => {
   });
 
   it("shows the legal notice and a Registrarme link to /register by default (login intent)", () => {
-    render(<AuthCard mode="page" />);
+    render(<AuthCard mode="page" googleAuthorizeUrl={GOOGLE_AUTHORIZE_URL} />);
 
     expect(
       screen.getByText(/Al continuar, aceptas nuestros Términos/i),
@@ -418,7 +424,11 @@ describe("AuthCard", () => {
   });
 
   it("shows the register subtitle and an Iniciar Sesión link to /login for register intent", () => {
-    render(<AuthCard mode="page" intent="register" />);
+    render(<AuthCard
+      mode="page"
+      intent="register"
+      googleAuthorizeUrl={GOOGLE_AUTHORIZE_URL}
+    />);
 
     expect(
       screen.getByText("Crea una cuenta y descubre lo que puedes encontrar"),
@@ -427,5 +437,125 @@ describe("AuthCard", () => {
     const link = screen.getByRole("link", { name: "Iniciar Sesión" });
     expect(link).toHaveAttribute("href", "/login");
     expect(screen.getByText("Ya tengo una cuenta.")).toBeInTheDocument();
+  });
+});
+
+describe("Google Sign-In", () => {
+  it("renders the Continuar con Google button as a real link to googleAuthorizeUrl", () => {
+    render(<AuthCard mode="page" googleAuthorizeUrl={GOOGLE_AUTHORIZE_URL} />);
+
+    const link = screen.getByRole("link", { name: /Continuar con Google/i });
+    expect(link).toHaveAttribute("href", GOOGLE_AUTHORIZE_URL);
+  });
+
+  it("prefills the name and skips to onboarding-name when landing with a registration_token from Google", () => {
+    render(
+      <AuthCard
+        mode="page"
+        intent="register"
+        googleAuthorizeUrl={GOOGLE_AUTHORIZE_URL}
+        initialRegistrationToken="reg-token-abc"
+        initialName="Nueva Persona"
+      />,
+    );
+
+    expect(screen.getByText("Cuéntanos sobre ti")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Nueva Persona")).toBeInTheDocument();
+  });
+
+  it("surfaces a google_auth_failed error passed down from the page", () => {
+    render(
+      <AuthCard
+        mode="page"
+        googleAuthorizeUrl={GOOGLE_AUTHORIZE_URL}
+        initialError="No pudimos iniciar sesión con Google. Intenta de nuevo."
+      />,
+    );
+
+    expect(
+      screen.getByText("No pudimos iniciar sesión con Google. Intenta de nuevo."),
+    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("correo@ejemplo.com")).toBeInTheDocument();
+  });
+});
+
+describe("Continuar como {name} card", () => {
+  const identity = {
+    name: "Alfonso",
+    email: "alfonso@example.com",
+    picture: "https://lh3.googleusercontent.com/a/pic.jpg",
+  };
+
+  it("greets a previously-signed-in Google user with their name, email and photo", () => {
+    render(
+      <AuthCard
+        mode="page"
+        googleAuthorizeUrl={GOOGLE_AUTHORIZE_URL}
+        googleIdentity={identity}
+      />,
+    );
+
+    expect(screen.getByText("Continuar como Alfonso")).toBeInTheDocument();
+    expect(screen.getByText("alfonso@example.com")).toBeInTheDocument();
+
+    expect(screen.getByTestId("google-identity-photo")).toHaveAttribute(
+      "src",
+      identity.picture,
+    );
+
+    const link = screen.getByText("Continuar como Alfonso").closest("a");
+    expect(link).toHaveAttribute("href", GOOGLE_AUTHORIZE_URL);
+    expect(
+      screen.queryByPlaceholderText("correo@ejemplo.com"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows only the first name, like Google's own Continue as X", () => {
+    render(
+      <AuthCard
+        mode="page"
+        googleAuthorizeUrl={GOOGLE_AUTHORIZE_URL}
+        googleIdentity={{ ...identity, name: "María Cliente Test" }}
+      />,
+    );
+
+    // Full name would overflow the narrow card; the email below still
+    // disambiguates which account this is.
+    expect(screen.getByText("Continuar como María")).toBeInTheDocument();
+  });
+
+  it("falls back to an initial when the identity has no photo", () => {
+    render(
+      <AuthCard
+        mode="page"
+        googleAuthorizeUrl={GOOGLE_AUTHORIZE_URL}
+        googleIdentity={{ ...identity, picture: null }}
+      />,
+    );
+
+    expect(screen.getByText("Continuar como Alfonso")).toBeInTheDocument();
+    expect(screen.getByText("A")).toBeInTheDocument();
+  });
+
+  it("shows the plain email step when no identity is known", () => {
+    render(<AuthCard mode="page" googleAuthorizeUrl={GOOGLE_AUTHORIZE_URL} />);
+
+    expect(screen.queryByText(/Continuar como/)).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("correo@ejemplo.com")).toBeInTheDocument();
+  });
+
+  it("falls back to the plain email step when dismissed via Usar otro correo", () => {
+    render(
+      <AuthCard
+        mode="page"
+        googleAuthorizeUrl={GOOGLE_AUTHORIZE_URL}
+        googleIdentity={identity}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Usar otro correo"));
+
+    expect(screen.queryByText(/Continuar como/)).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("correo@ejemplo.com")).toBeInTheDocument();
   });
 });

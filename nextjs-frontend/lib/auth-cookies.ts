@@ -1,6 +1,21 @@
 const REFRESH_COOKIE_NAMES = ["refreshToken", "fingerprintToken"] as const;
 
 /**
+ * `lax`, not `strict`, and this matters: Google Sign-In returns the browser
+ * through a redirect chain that STARTS on accounts.google.com
+ * (Google → /auth/google/callback → /api/auth/google/complete → /dashboard).
+ * Browsers judge SameSite by the chain's initiator, so with `strict` the
+ * session cookies — though set correctly — are withheld from that final
+ * navigation to /dashboard. `proxy.ts` then sees no accessToken and bounces
+ * to /login, where the user clicks "Continuar con Google" again: an endless
+ * login loop. `lax` sends cookies on top-level GET navigations like this one
+ * while still withholding them from cross-site POSTs, which is the CSRF case
+ * that actually matters here (and the refresh endpoint additionally requires
+ * the paired fingerprint cookie — see docs/auth.md).
+ */
+const AUTH_COOKIE_SAME_SITE = "lax" as const;
+
+/**
  * Structural type covering both `next/headers`' `cookies()` return value
  * (used in Server Actions) and `NextResponse.cookies` (used in
  * `proxy.ts`/middleware) — the two places these helpers get called from.
@@ -75,7 +90,7 @@ export function forwardAuthCookies(
     cookieStore.set(parsed.name, parsed.value, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      sameSite: AUTH_COOKIE_SAME_SITE,
       path: "/",
       maxAge: parsed.maxAge,
     });
@@ -90,7 +105,7 @@ export function setAccessTokenCookie(
   cookieStore.set("accessToken", accessToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: AUTH_COOKIE_SAME_SITE,
     path: "/",
   });
 }

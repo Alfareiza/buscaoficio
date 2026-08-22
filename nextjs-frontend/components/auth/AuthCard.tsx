@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
 import { Check } from "lucide-react";
-import { FaGoogle } from "react-icons/fa";
 
 import { OtpCodeInput } from "@/components/auth/OtpCodeInput";
 import {
@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { GoogleIdentity } from "@/lib/google-identity-cookie";
 import {
   Select,
   SelectContent,
@@ -55,6 +56,25 @@ interface AuthCardProps {
   mode: "page" | "modal";
   intent?: "login" | "register";
   onSuccess?: () => void;
+  /** Where the "Continuar con Google" link navigates the browser — the
+   * backend's own /auth/google/authorize URL. Built server-side (from
+   * API_BASE_URL) and passed down, since this is a plain browser
+   * navigation, not a fetch call this client component makes itself. */
+  googleAuthorizeUrl: string;
+  /** Set when landing here from GET /auth/google/callback's redirect for a
+   * new email — skips straight to onboarding-name instead of email/OTP. */
+  initialRegistrationToken?: string;
+  /** Prefills the name field when arriving via initialRegistrationToken
+   * (Google already supplied a verified name) — still editable. */
+  initialName?: string;
+  /** Set when landing here after GET /auth/google/callback redirected with
+   * ?error=... (e.g. the user cancelled the Google consent screen). */
+  initialError?: string;
+  /** The last Google-signed-in user on this browser, read server-side from
+   * the lastGoogleIdentity cookie. When present, the email step greets them
+   * with "Continuar como {name}" instead of a blank form — on every visit,
+   * including after a deliberate logout. */
+  googleIdentity?: GoogleIdentity | null;
 }
 
 const INTENT_COPY = {
@@ -76,13 +96,24 @@ const INTENT_COPY = {
 // silently no-ops a resend inside this window (anti-enumeration 202).
 const OTP_RESEND_COOLDOWN_SECONDS = 60;
 
-export function AuthCard({ mode, intent = "login", onSuccess }: AuthCardProps) {
+export function AuthCard({
+  mode,
+  intent = "login",
+  onSuccess,
+  googleAuthorizeUrl,
+  initialRegistrationToken,
+  initialName,
+  initialError,
+  googleIdentity,
+}: AuthCardProps) {
   const router = useRouter();
   const copy = INTENT_COPY[intent];
 
-  const [step, setStep] = useState<Step>("email");
+  const [step, setStep] = useState<Step>(
+    initialRegistrationToken ? "onboarding-name" : "email",
+  );
   const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError ?? null);
   const [shakeOtp, setShakeOtp] = useState(false);
   const [otpResetKey, setOtpResetKey] = useState(0);
   const [resendIn, setResendIn] = useState(0);
@@ -91,12 +122,16 @@ export function AuthCard({ mode, intent = "login", onSuccess }: AuthCardProps) {
 
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
-  const [registrationToken, setRegistrationToken] = useState("");
-  const [nombreCompleto, setNombreCompleto] = useState("");
+  const [registrationToken, setRegistrationToken] = useState(
+    initialRegistrationToken ?? "",
+  );
+  const [nombreCompleto, setNombreCompleto] = useState(initialName ?? "");
   const [whatsapp, setWhatsapp] = useState("");
   const [role, setRole] = useState<Role | null>(null);
   const [documentoTipo, setDocumentoTipo] = useState<TipoDocumento | "">("");
   const [documentoNumero, setDocumentoNumero] = useState("");
+
+  const [welcomeBackDismissed, setWelcomeBackDismissed] = useState(false);
 
   useEffect(() => {
     if (resendIn <= 0) return;
@@ -229,48 +264,102 @@ export function AuthCard({ mode, intent = "login", onSuccess }: AuthCardProps) {
           </div>
 
           <div className="mx-auto flex w-[calc(100%-4rem)] flex-col gap-5">
-            <Button
-              type="button"
-              variant="outline"
-              disabled
-              className="flex w-full rounded-2xl items-center justify-center gap-2 opacity-60"
-              title="Próximamente"
-            >
-              <FaGoogle className="h-4 w-4" />
-              Continuar con Google
-              <span className="ml-1 bg-hueso-borde px-2 py-0.5 text-xs text-gray-500">
-                Soons
-              </span>
-            </Button>
+            {googleIdentity && !welcomeBackDismissed ? (
+              <>
+                <a
+                  href={googleAuthorizeUrl}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-hueso-borde p-2 text-left transition-colors hover:border-naranja-claro"
+                >
+                  {googleIdentity.picture ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={googleIdentity.picture}
+                      alt=""
+                      data-testid="google-identity-photo"
+                      referrerPolicy="no-referrer"
+                      className="h-9 w-9 shrink-0 rounded-full object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-durazno-pale text-sm font-medium text-naranja">
+                      {googleIdentity.name.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                  <span className="flex flex-col overflow-hidden">
+                    {/* First name only, like Google's own "Continue as X" —
+                        a full name overflows this narrow card. */}
+                    <span className="truncate text-sm font-medium text-azul dark:text-white">
+                      Continuar como {googleIdentity.name.split(" ")[0]}
+                    </span>
+                    <span className="truncate text-xs text-gray-500 dark:text-gray-400">
+                      {googleIdentity.email}
+                    </span>
+                  </span>
+                  <Image
+                    src="/images/logo/google.svg"
+                    alt=""
+                    width={16}
+                    height={16}
+                    className="ml-auto h-4 w-4 shrink-0"
+                  />
+                </a>
 
-            <div className="flex w-full items-center gap-3 text-xs text-gray-400">
-              <span className="h-px flex-1 bg-hueso-borde" />
-              o
-              <span className="h-px flex-1 bg-hueso-borde" />
-            </div>
+                <button
+                  type="button"
+                  className="text-sm font-extralight text-azul hover:underline dark:text-naranja-claro"
+                  onClick={() => setWelcomeBackDismissed(true)}
+                >
+                  Usar otro correo
+                </button>
+              </>
+            ) : (
+              <>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="relative flex w-full rounded-2xl items-center justify-center"
+                >
+                  <a href={googleAuthorizeUrl}>
+                    <Image
+                      src="/images/logo/google.webp"
+                      alt=""
+                      width={16}
+                      height={16}
+                      className="absolute left-4 h-4 w-4"
+                    />
+                    <span>Continuar con Google</span>
+                  </a>
+                </Button>
 
-            <div className="flex w-full flex-col gap-2 text-left">
-              {/* <Label htmlFor="email">Correo electrónico</Label> */}
-              <Input
-                id="email"
-                type="email"
-                placeholder="correo@ejemplo.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleRequestOtp()}
-              />
-            </div>
+                <div className="flex w-full items-center gap-3 text-xs text-gray-400">
+                  <span className="h-px flex-1 bg-hueso-borde" />
+                  o
+                  <span className="h-px flex-1 bg-hueso-borde" />
+                </div>
 
-            {error && <p className="text-sm text-red-500">{error}</p>}
+                <div className="flex w-full flex-col gap-2 text-left">
+                  {/* <Label htmlFor="email">Correo electrónico</Label> */}
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="correo@ejemplo.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleRequestOtp()}
+                  />
+                </div>
 
-            <Button
-              type="button"
-              className="w-full rounded-2xl bg-naranja hover:bg-naranja-hover"
-              disabled={isPending || !email}
-              onClick={handleRequestOtp}
-            >
-              {isPending ? "Enviando…" : "Continuar"}
-            </Button>
+                {error && <p className="text-sm text-red-500">{error}</p>}
+
+                <Button
+                  type="button"
+                  className="w-full rounded-2xl bg-naranja hover:bg-naranja-hover"
+                  disabled={isPending || !email}
+                  onClick={handleRequestOtp}
+                >
+                  {isPending ? "Enviando…" : "Continuar"}
+                </Button>
+              </>
+            )}
           </div>
 
           <div className="flex flex-col gap-2 text-xs text-gray-400 dark:text-gray-500">

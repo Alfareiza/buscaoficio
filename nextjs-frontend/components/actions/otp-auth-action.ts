@@ -11,6 +11,7 @@ import {
   type TipoDocumento,
 } from "@/app/clientService";
 import { forwardAuthCookies, setAccessTokenCookie } from "@/lib/auth-cookies";
+import { setGoogleIdentityCookie } from "@/lib/google-identity-cookie";
 import {
   onboardingClienteSchema,
   onboardingProfesionalSchema,
@@ -66,6 +67,23 @@ async function persistSession(
   const cookieStore = await cookies();
   setAccessTokenCookie(cookieStore, accessToken);
   forwardAuthCookies(setCookieHeaders, cookieStore);
+
+  // "picture" is only ever present in a Google-backed response (see
+  // _registration_session_extra in the backend) — its mere presence, not
+  // its value, is the signal that this registration came from Google, and
+  // so should be remembered for /login's "Continuar como {name}" card.
+  const body = data as Record<string, unknown>;
+  if (
+    "picture" in body &&
+    typeof body.nombre_completo === "string" &&
+    typeof body.email === "string"
+  ) {
+    setGoogleIdentityCookie(cookieStore, {
+      name: body.nombre_completo,
+      email: body.email,
+      picture: typeof body.picture === "string" ? body.picture : null,
+    });
+  }
 
   return { status: "existing_user", hasRole };
 }
