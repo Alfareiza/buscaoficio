@@ -257,8 +257,18 @@ async def google_callback(
             # app already treats email as the canonical identity.
             user.google_sub = profile.sub
             db.add(user)
-            await db.commit()
-            await db.refresh(user)
+            try:
+                await db.commit()
+                await db.refresh(user)
+            except IntegrityError:
+                # Two concurrent callbacks for the same not-yet-linked email
+                # (e.g. a duplicated/retried navigation to this route) can
+                # both pass the `google_sub is None` check above and race to
+                # commit. The loser hits the unique constraint on
+                # google_sub — reload rather than 500ing, since the row is
+                # now linked exactly the way this request wanted anyway.
+                await db.rollback()
+                user = await user_manager.user_db.get_by_email(profile.email)
 
     if user is None:
         registration_token = OtpManager.issue_registration_token(
@@ -313,9 +323,20 @@ async def google_session(
     this login was Google-backed.
     """
     payload = GoogleOAuthManager.verify_session_token(google_session_token)
-    if payload is None or "user_id" not in payload:
+    if payload is None or "user_id" not in payload or "jti" not in payload:
         logger.warning(
             "Google session exchange failed: invalid/expired google_session_token"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="google_session_token inválido o expirado",
+        )
+
+    if not await GoogleOAuthManager.consume_session_token_jti(db, payload["jti"]):
+        # Valid signature, but this exact token already established a
+        # session once — reject the replay rather than minting another one.
+        logger.warning(
+            f"Google session token replay detected: user_id={payload['user_id']}"
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

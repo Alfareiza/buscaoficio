@@ -137,3 +137,19 @@ class TestClockSkewLeeway:
         # diagnose the real production failure as clock skew rather than a
         # forged/tampered token.
         assert "ImmatureSignatureError" in caplog.text
+
+
+class TestConsumeSessionTokenJti:
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_first_use_succeeds(self, db_session) -> None:
+        assert await GoogleOAuthManager.consume_session_token_jti(db_session, "jti-1") is True
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_second_use_of_the_same_jti_fails(self, db_session) -> None:
+        assert await GoogleOAuthManager.consume_session_token_jti(db_session, "jti-2") is True
+        assert await GoogleOAuthManager.consume_session_token_jti(db_session, "jti-2") is False
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_different_jtis_are_independent(self, db_session) -> None:
+        assert await GoogleOAuthManager.consume_session_token_jti(db_session, "jti-a") is True
+        assert await GoogleOAuthManager.consume_session_token_jti(db_session, "jti-b") is True

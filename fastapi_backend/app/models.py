@@ -179,3 +179,20 @@ class EmailOtp(TimestampMixin, Base):
     expires_at = Column(DateTime(timezone=True), nullable=False)
     consumed_at = Column(DateTime(timezone=True), nullable=True)
     created_ip = Column(String, nullable=True)
+
+
+class UsedGoogleSessionToken(TimestampMixin, Base):
+    """Marks a google_session_token's `jti` as consumed the moment
+    POST /auth/google/session successfully uses it, so the same token can't
+    establish a second session if it leaks (e.g. via a URL captured in logs
+    or Sentry request tracing) — it's a bearer credential that briefly rides
+    in a redirect URL, unlike every other session-establishing token in this
+    app which never leaves an HttpOnly cookie or a POST body. The token's
+    own 2-minute expiry already bounds how long a leaked copy is dangerous;
+    this closes the replay-within-that-window gap. No cleanup job purges old
+    rows — same known gap as `refresh_tokens`/`email_otps`."""
+
+    __tablename__ = "used_google_session_tokens"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    jti = Column(String, unique=True, nullable=False, index=True)
