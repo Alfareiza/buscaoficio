@@ -67,6 +67,40 @@ Changed from defaults (Postgres 5432/5433, API 8000) to avoid conflict with anot
 - Quality: pre-commit, Ruff, mypy, ESLint/Prettier
 - Docs: MkDocs Material
 
+### Production SSH access
+- Two SSH keys authorize into EC2 `i-0b3ac8e7768cb4b5d` (`ec2-user`,
+  Elastic IP `44.207.170.68`), each scoped to a different purpose:
+  - **Operator key** — `~/.ssh/aag.pem` (key pair name `aag`), full admin
+    access, used for manual ops (this file, deploys, debugging). Not
+    rotated as part of this procedure.
+  - **Deploy-only key** — used exclusively by the `deploy` job in
+    `.github/workflows/deploy.yml`, which SSHes in to rewrite
+    `BACKEND_IMAGE`/`FRONTEND_IMAGE` in `/opt/buscaoficio/.env` and run
+    `docker compose -f docker-compose.prod.yml pull && up -d`. It needs no
+    other permissions on the box. Stored solely as the `EC2_SSH_KEY`
+    GitHub Actions secret — never committed to the repo, never printed to
+    a terminal/transcript other than the user's own when first generated.
+- **Rotation procedure** (same steps used 2026-08-22, see below):
+  1. Generate a new ed25519 keypair locally, e.g.
+     `ssh-keygen -t ed25519 -f /tmp/buscaoficio_deploy_key_new -N "" -C "github-actions-deploy@buscaoficio"`.
+  2. SSH in with the personal `aag` key and swap the line in
+     `~/.ssh/authorized_keys`: remove the old line tagged
+     `github-actions-deploy@buscaoficio`, append the new public key.
+     Leave the `aag` line untouched.
+  3. Update the `EC2_SSH_KEY` GitHub Actions secret with the new private
+     key contents.
+  4. Verify: SSH in with the new private key and confirm it authenticates
+     (e.g. `ssh -i <new-key> ec2-user@44.207.170.68 whoami`); trigger or
+     wait for the next `deploy.yml` run to confirm CI/CD still works.
+  5. Securely delete the old local private key file and, once the GitHub
+     secret is confirmed updated, the new key's local copies too — the
+     key should live only in the GitHub secret and on the box's
+     `authorized_keys`, not on any operator's disk long-term.
+- 2026-08-22: the deploy-only key was rotated because the previous one had
+  been accidentally exposed in an agent transcript during an earlier
+  session (see memory `project_aws_deployment.md` for the incident, not
+  duplicated here).
+
 ## E2E type safety
 Not “E2W”. End-to-end type safety means:
 1. FastAPI routes + Pydantic → OpenAPI schema
