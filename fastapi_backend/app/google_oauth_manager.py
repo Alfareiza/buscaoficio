@@ -21,8 +21,11 @@ import jwt
 from fastapi_users.jwt import decode_jwt, generate_jwt
 from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.oauth2 import GetAccessTokenError
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import logger, settings
+from .models import UsedGoogleSessionToken
 
 GOOGLE_ISSUERS = ("https://accounts.google.com", "accounts.google.com")
 GOOGLE_JWKS_URI = "https://www.googleapis.com/oauth2/v3/certs"
@@ -104,8 +107,22 @@ class GoogleOAuthManager:
         `picture` rides along so /auth/google/session can hand it back to
         the frontend — it's never persisted on the User row (display-only
         hint for the "Welcome back" card, re-fetched fresh on every Google
-        login rather than treated as durable profile data)."""
-        payload = {"user_id": str(user_id), "aud": GOOGLE_SESSION_AUDIENCE}
+        login rather than treated as durable profile data).
+
+        Carries a random `jti` so POST /auth/google/session can enforce
+        single use (see consume_session_token_jti) — this token is a bearer
+        credential that briefly rides in a redirect URL (Google's redirect
+        chain lands the browser on /auth/google/callback, which redirects
+        again carrying this token), unlike every other session-establishing
+        value in this app, which never leaves an HttpOnly cookie or a POST
+        body. Signature + expiry alone aren't enough: a copy captured from
+        request logs or Sentry's request tracing within the 2-minute
+        lifetime could otherwise be replayed to open additional sessions."""
+        payload = {
+            "user_id": str(user_id),
+            "jti": secrets.token_urlsafe(16),
+            "aud": GOOGLE_SESSION_AUDIENCE,
+        }
         if picture is not None:
             payload["picture"] = picture
         return generate_jwt(
@@ -122,6 +139,22 @@ class GoogleOAuthManager:
             )
         except jwt.PyJWTError:
             return None
+
+    @staticmethod
+    async def consume_session_token_jti(db: AsyncSession, jti: str) -> bool:
+        """Atomically claims `jti` as used. Returns True on first use, False
+        if it's already been consumed (replay) — relies on the unique
+        constraint on UsedGoogleSessionToken.jti to make the check-and-claim
+        atomic under concurrent requests, the same way the IntegrityError
+        pattern is used elsewhere in this app (see google_callback's
+        concurrent-linking handling)."""
+        try:
+            db.add(UsedGoogleSessionToken(jti=jti))
+            await db.commit()
+            return True
+        except IntegrityError:
+            await db.rollback()
+            return False
 
     @classmethod
     def _client(cls) -> GoogleOAuth2:

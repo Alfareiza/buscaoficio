@@ -10,7 +10,9 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 from fastapi import status
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.google_oauth_manager import GoogleOAuthError, GoogleOAuthManager, GoogleProfile
 from app.models import User
@@ -251,6 +253,63 @@ class TestGoogleCallbackExistingUser:
         refreshed = result.scalar_one()
         assert refreshed.google_sub == "google-sub-789"
 
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_concurrent_linking_race_recovers_instead_of_500ing(
+        self,
+        test_client,
+        mocker,
+        create_user: Callable[..., Awaitable[User]],
+        db_session,
+        engine,
+    ) -> None:
+        """Two concurrent callbacks for the same not-yet-linked email both
+        pass the `google_sub is None` check, then race to commit. Simulates
+        the loser's commit hitting the real unique constraint — via a
+        genuinely separate connection committing first, not a stubbed
+        exception — and asserts the loser recovers into a normal login
+        instead of surfacing an unhandled 500."""
+        user = await create_user(email="race@example.com")
+        assert user.google_sub is None
+
+        _mock_profile(mocker, sub="google-sub-race", email=user.email)
+        state = GoogleOAuthManager.issue_state()
+
+        async def racy_commit():
+            # The "winner": a wholly separate transaction links the same
+            # row first, so this request's own commit below genuinely
+            # violates the unique constraint rather than merely simulating
+            # the error.
+            async with AsyncSession(engine) as other_session:
+                await other_session.execute(
+                    update(User)
+                    .where(User.id == user.id)
+                    .values(google_sub="google-sub-race")
+                )
+                await other_session.commit()
+            raise IntegrityError(
+                "duplicate key value violates unique constraint "
+                '"usuarios_google_sub_key"',
+                {},
+                Exception("duplicate key"),
+            )
+
+        mocker.patch.object(db_session, "commit", side_effect=racy_commit)
+
+        response = await test_client.get(
+            "/api/v1/auth/google/callback",
+            params={"code": "auth-code", "state": state},
+            follow_redirects=False,
+        )
+
+        assert response.status_code == status.HTTP_307_TEMPORARY_REDIRECT
+        location = urlparse(response.headers["location"])
+        assert location.path == "/api/auth/google/complete"
+        assert "google_session_token" in parse_qs(location.query)
+
+        result = await db_session.execute(select(User).where(User.id == user.id))
+        refreshed = result.scalar_one()
+        assert refreshed.google_sub == "google-sub-race"
+
 
 class TestGoogleCallbackFailures:
     @pytest.mark.asyncio(loop_scope="function")
@@ -382,3 +441,55 @@ class TestGoogleSession:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert str(user.id) in caplog.text
         assert "not found or inactive" in caplog.text
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_session_token_cannot_be_replayed(
+        self, test_client, create_user: Callable[..., Awaitable[User]], caplog
+    ) -> None:
+        """A google_session_token is a bearer credential that briefly rides
+        in a redirect URL (see issue_session_token's docstring) — if a copy
+        leaks (request logs, Sentry tracing) within its 2-minute lifetime,
+        it must not be usable more than once."""
+        user = await create_user(email="replay@example.com")
+        session_token = GoogleOAuthManager.issue_session_token(user.id)
+
+        first = await test_client.post(
+            "/api/v1/auth/google/session",
+            json={"google_session_token": session_token},
+        )
+        assert first.status_code == status.HTTP_200_OK
+
+        with caplog.at_level("WARNING", logger="buscaoficio"):
+            second = await test_client.post(
+                "/api/v1/auth/google/session",
+                json={"google_session_token": session_token},
+            )
+
+        assert second.status_code == status.HTTP_400_BAD_REQUEST
+        assert "replay detected" in caplog.text
+        assert str(user.id) in caplog.text
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_two_different_session_tokens_for_same_user_both_work(
+        self, test_client, create_user: Callable[..., Awaitable[User]]
+    ) -> None:
+        """Replay protection is per-token (per jti), not per-user — logging
+        in via Google twice in a row (two distinct callback round trips)
+        must still work."""
+        user = await create_user(email="two-logins@example.com")
+
+        first_token = GoogleOAuthManager.issue_session_token(user.id)
+        second_token = GoogleOAuthManager.issue_session_token(user.id)
+        assert first_token != second_token
+
+        first = await test_client.post(
+            "/api/v1/auth/google/session",
+            json={"google_session_token": first_token},
+        )
+        second = await test_client.post(
+            "/api/v1/auth/google/session",
+            json={"google_session_token": second_token},
+        )
+
+        assert first.status_code == status.HTTP_200_OK
+        assert second.status_code == status.HTTP_200_OK
