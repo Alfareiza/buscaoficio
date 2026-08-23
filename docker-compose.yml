@@ -6,7 +6,18 @@ services:
       - OPENAPI_OUTPUT_FILE=./shared-data/openapi.json
       - DATABASE_URL=postgresql+asyncpg://postgres:password@db:5432/buscaoficio
       - TEST_DATABASE_URL=postgresql+asyncpg://postgres:password@db_test:5432/testdatabase
+      # Force local dev onto the mailhog container regardless of whatever a
+      # developer's own .env holds (e.g. real Hostinger SMTP creds for
+      # occasional live-send testing) — MAIL_SERVER alone used to be
+      # overridden here, but MailHog only listens on 1025 with no TLS/auth,
+      # so a .env carrying production-style MAIL_PORT/MAIL_SSL_TLS values
+      # made every local OTP/password-reset email silently fail with
+      # "Error connecting to mailhog on port 465: Connection refused".
       - MAIL_SERVER=mailhog
+      - MAIL_PORT=1025
+      - MAIL_STARTTLS=False
+      - MAIL_SSL_TLS=False
+      - USE_CREDENTIALS=False
     ports:
       - "8001:8001"
     networks:

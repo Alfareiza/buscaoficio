@@ -1,6 +1,15 @@
 # Active Context
 
 ## Current focus
+- **Google Sign-In, 2026-08-22/23, merged to `main` via PR #17** (branch
+  `feature/google-sign-in`). Server-side OAuth 2.0 authorization code flow;
+  reaches the same fork OTP verification already does (existing account
+  logs in, new email still goes through mandatory role selection + WhatsApp
+  before an account is created). See "Recent changes" below for full detail
+  including two bugs found and fixed during the build (a login loop from
+  `SameSite=Strict` cookies, and an intermittent clock-skew login failure)
+  and two more fixed from code review after the PR was open (session-token
+  replay, a concurrent-account-linking race).
 - JWT session hardening: both backend refresh token rotation
   ([#9](https://github.com/Alfareiza/buscaoficio/issues/9), commit
   `0a8376b`) and frontend cookie forwarding/silent refresh
@@ -43,6 +52,74 @@
   steps.
 
 ## Recent changes
+- **Google Sign-In, 2026-08-22/23, merged to `main` via PR #17.** Server-side
+  OAuth 2.0 authorization code flow (`GET /auth/google/authorize` → Google →
+  `GET /auth/google/callback` → a Next.js **Route Handler**
+  `app/api/auth/google/complete/route.ts`, not a page, so the session is
+  established server-side and the browser lands directly on `/dashboard`
+  with no intermediate screen). Backend: `app/google_oauth_manager.py`
+  verifies Google's `id_token` against Google's JWKS directly (no People
+  API round trip). New `usuarios.google_sub` column (nullable, unique),
+  matched first, then falls back to matching by verified email for accounts
+  originally created via OTP (auto-links, backfills `google_sub`). A new
+  `lastGoogleIdentity` cookie (not localStorage — needs to be readable by
+  `/login`'s Server Component during render) remembers the last
+  Google-signed-in user's name/email/photo so `/login` can show "Continuar
+  como {first name}" on a return visit, including after a deliberate
+  logout — the cookie deliberately outlives logout, cleared nowhere.
+  - **Two real bugs found and fixed while building this:**
+    1. **Login loop**: session cookies (`accessToken`/`refreshToken`/
+       `fingerprintToken`) were `SameSite=Strict`. Google's redirect chain
+       starts cross-site (accounts.google.com), and browsers judge SameSite
+       by the chain's *initiator*, so Strict silently withheld the cookies
+       on the final navigation back into the app — `proxy.ts` saw no
+       session and bounced to `/login`, which invited clicking "Continuar
+       con Google" again. Fixed: `lib/auth-cookies.ts`'s
+       `AUTH_COOKIE_SAME_SITE` is now `"lax"`. OTP login never hit this
+       since that flow is entirely same-site.
+    2. **Intermittent login failure**: `ImmatureSignatureError: The token
+       is not yet valid (iat)` — PyJWT validates `id_token` `iat`/`exp`
+       against the local wall clock with zero tolerance by default, and
+       Docker Desktop for Mac's Linux VM clock can lag a few seconds behind
+       real time right after the host sleeps/wakes. Diagnosed by
+       deliberately letting the error raise unhandled once (at the user's
+       explicit request) to get a real Sentry issue + full traceback,
+       rather than the generic caught-and-redirected error. Fixed: 30s
+       `leeway` on `jwt.decode()` (`GOOGLE_ID_TOKEN_LEEWAY_SECONDS`).
+    3. Also fixed in passing: local MailHog was silently unreachable —
+       `docker-compose.yml` only overrode `MAIL_SERVER`, leaving a
+       developer's real SMTP port/TLS settings (from a `.env` with live
+       Hostinger creds) active against the MailHog container. Now overrides
+       the full MailHog-compatible var set.
+  - **Two more fixed from automated code review after the PR was open**
+    (both real, verified against the actual code, not false positives):
+    1. `google_session_token` (the short-lived token handed from the
+       backend callback to the Route Handler) briefly rides in a redirect
+       URL — unlike every other session-establishing value in this app,
+       which never leaves an HttpOnly cookie or POST body — so it's
+       exposed to browser history, request logs, and Sentry's request
+       tracing. It was verified for signature+expiry only, with no
+       single-use enforcement, so a leaked copy could be replayed within
+       its 2-minute lifetime to open extra sessions. Fixed: a `jti` claim
+       + new `used_google_session_tokens` table (mirrors `EmailOtp`'s
+       `consumed_at` pattern), claimed atomically via a unique-constraint
+       insert in `GoogleOAuthManager.consume_session_token_jti`.
+    2. Two concurrent `/google/callback` requests linking the same
+       not-yet-linked email (e.g. a duplicated/retried navigation) could
+       both pass the `google_sub is None` check and race to commit; the
+       loser hit the unique constraint as an unhandled `IntegrityError` →
+       500. Fixed: caught, rolled back, row reloaded — same pattern already
+       used in the OTP registration routes.
+  - Migration `938ad64baf39` (add `google_sub`) already reviewed and
+    applied by the user. Migration `67f2b3cd225f` (add
+    `used_google_session_tokens`) generated, **not yet applied** — needs
+    the same review-then-apply step.
+  - `client_secret.json` (the downloaded Google OAuth credentials file) sat
+    briefly untracked in the repo root; `client_secret*.json` added to
+    `.gitignore` as a safety net. User is removing the file themselves.
+  - Not built, deliberately mapped only: post-login redirect destination
+    (a `LOGIN_REDIRECT` default vs. a resource-gated modal that releases
+    back to the originally-requested resource) — see Open considerations.
 - **OTP auth UX polish batch, 2026-08-20 (issue #15, branch
   `otp-ux-polish-required-whatsapp`, pushed, not yet PR'd).** Built on top
   of the merged OTP migration below:
@@ -363,6 +440,11 @@
    is in those files.
 
 ## Open considerations
+- **Post-login redirect destination is hardcoded, not yet designed (2026-08-22, explicitly mapped but NOT implemented per the user's request — "let's keep it that way so far just mapped").**
+  Today `AuthCard.tsx`'s `finish()` always does `router.push("/dashboard")` regardless of how/why the user reached the login screen — there is no concept yet of "where should this login actually land." Two real scenarios need to be told apart:
+  1. **Direct visit to `/login`** (the user chose to log in, no prior context) → should land on a configurable default, referred to as `LOGIN_REDIRECT` — i.e. a single named app-level setting for "where a voluntary login lands," not a value inlined at the call site.
+  2. **Gated-resource access** (the user hit a protected page/action while logged out, or a logged-in-but-unauthorized action) → login should happen **in a modal**, without leaving the page, and on success should **release access to the originally-requested resource** — resume/redirect back to what they were actually trying to do, not bounce to the generic default.
+  Relevant existing pieces this would build on: `components/auth/AuthModal.tsx` already exists (`mode="modal"` on `AuthCard`) but per its own comment is "not wired to a trigger anywhere in the app yet" — scenario 2 is exactly its intended use case. `proxy.ts`'s redirect-to-`/login` on a dead/missing session (see [[project_auth_otp_migration]] and the Google Sign-In session-cookie work) currently does **not** preserve the originally-requested URL — that's the specific gap scenario 2 needs closed (e.g. a `?next=` param or similar). Not designed further than this — no return-URL param format, no decision on which protected actions should trigger the modal vs. a full redirect, chosen yet.
 - `email_otps` rows are never purged either — same known gap as
   `refresh_tokens` below, now duplicated across two tables.
 - `refresh_tokens` rows are never purged — no cleanup job yet for
