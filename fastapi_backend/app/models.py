@@ -68,6 +68,12 @@ class User(SQLAlchemyBaseUserTableUUID, TimestampMixin, Base):
 
     nombre_completo = Column(String, nullable=False)
     whatsapp = Column(String, nullable=True)
+    # Google's OIDC "sub" (subject) claim — the permanent, unique ID Google
+    # assigns to a Google Account. Unlike email, it never changes even if
+    # the user later changes their Google email address, so it's what
+    # actually identifies "this Google account" across logins. Nullable:
+    # only set for accounts that have signed in with Google at least once
+    # (see app/google_oauth_manager.py § "Google Sign-In").
     google_sub = Column(String, unique=True, nullable=True)
 
     items = relationship("Item", back_populates="user", cascade="all, delete-orphan")
