@@ -15,14 +15,14 @@ class TipoDocumento(str, Enum):
 
     CC = ("CC", "Cédula de Ciudadanía")
     CE = ("CE", "Cédula de Extranjería")
-    TI = ("TI", "Tarjeta de Identidad")
-    RC = ("RC", "Registro Civil")
+    # TI = ("TI", "Tarjeta de Identidad")
+    # RC = ("RC", "Registro Civil")
     PA = ("PA", "Pasaporte")
-    MS = ("MS", "Menor sin Identificación")
+    # MS = ("MS", "Menor sin Identificación")
     PE = ("PE", "Permiso Especial")
-    CN = ("CN", "Certificado Nacido Vivo")
+    # CN = ("CN", "Certificado Nacido Vivo")
     PT = ("PT", "Permiso Temporal")
-    SC = ("SC", "Salvo Conducto")
+    # SC = ("SC", "Salvo Conducto")
 
 
 class EstadoVerificacionProfesional(str, Enum):
