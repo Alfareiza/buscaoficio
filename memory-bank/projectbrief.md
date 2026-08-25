@@ -6,7 +6,8 @@ This repo is based on Vinta Software’s **Next.js FastAPI Template** (`vintasof
 ## Goals
 - Provide a production-shaped MVP foundation (auth + CRUD + typed FE/BE contract).
 - Keep frontend and backend in sync via OpenAPI-generated TypeScript clients.
-- Support local Docker Compose development and Vercel deployment.
+- Support local Docker Compose development and production deploy to EC2
+  (GitHub Actions → ECR → Docker Compose on the box).
 
 ## Scope (current template)
 - JWT authentication — passwordless email OTP for login/registration (the
@@ -21,7 +22,8 @@ This repo is based on Vinta Software’s **Next.js FastAPI Template** (`vintasof
 ## Out of scope (for now)
 - Domain-specific “busca oficio” business features.
 - Production email provider configuration beyond local MailHog.
-- Non-Vercel production container orchestration (unless explicitly adopted later).
+- Vercel serverless as the production path (template leftovers remain;
+  production is EC2 + ECR, see `techContext.md`).
 
 ## Source of truth
 - Product intent and current focus: `memory-bank/activeContext.md` and `progress.md`.

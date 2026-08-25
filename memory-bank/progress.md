@@ -26,7 +26,9 @@
 - Docker Compose stack (backend, frontend, db, db_test, mailhog)
 - Alembic migrations (user + item revisions present)
 - CI workflows (FastAPI + Next.js), pre-commit, MkDocs
-- Vercel deploy docs / workflow templates for FE and BE
+- Production deploy workflow (`.github/workflows/deploy.yml`): OIDC →
+  ECR image push works; **Deploy to EC2 job still failing** (2026-08-25).
+  Vercel template workflows/docs remain but are not the prod path.
 
 ## Local customizations done
 - [x] Postgres host ports remapped to **5434** (db) and **5435** (db_test)
@@ -65,8 +67,10 @@
 - [ ] Confirm DBs restarted and migrations applied after port change
 - [ ] Domain product features for "busca oficio" (not started)
 - [ ] Production email provider (beyond MailHog)
-- [ ] Prod secrets / Vercel projects wiring (if deploying), including Sentry
-  DSN + `SENTRY_ENVIRONMENT=production` + frontend `SENTRY_AUTH_TOKEN`
+- [ ] Finish Deploy to EC2 job (SCP/SSH); box should run the SHA that ECR has
+- [ ] Prod secrets on the box, including Sentry DSN +
+  `SENTRY_ENVIRONMENT=production` (frontend `SENTRY_AUTH_TOKEN` is already
+  a GitHub Actions secret used at image-build time)
 - [ ] Confirm a real error from the running app lands in Sentry (not done yet)
 - [ ] Optional: replace MailHog with Mailpit
 - [ ] `createsuperuser` management command (workaround now: sign up via the
@@ -75,7 +79,9 @@
 ## Known issues / gotchas
 - Changing `models.py` alone does **not** update OpenAPI client or DB schema.
 - Bare `pnpm run dev` / `uv run fastapi` skips watchers - use Makefile/`start.sh`.
-- Vercel is serverless, not Docker; no `$PORT` wiring in this repo for that path.
+- Production is EC2 + ECR, not Vercel. GitHub OIDC `sub` is
+  `repo:Owner@id/repo@id:…` — a slug-form IAM trust policy fails AssumeRole.
+- Leftover Vercel serverless path has no `$PORT` wiring; ignore it for prod.
 - Mixing local and Docker runs is discouraged by upstream docs.
 - Default DB credentials (`postgres`/`password`) are local-only.
 - `on_after_request_verify` logs `user.id` only — verification email not yet sent.
@@ -268,6 +274,17 @@
   (rebase-merged 2026-08-18) once given explicit go-ahead, after fixing
   three CI failures — see the 2026-08-20 session log below for the
   follow-up UX polish batch.
+
+## Session log (2026-08-25) — EC2 deploy workflow + OIDC trust policy
+- Walked through `.github/workflows/deploy.yml` OIDC step
+  (`aws-actions/configure-aws-credentials@v4` + `AWS_DEPLOY_ROLE_ARN`).
+- `sts:AssumeRoleWithWebIdentity` failed until the IAM trust policy's
+  `sub` was changed from `repo:Alfareiza/buscaoficio:ref:refs/heads/…` to
+  GitHub's numeric-ID form
+  `repo:Alfareiza@63620799/buscaoficio@1329243606:*`.
+- After that, Build & push (backend + frontend) succeeded; Deploy to EC2
+  still failing. Images in ECR are tagged with the commit SHA; the box
+  has not pulled them yet.
 
 ## Session log (2026-08-20) — OTP UX polish: multi-box input, cooldown fix, required WhatsApp
 - Picked up a second, larger batch of uncommitted OTP UX work sitting

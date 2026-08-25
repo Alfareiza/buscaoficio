@@ -8,8 +8,38 @@ Next.js (FE) ──typed client──▶ FastAPI (BE) ──asyncpg──▶ Pos
             openapi.json         fastapi-mail ──▶ MailHog (local)
 ```
 
+Production (not shown above): GitHub Actions builds FE/BE images, pushes
+them to ECR tagged with the git SHA, then the EC2 box pulls those tags
+and runs `docker-compose.prod.yml` (Caddy in front). The box never builds.
+
+## Production deploy pattern
+- Workflow: `.github/workflows/deploy.yml` (`build-backend` +
+  `build-frontend` in parallel, then `deploy` over SSH).
+- Auth to AWS from Actions is **OIDC** (`aws-actions/configure-aws-credentials`
+  + `permissions: id-token: write`), not long-lived access keys. The role
+  ARN lives in the GitHub secret `AWS_DEPLOY_ROLE_ARN`.
+- GitHub's OIDC `sub` uses numeric IDs, not the slug:
+  `repo:Alfareiza@63620799/buscaoficio@1329243606:...`. A trust policy
+  written as `repo:Alfareiza/buscaoficio:...` fails with
+  `Not authorized to perform sts:AssumeRoleWithWebIdentity`.
+- The trust policy's `*` covers every branch of this repo; **which branches
+  actually run** is decided by `deploy.yml` (`on.push.branches`).
+- Images: `502993831706.dkr.ecr.us-east-1.amazonaws.com/buscaoficio-{backend,frontend}:<sha>`.
+  Built with `--provenance=false` so ECR lifecycle expiry of untagged
+  images cannot strand a tag.
+- `docker-compose.prod.yml` and `Caddyfile` live on the box at
+  `/opt/buscaoficio`, copied by hand. GitHub-hosted runners cannot reach
+  `:22` (SG is operator-IP-only), so Actions does not SCP them. A push
+  that edits those files fails `.github/workflows/infra-manual-reminder.yml`
+  on purpose. Env files stay on the box and are never in the repo.
+- The `deploy` job SSHes in to rewrite `BACKEND_IMAGE`/`FRONTEND_IMAGE` in
+  `/opt/buscaoficio/.env`, then `docker compose pull && up -d` and
+  `caddy reload`. Same `:22` SG restriction applies to this SSH step.
+- SSH into the box for that job uses the deploy-only key (`EC2_SSH_KEY`);
+  ECR login *on the box* uses the instance profile, not the GitHub OIDC role.
+
 ## OpenAPI sync pipeline (dev only)
-Core of E2E type safety. Production/Vercel does **not** run watchers; generated client is baked into FE build.
+Core of E2E type safety. Production does **not** run watchers; generated client is baked into the frontend image.
 
 ```
 Change BE routes/schemas
@@ -41,7 +71,7 @@ app/openapi-client (typed SDK)
 ### When `start.sh` runs
 - Local: `make start-backend` / `make start-frontend`
 - Docker: container `CMD ["./start.sh"]` via `make docker-start-*`
-- **Not** on Vercel, CI tests, or production builds
+- **Not** on CI tests or production image builds (watchers are local-dev only)
 
 ### Dev workflow rule
 Prefer `make start-*` / `make docker-start-*` over bare `pnpm run dev` or `uv run fastapi …`. Bare commands start the app **without** watchers → OpenAPI/client won’t auto-sync.

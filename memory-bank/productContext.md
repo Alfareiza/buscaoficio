@@ -22,4 +22,7 @@ The template gives a clean, typed full-stack starting point so product work can 
 ## UX goals
 - Immediate usable auth + dashboard after setup.
 - Developer experience: hot reload + automatic client sync when API surfaces change.
-- Clear separation: Docker for local infra; Vercel serverless for target deploy (not Docker-on-Vercel).
+- Clear separation: Docker Compose for local infra; production is the
+  same Compose shape on EC2 (`docker-compose.prod.yml`), with images
+  built in GitHub Actions and stored in ECR — not Docker-on-Vercel.
+  Template Vercel files still exist but are not the prod path.

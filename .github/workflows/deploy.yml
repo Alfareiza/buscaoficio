@@ -13,8 +13,6 @@ on:
     paths:
       - "fastapi_backend/**"
       - "nextjs-frontend/**"
-      - "docker-compose.prod.yml"
-      - "Caddyfile"
       - ".github/workflows/deploy.yml"
   workflow_dispatch: {}
 
@@ -92,21 +90,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The box has no git checkout, and images only carry app code - so the
-      # infra config (compose file + Caddyfile) has to be shipped separately.
-      # Without this the workflow's `paths:` filter is a lie: editing the
-      # Caddyfile would trigger a green deploy that ran the box's stale copy.
-      # Neither file contains secrets; the three .env files live only on the
-      # box and are deliberately never copied.
-      - name: Copy infra config to the box
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "docker-compose.prod.yml,Caddyfile"
-          target: /opt/buscaoficio
-
+      # docker-compose.prod.yml and Caddyfile are copied onto the box by
+      # hand (GitHub-hosted runners cannot reach :22; the SG is locked to
+      # operator IPs). Changing them in git does not update the box — see
+      # .github/workflows/infra-manual-reminder.yml. Env files stay on the
+      # box and are deliberately never in the repo.
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
