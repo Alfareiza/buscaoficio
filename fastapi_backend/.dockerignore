@@ -1,0 +1,36 @@
+# Keeps host-only files out of the build context.
+#
+# The two that actually matter for correctness:
+#   .venv  - the Dockerfile runs `uv sync` to build /app/.venv inside the image.
+#            A host .venv copied by `COPY . .` would clobber it, and on Apple
+#            Silicon it holds arm64 wheels that can't run on the x86_64 EC2 box.
+#   .env   - real production/local secrets. Never bake these into an image that
+#            gets pushed to ECR.
+
+# Python environment and caches
+.venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets (.env.example is intentionally kept — it's the committed template)
+.env
+.env.*
+!.env.example
+
+# VCS and editor noise
+.git/
+.gitignore
+.DS_Store
+
+# Inactive Vercel leftovers from the upstream template (see aws-deployer agent)
+vercel.json
+vercel.prod.json
+
+# Docs and local tooling not needed at runtime
+README.md
+.CLAUDE.md
+.postman/
+postman/

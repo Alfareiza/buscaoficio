@@ -1,0 +1,35 @@
+# DRAFT — Caddy reverse proxy config for production.
+# NOT deployed yet. Requires DOMAIN, API_DOMAIN, ACME_EMAIL to be set in the
+# EC2 box's ./.env (see .env.prod.example). Caddy issues/renews Let's Encrypt
+# certs automatically for these hostnames as long as DNS points at the box
+# and 80/443 are reachable from the internet.
+#
+# Layout assumes two hostnames:
+#   DOMAIN      -> the Next.js frontend (what users browse to)
+#   API_DOMAIN  -> the FastAPI backend, needed because FastAdmin is mounted
+#                  directly on the FastAPI app at /admin for direct browser
+#                  access (see fastapi_backend/app/main.py), so the backend
+#                  must be reachable from the public internet too, not just
+#                  proxied internally through Next.js server actions.
+#
+# DOMAIN=app.buscaoficio.co / API_DOMAIN=api.buscaoficio.co. Both already have
+# "A" records on Hostinger pointed at the EC2 instance's Elastic IP
+# (44.207.170.68), confirmed resolving via `dig` on 2026-08-22.
+#
+# Google Sign-In needs no routing changes here: because each hostname proxies
+# *everything* to one container (no path-based splitting), Next.js's own
+# /api/auth/google/complete route handler (under DOMAIN) and FastAPI's
+# /api/v1/auth/google/* routes (under API_DOMAIN) are both already reachable
+# — there's no /api/* prefix collision to worry about between the two apps.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	reverse_proxy frontend:3000
+}
+
+{$API_DOMAIN} {
+	reverse_proxy backend:8001
+}
