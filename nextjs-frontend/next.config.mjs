@@ -4,6 +4,10 @@ import process from "node:process";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Traces only the files node server.js needs. Dockerfile.prod copies
+  // .next/standalone into a slim alpine runner — without this, the image
+  // ships Debian + full node_modules + webpack cache (~GB, too big for the EC2).
+  output: "standalone",
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.plugins.push(
