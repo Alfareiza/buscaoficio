@@ -1,0 +1,36 @@
+# DRAFT — production Dockerfile for the Next.js frontend.
+# NOT built/deployed yet. Review before use.
+#
+# Differs from the dev Dockerfile by actually running `pnpm build` at image-build
+# time and serving the compiled app with `pnpm start`, instead of relying on
+# start.sh's `pnpm run dev` + watcher.js. No source bind-mount is needed at
+# runtime — the image is self-contained, same as it would need to be on ECR/ECS.
+
+FROM node:20-bookworm
+
+WORKDIR /app
+
+RUN npm install -g pnpm
+
+# Install dependencies first to leverage Docker layer caching
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+# Copy the rest of the application code (the generated OpenAPI client under
+# app/openapi-client is already committed, so this build has no dependency on
+# the backend or the openapi watcher being available)
+COPY . .
+
+# SENTRY_AUTH_TOKEN is only needed at build time (sourcemap upload via the
+# Sentry Next.js plugin, see next.config.mjs) - passed in as a build-arg from
+# CI, never baked into the running container's env beyond the build layer.
+ARG SENTRY_AUTH_TOKEN
+ENV SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN}
+
+RUN pnpm run build
+
+USER node
+EXPOSE 3000
+ENV NODE_ENV=production
+
+CMD ["pnpm", "start"]

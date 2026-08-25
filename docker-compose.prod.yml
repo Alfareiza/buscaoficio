@@ -1,0 +1,84 @@
+# DRAFT — production Docker Compose file for the EC2 box.
+# NOT deployed yet. Review before copying to the server.
+#
+# Differences from the dev docker-compose.yml at repo root:
+#   - No db / db_test / mailhog containers (RDS + real SMTP provider replace them).
+#   - No source bind-mounts — services run from the built image, not hot-reloaded.
+#   - backend runs a production ASGI command instead of `fastapi dev --reload`.
+#   - frontend is built at image-build time (nextjs-frontend/Dockerfile.prod) and
+#     served via `pnpm start`, not `pnpm run dev`.
+#   - Neither watcher.py nor watcher.js run (OpenAPI sync is a dev-only concern;
+#     the generated TS client is already committed to the repo).
+#   - Only Caddy publishes ports to the host (80/443). backend/frontend are only
+#     reachable through the app_network, not exposed directly on the EC2 box.
+#
+# Expects three env files to exist on the EC2 box (none of them committed):
+#   ./.env                        - DOMAIN, API_DOMAIN, ACME_EMAIL, BACKEND_IMAGE,
+#                                    FRONTEND_IMAGE (see .env.prod.example)
+#   ./fastapi_backend/.env        - production values for fastapi_backend/.env.example
+#   ./nextjs-frontend/.env        - production values for nextjs-frontend/.env.example
+#
+# Images are built in CI (GitHub Actions) and pushed to ECR, tagged with the git
+# SHA. This file only ever pulls pre-built images — no `docker compose build` is
+# run on the box (913MB RAM makes building here unreliable).
+
+services:
+  backend:
+    image: ${BACKEND_IMAGE}
+    command:
+      [
+        "fastapi",
+        "run",
+        "app/main.py",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8001",
+        "--workers",
+        "2",
+      ]
+    env_file:
+      - ./fastapi_backend/.env
+    networks:
+      - app_network
+    restart: unless-stopped
+
+  frontend:
+    image: ${FRONTEND_IMAGE}
+    env_file:
+      - ./nextjs-frontend/.env
+    environment:
+      - NODE_ENV=production
+    networks:
+      - app_network
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN}
+      - API_DOMAIN=${API_DOMAIN}
+      - ACME_EMAIL=${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - app_network
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

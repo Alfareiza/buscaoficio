@@ -1,0 +1,126 @@
+name: Deploy to production (EC2)
+
+# Builds backend/frontend images, pushes them to ECR tagged with the commit SHA,
+# then tells the EC2 box to pull those exact tags and restart via Docker Compose.
+# No build ever happens on the box (913MB RAM makes that unreliable) - the box
+# only runs `docker compose pull` + `up -d` against docker-compose.prod.yml.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "fastapi_backend/**"
+      - "nextjs-frontend/**"
+      - "docker-compose.prod.yml"
+      - "Caddyfile"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write # required for OIDC -> AWS role assumption
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: 502993831706.dkr.ecr.us-east-1.amazonaws.com
+  BACKEND_REPO: buscaoficio-backend
+  FRONTEND_REPO: buscaoficio-frontend
+
+jobs:
+  build-backend:
+    name: Build & push backend image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push backend image
+        working-directory: ./fastapi_backend
+        run: |
+          IMAGE="${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ github.sha }}"
+          # --provenance=false: without it buildx pushes an OCI image index whose
+          # real (tagged-by-nothing) child manifest holds the layers. The repo's
+          # lifecycle rule expires untagged images after 7 days, which would strand
+          # the tag pointing at deleted content. Single-platform build, so the
+          # manifest-list indirection buys nothing anyway.
+          docker build --provenance=false -t "$IMAGE" -f Dockerfile .
+          docker push "$IMAGE"
+
+  build-frontend:
+    name: Build & push frontend image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push frontend image
+        working-directory: ./nextjs-frontend
+        run: |
+          IMAGE="${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ github.sha }}"
+          # --provenance=false for the same reason as the backend job above.
+          docker build --provenance=false \
+            --build-arg SENTRY_AUTH_TOKEN="${{ secrets.SENTRY_AUTH_TOKEN }}" \
+            -t "$IMAGE" -f Dockerfile.prod .
+          docker push "$IMAGE"
+
+  deploy:
+    name: Deploy to EC2
+    needs: [build-backend, build-frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The box has no git checkout, and images only carry app code - so the
+      # infra config (compose file + Caddyfile) has to be shipped separately.
+      # Without this the workflow's `paths:` filter is a lie: editing the
+      # Caddyfile would trigger a green deploy that ran the box's stale copy.
+      # Neither file contains secrets; the three .env files live only on the
+      # box and are deliberately never copied.
+      - name: Copy infra config to the box
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "docker-compose.prod.yml,Caddyfile"
+          target: /opt/buscaoficio
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /opt/buscaoficio
+            BACKEND_IMAGE="${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ github.sha }}"
+            FRONTEND_IMAGE="${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ github.sha }}"
+            aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
+            sed -i "s#^BACKEND_IMAGE=.*#BACKEND_IMAGE=${BACKEND_IMAGE}#" .env
+            sed -i "s#^FRONTEND_IMAGE=.*#FRONTEND_IMAGE=${FRONTEND_IMAGE}#" .env
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d
+            # The Caddyfile is a bind mount, so a changed file does NOT make
+            # Compose recreate the container - `up -d` alone would leave the old
+            # config loaded. Reload it explicitly (graceful, no dropped conns).
+            docker compose -f docker-compose.prod.yml exec -T caddy \
+              caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+            docker image prune -f

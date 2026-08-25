@@ -1,0 +1,36 @@
+# Keeps host-only files out of the build context.
+#
+# The two that actually matter for correctness:
+#   node_modules - the Dockerfile runs `pnpm install --frozen-lockfile` before
+#                  `COPY . .`. A host node_modules copied over it would clobber
+#                  the install, and on Apple Silicon it holds arm64 binaries
+#                  that can't run on the x86_64 EC2 box.
+#   .env.local   - real local/production secrets. Never bake these into an image
+#                  that gets pushed to ECR.
+
+# Dependencies and build output
+node_modules/
+.next/
+.swc/
+tsconfig.tsbuildinfo
+
+# Secrets (.env.example is intentionally kept — it's the committed template)
+.env
+.env.*
+!.env.example
+
+# VCS and editor noise
+.git/
+.gitignore
+.DS_Store
+
+# Inactive Vercel leftovers from the upstream template (see aws-deployer agent)
+vercel.json
+
+# Docs, tests, and local tooling not needed for a production build
+README.md
+.CLAUDE.md
+docs/
+__tests__/
+jest.config.ts
+openapi-ts-error-*.log
