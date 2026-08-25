@@ -1,0 +1,32 @@
+name: Infra files are manual on EC2
+
+# docker-compose.prod.yml and Caddyfile live at /opt/buscaoficio on the box,
+# copied by hand. GitHub-hosted runners cannot SCP/SSH in (security group
+# allows :22 from operator IPs only). This workflow exists so a push that
+# edits those files cannot look like a no-op: it fails on purpose with a
+# reminder to copy the new files onto the instance.
+
+on:
+  push:
+    branches:
+      - main
+      - 18-deployment-workflow
+    paths:
+      - "docker-compose.prod.yml"
+      - "Caddyfile"
+  pull_request:
+    paths:
+      - "docker-compose.prod.yml"
+      - "Caddyfile"
+
+jobs:
+  remind:
+    name: Copy these files onto the box yourself
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail with a reminder
+        run: |
+          echo "::warning title=EC2 infra files are not deployed::docker-compose.prod.yml and Caddyfile are mounted manually at /opt/buscaoficio. This repo does not SCP them (GitHub runners are blocked on :22). Copy the new files onto the box and reload Caddy:"
+          echo "scp -i ~/.ssh/aag.pem docker-compose.prod.yml Caddyfile ec2-user@44.207.170.68:/opt/buscaoficio/"
+          echo "ssh -i ~/.ssh/aag.pem ec2-user@44.207.170.68 'cd /opt/buscaoficio && docker compose -f docker-compose.prod.yml up -d && docker compose -f docker-compose.prod.yml exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile'"
+          exit 1

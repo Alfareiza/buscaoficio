@@ -59,11 +59,22 @@
 Changed from defaults (Postgres 5432/5433, API 8000) to avoid conflict with another local project.
 
 ### DevOps / Infrastructure
-- Docker Compose: `backend`, `frontend`, `db`, `db_test`, `mailhog`
+- Docker Compose: `backend`, `frontend`, `db`, `db_test`, `mailhog` (local)
 - Shared volume `local-shared-data` for OpenAPI schema between BE and FE containers
 - Makefile for start, migrate, test, shells
-- GitHub Actions: CI (FastAPI + Next.js), pre-commit, release
-- Deploy target: **Vercel** (separate FE/BE projects; prod deploy workflow files at repo root, move into `.github/workflows` to enable)
+- GitHub Actions: CI (FastAPI + Next.js), pre-commit, release, **deploy**
+  (`.github/workflows/deploy.yml`)
+- **Production deploy target: EC2 + ECR + Docker Compose**, not Vercel.
+  Region `us-east-1`, account `502993831706`. Images
+  `buscaoficio-backend` / `buscaoficio-frontend` tagged with `github.sha`.
+  The box (`i-0b3ac8e7768cb4b5d`, Elastic IP `44.207.170.68`) only pulls
+  and runs `docker-compose.prod.yml` — it never builds (913MB RAM).
+- GitHub Actions authenticates to AWS via **OIDC** (secret
+  `AWS_DEPLOY_ROLE_ARN`). Trust-policy `sub` must use GitHub's numeric-ID
+  form `repo:Alfareiza@63620799/buscaoficio@1329243606:*`, not
+  `repo:Alfareiza/buscaoficio:*`. The `*` is repo-wide; branch filtering
+  lives in the workflow YAML.
+- Template Vercel workflows/docs still exist; they are not the prod path.
 - Quality: pre-commit, Ruff, mypy, ESLint/Prettier
 - Docs: MkDocs Material
 
@@ -111,11 +122,14 @@ Not “E2W”. End-to-end type safety means:
 - Fake local SMTP catcher; captures mail for password reset / verification in UI (`:8025`)
 - Community: still useful and simple; **unmaintained since ~2020**; for greenfield, prefer **Mailpit** (drop-in same ports)
 
-## Vercel vs Docker (important)
-- **Local:** Docker containers / Compose
-- **Vercel:** NOT containers - serverless (Next.js + FastAPI via `api/index.py` importing `app`)
-- **`$PORT` is not mapped** for Vercel in this repo. Local `start.sh` hardcodes `--port 8001`. On Vercel the platform invokes ASGI; no uvicorn bind.
-- Dockerfiles / EXPOSE are for local Compose, not Vercel.
+## Local vs production (important)
+- **Local:** Docker Compose (`make docker-start-*`) or host processes + Docker Postgres.
+- **Production:** GitHub Actions builds images → ECR → EC2 `docker compose pull/up`.
+  Frontend uses `nextjs-frontend/Dockerfile.prod`. Backend uses
+  `fastapi_backend/Dockerfile`.
+- Template Vercel path (serverless Next + `api/index.py`) still exists in
+  the repo but is **not** what production uses. `$PORT` is still not
+  mapped for that unused path. Local `start.sh` hardcodes `--port 8001`.
 
 ## Observability
 - Org: `aag-k0`. Projects: `buscaoficio-backend` (python-fastapi),

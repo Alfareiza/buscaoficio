@@ -1,6 +1,13 @@
 # Active Context
 
 ## Current focus
+- **Production deploy on EC2 (in progress, 2026-08-25), branch
+  `18-deployment-workflow`.** `.github/workflows/deploy.yml` builds FE/BE
+  images in Actions, pushes to ECR tagged with the commit SHA, then SSHes
+  to the box to `docker compose pull && up -d`. OIDC trust policy is
+  fixed (GitHub `sub` uses numeric IDs). Build & push jobs have succeeded;
+  the **Deploy to EC2** job is still failing — images in ECR are ahead of
+  what the box is running. See Recent changes.
 - **Google Sign-In, 2026-08-22/23, merged to `main` via PR #17** (branch
   `feature/google-sign-in`). Server-side OAuth 2.0 authorization code flow;
   reaches the same fork OTP verification already does (existing account
@@ -52,6 +59,19 @@
   steps.
 
 ## Recent changes
+- **EC2/ECR deploy pipeline, 2026-08-25 (branch `18-deployment-workflow`,
+  not yet on `main`).** Workflow `.github/workflows/deploy.yml`: parallel
+  `build-backend` / `build-frontend` (OIDC → ECR login → `docker build
+  --provenance=false` + push as `…/buscaoficio-{backend,frontend}:${{ github.sha }}`),
+  then `deploy` copies `docker-compose.prod.yml` + `Caddyfile` via SCP and
+  SSHes in to rewrite image tags in `/opt/buscaoficio/.env` and restart
+  Compose. OIDC `AssumeRoleWithWebIdentity` initially failed because the
+  IAM trust policy used slug form `repo:Alfareiza/buscaoficio:ref:refs/heads/…`
+  while GitHub now emits
+  `repo:Alfareiza@63620799/buscaoficio@1329243606:…`. Trust policy updated
+  to the numeric-ID `sub` with `:*` (any branch of this repo); branch
+  gating stays in the workflow YAML. After that fix, both image-push jobs
+  succeeded; **Deploy to EC2 still failing** as of this update.
 - **Google Sign-In, 2026-08-22/23, merged to `main` via PR #17.** Server-side
   OAuth 2.0 authorization code flow (`GET /auth/google/authorize` → Google →
   `GET /auth/google/callback` → a Next.js **Route Handler**
@@ -391,7 +411,8 @@
   since it's part of the public API contract regardless of what the current
   frontend does; needed an explicit answer, not an inference from the code.
 - Stay on template patterns (Makefile + watchers for OpenAPI sync).
-- Keep Vercel as intended deploy target (serverless, not containers).
+- **Production deploy is EC2 + ECR + Compose**, not Vercel. Vercel
+  serverless leftovers stay in the repo until someone deletes them.
 - MailHog remains for local email; Mailpit is a known alternative if we replace later.
 - Prefer Docker for Postgres even when running API/FE on host.
 - Auth routes are kept explicit (not using fastapi-users built-in router) to allow clear docstrings in OpenAPI docs.
@@ -406,14 +427,17 @@
   `tunnelRoute` unless we explicitly decide to.
 
 ## Next steps (suggested)
-1. Open a PR for branch `otp-ux-polish-required-whatsapp` (issue #15,
+1. Finish the EC2 deploy job in `.github/workflows/deploy.yml` (build/push
+   already works; SSH/SCP to the box is the remaining failure). Confirm
+   the box is running the SHA that ECR just received.
+2. Open a PR for branch `otp-ux-polish-required-whatsapp` (issue #15,
    pushed 2026-08-20) once ready for review.
-2. **Resolve the frontend architecture question** (server-mediated vs. SPA
+3. **Resolve the frontend architecture question** (server-mediated vs. SPA
    vs. hybrid — see Current focus / Active decisions). Now somewhat
    independent of #10 (already merged) but still relevant to how future
    features (live status, messaging) get built.
-3. Close out issue #8 (parent) once the architecture question above is settled.
-4. **Re-evaluate GitHub issue #1 (email verification)** — its premise may
+4. Close out issue #8 (parent) once the architecture question above is settled.
+5. **Re-evaluate GitHub issue #1 (email verification)** — its premise may
    have changed: OTP-created accounts are already `is_verified=true` at
    creation (receiving the code already proves mailbox ownership), and the
    password-based registration flow that could produce an unverified
@@ -422,18 +446,19 @@
    act on — worth deciding whether to close #1 as no-longer-applicable,
    scope it down, or actually remove those routes too (not done in this
    session — see the removal entry's "Not done" note).
-5. Decide the fate of `/forgot-password`/`/reset-password` and the
-   frontend `/password-recovery` pages — same vestigial status as #4 above
+6. Decide the fate of `/forgot-password`/`/reset-password` and the
+   frontend `/password-recovery` pages — same vestigial status as #5 above
    (no password-login route left to use a reset password with), flagged
    but not acted on.
-6. Add `createsuperuser` management command under `commands/` — the
+7. Add `createsuperuser` management command under `commands/` — the
    go-to instruction for this changed from "`POST /auth/register` then
    promote in SQL" to "sign up via the app's OTP flow, or FastAdmin, then
    promote in SQL" (see `docs/auth.md`), but the underlying gap is the same.
-7. If deploying: set Sentry env vars on Vercel (`SENTRY_ENVIRONMENT=production`)
-   and add `SENTRY_AUTH_TOKEN` for frontend source maps.
-8. Decide whether to evolve toward domain "busca oficio" features.
-9. Optional cosmetic cleanup: many unrelated route docstrings (`items.py`,
+8. Production Sentry: `SENTRY_ENVIRONMENT=production` on the box, plus
+   `SENTRY_AUTH_TOKEN` (already wired as a GitHub secret for the frontend
+   image build / source maps).
+9. Decide whether to evolve toward domain "busca oficio" features.
+10. Optional cosmetic cleanup: many unrelated route docstrings (`items.py`,
    user/cliente/profesional CRUD) still say "Requires POST /auth/jwt/login"
    as generic authenticated-request boilerplate — harmless (Swagger text
    only) but worth a sweep to say `/otp/verify` instead, next time someone
@@ -457,7 +482,8 @@
   2026-08-18 cleanup (unconfirmed scope), but worth a deliberate decision
   rather than leaving them as silent dead weight indefinitely.
 - Whether to migrate MailHog → Mailpit.
-- Whether `$PORT` / container deploy will ever be needed (not required for Vercel path).
+- Whether to delete the leftover Vercel serverless path (`api/index.py`,
+  template deploy workflows) now that production is EC2.
 - Product domain requirements not yet defined beyond the template MVP.
 - No RBAC or fine-grained permissions — only binary `is_superuser` flag exists today.
 - First real Sentry error from a running app has not been verified end-to-end
