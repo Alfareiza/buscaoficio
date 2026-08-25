@@ -67,3 +67,80 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Backdrop for <AuthBrandPanel>. Three oversized palette gradients rotate
+   behind the copy while a staggered fade crossfades between them, so the
+   surface drifts through the brand instead of sitting on one flat fill.
+   Kept in plain CSS (not tailwind.config keyframes) because the layers wire
+   both animations through an inline `animation` shorthand — Tailwind only
+   emits config keyframes for `animate-*` utilities it can see in the markup. */
+@keyframes brand-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* One layer holds ~6s and crossfades over ~2s on either side; the three
+   layers stagger by 8s across the 24s cycle to hand off cleanly. */
+@keyframes brand-cycle {
+  0%,
+  41.7%,
+  100% {
+    opacity: 0;
+  }
+  8.3%,
+  33.3% {
+    opacity: 0.38;
+  }
+}
+
+.brand-layer {
+  opacity: 0;
+}
+
+/* Service cards inside <AuthBrandPanel>. Every slot stacks all seven services
+   and plays this one cycle, each card offset by a full step, so a card holds
+   the frame for 1/7 of the cycle and hands over exactly as the next fades in.
+   The percentages are fixed by the service count (1/7 = 14.286%) — change
+   SERVICIOS.length and these need to move with it. */
+@keyframes brand-card {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  2%,
+  12.3% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  14.286%,
+  100% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+.brand-card {
+  opacity: 0;
+}
+
+/* Without motion the crossfade would leave every layer at opacity 0, so pin
+   the first one on and let the panel read as a static gradient. */
+@media (prefers-reduced-motion: reduce) {
+  .brand-layer,
+  .brand-card {
+    animation: none !important;
+  }
+
+  .brand-layer:first-child {
+    opacity: 0.38;
+  }
+
+  .brand-card:first-child {
+    opacity: 1;
+    transform: none;
+  }
+}
