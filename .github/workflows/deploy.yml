@@ -9,7 +9,6 @@ on:
   push:
     branches:
       - main
-      - 18-deployment-workflow
     paths:
       - "fastapi_backend/**"
       - "nextjs-frontend/**"

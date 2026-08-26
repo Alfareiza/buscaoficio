@@ -10,7 +10,6 @@ on:
   push:
     branches:
       - main
-      - 18-deployment-workflow
     paths:
       - "docker-compose.prod.yml"
       - "Caddyfile"
