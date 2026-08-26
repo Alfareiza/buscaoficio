@@ -27,8 +27,12 @@
 - Alembic migrations (user + item revisions present)
 - CI workflows (FastAPI + Next.js), pre-commit, MkDocs
 - Production deploy workflow (`.github/workflows/deploy.yml`): OIDC →
-  ECR image push works; **Deploy to EC2 job still failing** (2026-08-25).
-  Vercel template workflows/docs remain but are not the prod path.
+  ECR image push → SSH deploy to EC2 **works end-to-end** (2026-08-26);
+  production runs login, Google Sign-In, RDS Postgres, FastAdmin. ECR
+  pushes are idempotent ("already exists" = success) so re-runs can't fail
+  on immutable SHA tags. Branch `18-deployment-workflow` is not yet merged
+  to `main`. Vercel template workflows/docs remain but are not the prod
+  path.
 
 ## Local customizations done
 - [x] Postgres host ports remapped to **5434** (db) and **5435** (db_test)
@@ -67,7 +71,10 @@
 - [ ] Confirm DBs restarted and migrations applied after port change
 - [ ] Domain product features for "busca oficio" (not started)
 - [ ] Production email provider (beyond MailHog)
-- [ ] Finish Deploy to EC2 job (SCP/SSH); box should run the SHA that ECR has
+- [x] Finish Deploy to EC2 job (SCP/SSH); box should run the SHA that ECR has
+- [ ] Create the first superuser to log into FastAdmin
+  (https://api.buscaoficio.co/admin) — the 3-step bootstrap the user
+  provided
 - [ ] Prod secrets on the box, including Sentry DSN +
   `SENTRY_ENVIRONMENT=production` (frontend `SENTRY_AUTH_TOKEN` is already
   a GitHub Actions secret used at image-build time)
@@ -285,6 +292,21 @@
 - After that, Build & push (backend + frontend) succeeded; Deploy to EC2
   still failing. Images in ECR are tagged with the commit SHA; the box
   has not pulled them yet.
+
+## Session log (2026-08-26) — Deploy pipeline stabilization + ECR immutable-tag fix
+- Production is up end-to-end (login, Google Sign-In, RDS Postgres,
+  FastAdmin) on branch `18-deployment-workflow`; the only remaining action
+  is creating the first superuser for FastAdmin (3-step bootstrap).
+- Fixed the recurring `"image tag … already exists … tag is immutable"`
+  ECR failure: `deploy.yml`'s build jobs now treat that push rejection as
+  success (same SHA = same content, immutability guarantees it), so GitHub
+  re-runs, `workflow_dispatch`, and duplicate pushes all deploy cleanly.
+  The `docker image prune` on the box (disk-full fix from `9372d34`) is
+  unrelated to this ECR error — no manual prune ever unblocks it.
+- Recent pipeline commits: `0713267` (opaque prod 500s, squashed
+  migrations), `73ae711` (concurrency per ref), `9372d34` (prune after
+  `up -d` so old images are actually orphaned), `20dc245` (Google redirect
+  to 0.0.0.0:3000), `ee94b4f` (pnpm via Corepack).
 
 ## Session log (2026-08-20) — OTP UX polish: multi-box input, cooldown fix, required WhatsApp
 - Picked up a second, larger batch of uncommitted OTP UX work sitting

@@ -1,13 +1,15 @@
 # Active Context
 
 ## Current focus
-- **Production deploy on EC2 (in progress, 2026-08-25), branch
-  `18-deployment-workflow`.** `.github/workflows/deploy.yml` builds FE/BE
-  images in Actions, pushes to ECR tagged with the commit SHA, then SSHes
-  to the box to `docker compose pull && up -d`. OIDC trust policy is
-  fixed (GitHub `sub` uses numeric IDs). Build & push jobs have succeeded;
-  the **Deploy to EC2** job is still failing — images in ECR are ahead of
-  what the box is running. See Recent changes.
+- **Production deploy on EC2 (working, branch `18-deployment-workflow`,
+  not yet merged to `main`).** `.github/workflows/deploy.yml` builds FE/BE
+  images in Actions, pushes to ECR tagged with the commit SHA (push is
+  idempotent — "tag already exists" is treated as success), then SSHes to
+  the box to `docker compose pull && up -d`. Production is live: login,
+  Google Sign-In, RDS Postgres, FastAdmin
+  (https://api.buscaoficio.co/admin) all work. **Remaining action: create
+  the first superuser** to log into FastAdmin, following the 3-step
+  bootstrap the user provided. See Recent changes.
 - **Google Sign-In, 2026-08-22/23, merged to `main` via PR #17** (branch
   `feature/google-sign-in`). Server-side OAuth 2.0 authorization code flow;
   reaches the same fork OTP verification already does (existing account
@@ -59,6 +61,18 @@
   steps.
 
 ## Recent changes
+- **Deploy pipeline stabilized + ECR immutable-tag fix, 2026-08-26
+  (branch `18-deployment-workflow`).** Production is now running
+  end-to-end: login, Google Sign-In, RDS Postgres, FastAdmin. Pipeline
+  commits this week: `0713267` (opaque prod 500s, migrations squashed to a
+  clean initial schema), `73ae711` (serialize runs per ref for duplicate
+  push triggers), `9372d34` (image prune ordering — the 8GB EC2 disk had
+  filled up), `20dc245` (Google Sign-In redirecting to 0.0.0.0:3000 in
+  prod), `ee94b4f` (pnpm pinned via Corepack). The recurring
+  `"tag already exists … tag is immutable"` ECR failure on re-runs was
+  fixed by making the SHA-tagged push idempotent: "already exists" is
+  treated as success, since same SHA = same content. Pending: create the
+  first superuser for FastAdmin (3-step bootstrap from the user).
 - **EC2/ECR deploy pipeline, 2026-08-25 (branch `18-deployment-workflow`,
   not yet on `main`).** Workflow `.github/workflows/deploy.yml`: parallel
   `build-backend` / `build-frontend` (OIDC → ECR login → `docker build
