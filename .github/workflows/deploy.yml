@@ -16,10 +16,11 @@ on:
       - ".github/workflows/deploy.yml"
   workflow_dispatch: {}
 
-# Serializes runs per branch. Without this, two runs for the same push (a
-# rare but observed GitHub platform duplicate-delivery) race to push the
-# same commit-SHA tag to ECR; since both repos are tag-immutable, the loser
-# fails with "tag already exists" instead of deploying cleanly.
+# Serializes runs per branch so two runs for the same push (a rare but
+# observed GitHub platform duplicate-delivery) don't race to SSH into the
+# box at once. The ECR push itself is now idempotent ("already exists" is
+# treated as success), so re-runs and duplicate runs can't fail on the
+# immutable SHA tag anymore.
 concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: false
@@ -64,7 +65,19 @@ jobs:
           # the tag pointing at deleted content. Single-platform build, so the
           # manifest-list indirection buys nothing anyway.
           docker build --provenance=false -t "$IMAGE" -f Dockerfile .
-          docker push "$IMAGE"
+          # ECR tag immutability means a second run for the same SHA (GitHub
+          # re-run, workflow_dispatch, or the same commit pushed to a second
+          # ref) cannot re-push the tag. Same SHA = same content, so the image
+          # already in ECR is exactly the one we want - treat "already exists"
+          # as success instead of failing the run.
+          if docker push "$IMAGE" > push.log 2>&1; then
+            echo "Pushed $IMAGE"
+          elif grep -qiE "already exists" push.log; then
+            echo "Tag already exists - reusing existing image"
+          else
+            cat push.log
+            exit 1
+          fi
 
   build-frontend:
     name: Build & push frontend image
@@ -89,7 +102,14 @@ jobs:
           docker build --provenance=false \
             --build-arg SENTRY_AUTH_TOKEN="${{ secrets.SENTRY_AUTH_TOKEN }}" \
             -t "$IMAGE" -f Dockerfile.prod .
-          docker push "$IMAGE"
+          if docker push "$IMAGE" > push.log 2>&1; then
+            echo "Pushed $IMAGE"
+          elif grep -qiE "already exists" push.log; then
+            echo "Tag already exists - reusing existing image"
+          else
+            cat push.log
+            exit 1
+          fi
 
   deploy:
     name: Deploy to EC2
