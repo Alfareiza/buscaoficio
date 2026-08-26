@@ -18,7 +18,7 @@ For the API, auth, and DB, see [`fastapi_backend/README.md`](../fastapi_backend/
 | API client | `@hey-api/openapi-ts` → `app/openapi-client` |
 | Package manager | **pnpm** |
 | Tests | Jest + Testing Library |
-| Deploy | Vercel (Next.js project) |
+| Deploy | AWS EC2 (Docker image built in CI, see [`docs/deployment.md`](../docs/deployment.md)) |
 
 ---
 
@@ -70,7 +70,7 @@ cp .env.example .env.local
 
 In Docker Compose, `API_BASE_URL` is set to `http://backend:8001` (service DNS), not localhost.
 
-Production: set `API_BASE_URL` to the deployed backend URL in the Vercel project env.
+Production: set `API_BASE_URL` to the deployed backend URL in the on-box `nextjs-frontend/.env` (see `docs/deployment.md`).
 
 ---
 
@@ -167,17 +167,11 @@ make docker-test-frontend
 
 ---
 
-## Deploy (Vercel) - frontend perspective
+## Deploy - frontend perspective
 
-1. Create/link a Vercel project for `nextjs-frontend`.
-2. Set **`API_BASE_URL`** to the deployed backend origin (no trailing assumptions - use the real HTTPS URL).
-3. Redeploy after the backend URL is final.
-4. Ensure backend `CORS_ORIGINS` includes this frontend origin.
-5. Optional CD: move `prod-frontend-deploy.yml` → `.github/workflows/`, set `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID_FRONTEND`.
+Production is AWS (EC2 + Docker + Caddy), not Vercel. CI builds `Dockerfile.prod` and pushes to ECR; the box pulls and runs it. `FRONTEND_URL` must be set in the on-box env — Route Handler redirects behind the reverse proxy resolve to the container bind address otherwise. Full picture: [`docs/deployment.md`](../docs/deployment.md).
 
-Details: [`docs/deployment.md`](../docs/deployment.md).
-
-The FE does **not** need Docker on Vercel. Commit / build uses the generated `app/openapi-client` already in the tree (or regenerate in CI if you add that step).
+The build uses the generated `app/openapi-client` already in the tree (no backend/watcher needed at build time).
 
 ---
 

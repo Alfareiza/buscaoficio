@@ -1,12 +1,12 @@
-site_name: Next.js FastAPI Template
-site_description: Kickstart scalable apps with our Next.js FastAPI Template. Includes auth, type safety (Zod), hot reload, Docker, and Vercel-ready deployment.
-site_url: https://vintasoftware.github.io/nextjs-fastapi-template/
+site_name: BuscaOficio Docs
+site_description: Documentación técnica de BuscaOficio — Next.js + FastAPI, auth passwordless OTP, y despliegue en AWS.
+site_url: https://alfareiza.github.io/buscaoficio/
 
-repo_name: vintasoftware/nextjs-fastapi-template
-repo_url: https://github.com/vintasoftware/nextjs-fastapi-template/
+repo_name: Alfareiza/buscaoficio
+repo_url: https://github.com/Alfareiza/buscaoficio/
 edit_uri: blob/main/docs/
 
-copyright: From <a href="https://www.vintasoftware.com">Vinta Software</a> to the community with 💙
+copyright: © BuscaOficio
 
 theme:
   name: material
@@ -80,14 +80,8 @@ plugins:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/vintasoftware/nextjs-fastapi-template/
-      name: Nextjs FastAPI Template GitHub
-    - icon: fontawesome/brands/x-twitter
-      link: https://x.com/vintasoftware
-      name: Vinta Software X
-    - icon: fontawesome/brands/linkedin
-      link: https://linkedin.com/company/vintasoftware
-      name: Vinta Software LinkedIn
+      link: https://github.com/Alfareiza/buscaoficio/
+      name: BuscaOficio GitHub
   version:
     provider: mike
   analytics:

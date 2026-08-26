@@ -23,7 +23,7 @@ For the UI, see `[nextjs-frontend/README.md](../nextjs-frontend/README.md)`.
 | Email                 | fastapi-mail + Jinja templates                  |
 | Quality               | Ruff, mypy, pytest, pytest-asyncio              |
 | Local SMTP catcher    | MailHog (via Compose)                           |
-| Deploy                | Vercel serverless (`api/index.py` → ASGI `app`) |
+| Deploy                | AWS EC2 (Docker, `fastapi run app/main.py` — see [`docs/deployment.md`](../docs/deployment.md)) |
 
 
 ---
@@ -285,7 +285,7 @@ Tests use `TEST_DATABASE_URL` and recreate schema in `tests/conftest.py`.
 
 ### Connection pooling
 
-The engine uses `NullPool` so the same code path works on Vercel serverless (no sticky pool).
+The engine uses `NullPool` so connection behavior is uniform across dev and prod (no sticky pool).
 
 ---
 
@@ -321,13 +321,13 @@ Production: configure real SMTP (or a provider) via `MAIL_*` env vars - do not u
 
 
 
-## Deploy (Vercel) - backend perspective
+## Deploy - backend perspective
 
-Vercel does **not** run Docker or `start.sh`. It imports the FastAPI app from `api/index.py`.
+Production is AWS (EC2 + Docker + Caddy), not Vercel. The container runs `fastapi run app/main.py --workers 2`. RDS enforces SSL; asyncpg uses `ssl="prefer"` in `app/database.py` and Alembic, so no URL flag is needed.
 
 ### Required production env
 
-- `DATABASE_URL` (Neon / Vercel Postgres / other)
+- `DATABASE_URL` (RDS endpoint, TLS enforced)
 - `ACCESS_SECRET_KEY`, `RESET_PASSWORD_SECRET_KEY`, `VERIFICATION_SECRET_KEY` (strong secrets)
 - `CORS_ORIGINS` - start broad only temporarily; then set to the real frontend origin(s)
 - `FRONTEND_URL` - production frontend URL (for email links)
@@ -337,14 +337,10 @@ Vercel does **not** run Docker or `start.sh`. It imports the FastAPI app from `a
 
 ### Checklist
 
-1. Provision Postgres and set `DATABASE_URL`.
-2. Deploy backend project (`vercel.json` / `vercel.prod.json` as documented in `[docs/deployment.md](../docs/deployment.md)`).
-3. Ensure migrations run (`alembic upgrade head` - automated in the sample GitHub deploy workflow).
-4. After frontend URL is known, tighten `CORS_ORIGINS`.
-5. If using CD: move `prod-backend-deploy.yml` → `.github/workflows/`, set `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID_BACKEND`.
-6. After `uv.lock` changes, refresh `requirements.txt`: `uv export > requirements.txt`.
-
-There is **no** `$PORT` **configuration** for Vercel in this repo; the platform invokes ASGI directly.
+1. Create the app database on RDS (see `docs/deployment.md` first-time setup) and set `DATABASE_URL` + all `*_SECRET_KEY`s.
+2. CI builds the image and the box pulls it via `docker-compose.prod.yml` — nothing to do by hand.
+3. Run migrations manually against RDS: `docker compose -f docker-compose.prod.yml exec -T backend alembic upgrade head` (reviewed before applying, by project convention).
+4. After frontend URL is known, tighten `CORS_ORIGINS` to the real origin(s).
 
 ---
 
@@ -365,7 +361,6 @@ fastapi_backend/
 │   └── config.py        # Settings
 ├── alembic_migrations/
 ├── commands/generate_openapi_schema.py
-├── api/index.py         # Vercel entry
 ├── start.sh             # Dev: API + watcher
 ├── watcher.py
 └── tests/

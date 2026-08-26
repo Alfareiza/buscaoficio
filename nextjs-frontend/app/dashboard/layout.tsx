@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Home, Users2, List } from "lucide-react";
-import Image from "next/image";
 
 import {
   Breadcrumb,
@@ -16,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { BuscaOficioMark } from "@/components/ui/BuscaOficioLogo";
 import { logout } from "@/components/actions/logout-action";
 
 export default function DashboardLayout({
@@ -31,12 +31,9 @@ export default function DashboardLayout({
             href="/"
             className="flex items-center justify-center rounded-full"
           >
-            <Image
-              src="/images/vinta.png"
-              alt="Vinta"
-              width={64}
-              height={64}
-              className="object-cover transition-transform duration-200 hover:scale-105"
+            <BuscaOficioMark
+              size={40}
+              className="transition-transform duration-200 hover:scale-105"
             />
           </Link>
           <Link

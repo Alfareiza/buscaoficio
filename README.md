@@ -2,7 +2,7 @@
 
 Full-stack starter for **Buscaoficio**: a Next.js frontend talking to a FastAPI backend, with JWT auth, a dashboard, PostgreSQL, and a typed API client generated from OpenAPI.
 
-The repo is based on [Vinta Software’s Next.js FastAPI Template](https://github.com/vintasoftware/nextjs-fastapi-template). Domain-specific product features are not built yet; this is the production-shaped foundation (auth, CRUD, typed FE/BE contract, local Docker, Vercel deploy).
+The repo is based on [Vinta Software’s Next.js FastAPI Template](https://github.com/vintasoftware/nextjs-fastapi-template). Domain-specific product features are not built yet; this is the production-shaped foundation (auth, CRUD, typed FE/BE contract, local Docker, AWS deployment (EC2 + RDS)).
 
 | App | Details |
 | --- | ------- |

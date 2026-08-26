@@ -8,11 +8,11 @@ export default function Home() {
     <main className="flex min-h-screen flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 p-8">
       <div className="text-center max-w-2xl">
         <h1 className="text-5xl font-bold text-gray-800 dark:text-white mb-6">
-          Welcome to the Next.js & FastAPI Boilerplate
+          BuscaOficio
         </h1>
         <p className="text-lg text-gray-600 dark:text-gray-300 mb-8">
-          A simple and powerful template to get started with full-stack
-          development using Next.js and FastAPI.
+          Conecta con profesionales de confianza o encuentra
+          clientes para tus servicios.
         </p>
 
         {/* Link to Dashboard */}
@@ -30,11 +30,11 @@ export default function Home() {
           >
             <FaGithub className="w-5 h-5 text-black dark:text-white" />
             <Link
-              href="https://github.com/vintasoftware/nextjs-fastapi-template"
+              href="https://github.com/Alfareiza/buscaoficio"
               target="_blank"
               className="hover:underline"
             >
-              View on GitHub
+              Ver en GitHub
             </Link>
           </Badge>
         </div>

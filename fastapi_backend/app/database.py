@@ -24,7 +24,7 @@ async_db_connection_url = (
 # connections outright, so the same setting ends up encrypted there with no
 # environment-specific branching needed.
 #
-# Disable connection pooling for serverless environments like Vercel
+# Disable connection pooling — keeps connection behavior uniform across dev and prod
 engine = create_async_engine(
     async_db_connection_url, poolclass=NullPool, connect_args={"ssl": "prefer"}
 )
