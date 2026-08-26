@@ -19,8 +19,21 @@ import { setGoogleIdentityCookie } from "@/lib/google-identity-cookie";
  * must be set on this origin — see docs/auth.md's cookie-forwarding
  * section.
  */
+/** Route Handlers on the Node.js runtime (unlike middleware, which Next
+ * normalizes same-origin redirects for) ship request.url's origin verbatim
+ * in the Location header. Behind Caddy's reverse proxy, that origin
+ * resolves to the standalone server's own bind address (0.0.0.0:3000), not
+ * the public domain — confirmed by curling the frontend container directly
+ * with an explicit correct Host header and still getting 0.0.0.0:3000 back.
+ * FRONTEND_URL is the same explicit-config workaround auth.py already uses
+ * for this exact reason; falling back to request.url keeps local dev (no
+ * reverse proxy, no FRONTEND_URL set) working unchanged. */
+function absoluteUrl(pathAndQuery: string, request: NextRequest): URL {
+  return new URL(pathAndQuery, process.env.FRONTEND_URL ?? request.url);
+}
+
 export async function GET(request: NextRequest) {
-  const loginUrl = new URL("/login?error=google_auth_failed", request.url);
+  const loginUrl = absoluteUrl("/login?error=google_auth_failed", request);
   const token = request.nextUrl.searchParams.get("google_session_token");
 
   if (!token) {
@@ -48,7 +61,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
-    const response = NextResponse.redirect(new URL("/dashboard", request.url));
+    const response = NextResponse.redirect(absoluteUrl("/dashboard", request));
 
     setAccessTokenCookie(
       response.cookies,
