@@ -117,9 +117,16 @@ jobs:
             aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
             sed -i "s#^BACKEND_IMAGE=.*#BACKEND_IMAGE=${BACKEND_IMAGE}#" .env
             sed -i "s#^FRONTEND_IMAGE=.*#FRONTEND_IMAGE=${FRONTEND_IMAGE}#" .env
-            docker image prune -f
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d
+            # -a (not just dangling) AFTER up -d (not before): every past
+            # deploy's SHA-tagged image was still "in use" by its running
+            # container at prune time, so `docker image prune -f` alone never
+            # reclaimed anything - images piled up until the 8GB disk filled
+            # (root cause of a real deploy failure on 2026-08-26). Only once
+            # up -d has swapped in the new containers are the old images
+            # actually orphaned and safe to remove.
+            docker image prune -af
             # The Caddyfile is a bind mount, so a changed file does NOT make
             # Compose recreate the container - `up -d` alone would leave the old
             # config loaded. Reload it explicitly (graceful, no dropped conns).
