@@ -18,8 +18,16 @@ async_db_connection_url = (
     f"{parsed_db_url.path}"
 )
 
+# ssl="prefer": negotiates encryption when the server offers it, falls back
+# to plaintext when it doesn't. Local dev Postgres has no SSL configured, so
+# this stays plaintext there; RDS's rds.force_ssl=1 rejects unencrypted
+# connections outright, so the same setting ends up encrypted there with no
+# environment-specific branching needed.
+#
 # Disable connection pooling for serverless environments like Vercel
-engine = create_async_engine(async_db_connection_url, poolclass=NullPool)
+engine = create_async_engine(
+    async_db_connection_url, poolclass=NullPool, connect_args={"ssl": "prefer"}
+)
 
 async_session_maker = async_sessionmaker(
     engine, expire_on_commit=settings.EXPIRE_ON_COMMIT

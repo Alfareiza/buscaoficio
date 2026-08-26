@@ -88,10 +88,13 @@ async def run_async_migrations() -> None:
 
     """
 
+    # ssl="prefer": same reasoning as app/database.py — encrypts when the
+    # server offers it (RDS forces this), plain otherwise (local dev).
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args={"ssl": "prefer"},
     )
 
     async with connectable.connect() as connection:
