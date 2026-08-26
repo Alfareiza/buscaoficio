@@ -39,6 +39,13 @@ function extractErrorMessage(error: unknown): string {
       return (detail as { reason: string }).reason;
     }
   }
+  // Reaching here means the backend's error body didn't match the
+  // {detail: string | {reason: string}} contract (e.g. a non-JSON 500) —
+  // capture it so it isn't silently invisible in Sentry.
+  Sentry.captureMessage("Unrecognized auth error shape", {
+    level: "error",
+    extra: { error },
+  });
   return "Ocurrió un error inesperado. Intenta de nuevo.";
 }
 

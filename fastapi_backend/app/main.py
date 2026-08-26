@@ -1,5 +1,7 @@
-from fastapi import FastAPI
+import sentry_sdk
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi_pagination import add_pagination
 from fastadmin import fastapi_app as admin_app
@@ -36,6 +38,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    # Starlette's default handler for an uncaught exception returns a plain-
+    # text "Internal Server Error" body. The frontend's error parsing only
+    # recognizes JSON {"detail": ...} (the shape FastAPI's own HTTPException
+    # produces), so a plain-text 500 was falling through to a generic message
+    # with no Sentry event at all. capture_exception here is explicit rather
+    # than relying on Sentry's auto-instrumentation timing relative to this
+    # handler.
+    sentry_sdk.capture_exception(exc)
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
+
 
 app.include_router(auth_router, prefix=f"{API_V1_PREFIX}/{AUTH_URL_PATH}")
 app.include_router(users_router, prefix=f"{API_V1_PREFIX}/users")
