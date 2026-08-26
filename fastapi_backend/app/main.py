@@ -1,41 +1,20 @@
-import logging
-import sys
-
-import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi_pagination import add_pagination
 from fastadmin import fastapi_app as admin_app
-from sentry_sdk.integrations.logging import LoggingIntegration
 
 from app.routes.auth import router as auth_router
 from app.routes.items import router as items_router
 from app.routes.users import router as users_router
 
 from . import admin  # noqa: F401
-from .config import STATIC_DIR, logger, settings
+from .config import STATIC_DIR, settings
 from .users import API_V1_PREFIX, AUTH_URL_PATH
 from .utils import simple_generate_unique_route_id
 
-if settings.SENTRY_DSN and "pytest" not in sys.modules:
-    sentry_sdk.init(
-        dsn=settings.SENTRY_DSN,
-        environment=settings.SENTRY_ENVIRONMENT or "development",
-        send_default_pii=False,
-        traces_sample_rate=(
-            0.1 if settings.SENTRY_ENVIRONMENT == "production" else 1.0
-        ),
-        enable_logs=True,
-        integrations=[
-            LoggingIntegration(
-                sentry_logs_level=logging.INFO,
-                level=logging.INFO,
-                event_level=logging.ERROR,
-            ),
-        ],
-    )
-    logger.info("Sentry initialized")
+# Sentry is initialized in app/__init__.py, before app.config builds
+# Settings() — see app/sentry.py for why it cannot live here.
 
 app = FastAPI(
     generate_unique_id_function=simple_generate_unique_route_id,
