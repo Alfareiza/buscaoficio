@@ -27,6 +27,11 @@ and runs `docker-compose.prod.yml` (Caddy in front). The box never builds.
 - Images: `502993831706.dkr.ecr.us-east-1.amazonaws.com/buscaoficio-{backend,frontend}:<sha>`.
   Built with `--provenance=false` so ECR lifecycle expiry of untagged
   images cannot strand a tag.
+- ECR repos are **tag-immutable** and `deploy.yml` tags with `github.sha`,
+  so a re-run or duplicate run re-pushes an existing tag. The push step
+  therefore treats ECR's `"already exists"` rejection as success (same
+  SHA = same content, immutability guarantees the existing image is the
+  right one) — never delete ECR tags by hand to unblock a re-run.
 - `docker-compose.prod.yml` and `Caddyfile` live on the box at
   `/opt/buscaoficio`, copied by hand. GitHub-hosted runners cannot reach
   `:22` (SG is operator-IP-only), so Actions does not SCP them. A push
