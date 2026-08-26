@@ -16,6 +16,14 @@ on:
       - ".github/workflows/deploy.yml"
   workflow_dispatch: {}
 
+# Serializes runs per branch. Without this, two runs for the same push (a
+# rare but observed GitHub platform duplicate-delivery) race to push the
+# same commit-SHA tag to ECR; since both repos are tag-immutable, the loser
+# fails with "tag already exists" instead of deploying cleanly.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   id-token: write # required for OIDC -> AWS role assumption
   contents: read
