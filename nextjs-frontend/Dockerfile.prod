@@ -6,9 +6,13 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 # sharp / native addons on alpine need this; without it `pnpm build` fails.
 RUN apk add --no-cache libc6-compat
-RUN npm install -g pnpm
 
+# Corepack (bundled with Node 20) reads packageManager below and installs
+# that exact, hash-verified pnpm version. `npm install -g pnpm` (no version
+# pin) always fetched latest, which broke this build the day pnpm shipped a
+# stricter engine-identity check this repo's lockfile predates.
 COPY package.json pnpm-lock.yaml ./
+RUN corepack enable && corepack prepare --activate
 RUN pnpm install --frozen-lockfile
 
 # openapi-client is committed; no backend/watcher needed at build time.
