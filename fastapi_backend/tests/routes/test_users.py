@@ -9,7 +9,8 @@ from fastapi_users.router.common import ErrorCode
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from app.models import Item, User
+from app.models import Item, RefreshToken, User
+from app.refresh_token_manager import RefreshTokenManager
 from tests.conftest import DEFAULT_USER_PASSWORD, issue_auth_headers
 
 MISSING_USER_ID = "00000000-0000-0000-0000-000000000000"
@@ -335,17 +336,21 @@ class TestDeleteUser:
     """Tests for DELETE /users/{id} (superuser only)."""
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_superuser_deletes_user_and_items(
+    async def test_superuser_soft_deletes_user_and_keeps_items(
         self,
         test_client: AsyncClient,
         authenticated_superuser: dict,
         create_user,
         db_session,
     ):
-        """Remove the user and cascade-delete their items."""
+        """Populate deleted_at; keep the row and its items."""
         target = await create_user(email="target@example.com")
-        db_session.add(
-            Item(name="Owned item", description="goes away", user_id=target.id)
+        db_session.add(Item(name="Owned item", description="stays", user_id=target.id))
+        await RefreshTokenManager.store_refresh_token(
+            db_session,
+            target.id,
+            refresh_token_hash="hash-a",
+            fingerprint_hash="fp-a",
         )
         await db_session.commit()
 
@@ -355,13 +360,72 @@ class TestDeleteUser:
         )
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
-        assert (await db_session.get(User, target.id)) is None
+        leftover = (
+            await db_session.execute(
+                select(User)
+                .where(User.id == target.id)
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one()
+        assert leftover.deleted_at is not None
+        assert leftover.is_active is False
         leftover_items = (
             (await db_session.execute(select(Item).where(Item.user_id == target.id)))
             .scalars()
             .all()
         )
-        assert leftover_items == []
+        assert len(leftover_items) == 1
+        tokens = (
+            (
+                await db_session.execute(
+                    select(RefreshToken).where(RefreshToken.user_id == target.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert tokens
+        assert all(token.revoked_at is not None for token in tokens)
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_deleted_user_returns_404_on_get(
+        self,
+        test_client: AsyncClient,
+        authenticated_superuser: dict,
+        create_user,
+    ):
+        """Treat a soft-deleted user as missing for superuser GET."""
+        target = await create_user(email="gone@example.com")
+        await test_client.delete(
+            f"/api/v1/users/{target.id}",
+            headers=authenticated_superuser["headers"],
+        )
+
+        response = await test_client.get(
+            f"/api/v1/users/{target.id}",
+            headers=authenticated_superuser["headers"],
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_deleted_user_cannot_use_existing_access_token(
+        self,
+        test_client: AsyncClient,
+        authenticated_superuser: dict,
+        create_user,
+    ):
+        """Reject JWT auth after the account is soft-deleted."""
+        target = await create_user(email="session@example.com")
+        target_headers = await issue_auth_headers(target)
+        await test_client.delete(
+            f"/api/v1/users/{target.id}",
+            headers=authenticated_superuser["headers"],
+        )
+
+        response = await test_client.get("/api/v1/users/me", headers=target_headers)
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_unknown_id_returns_404(

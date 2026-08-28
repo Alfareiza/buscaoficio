@@ -75,6 +75,10 @@ class User(SQLAlchemyBaseUserTableUUID, TimestampMixin, Base):
     # only set for accounts that have signed in with Google at least once
     # (see app/google_oauth_manager.py § "Google Sign-In").
     google_sub = Column(String, unique=True, nullable=True)
+    # Soft-delete timestamp. A populated value means the account is gone for
+    # login/admin listing, but the row stays so email/google_sub uniqueness
+    # still blocks reuse. See UserManager.delete.
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     items = relationship("Item", back_populates="user", cascade="all, delete-orphan")
     cliente = relationship(

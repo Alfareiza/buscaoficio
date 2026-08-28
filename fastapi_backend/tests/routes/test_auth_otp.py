@@ -158,6 +158,58 @@ class TestOtpVerifyExistingUser:
         assert response.json()["has_role"] is False
 
 
+class TestOtpDeletedUser:
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_verify_deleted_email_does_not_treat_as_new_user(
+        self,
+        test_client,
+        mock_send_otp_email,
+        create_user: Callable[..., Awaitable[User]],
+        authenticated_superuser: dict,
+    ) -> None:
+        user = await create_user(email="deleted-otp@example.com")
+        await test_client.delete(
+            f"/api/v1/users/{user.id}",
+            headers=authenticated_superuser["headers"],
+        )
+
+        code = await _request_and_capture_code(
+            test_client, mock_send_otp_email, user.email
+        )
+        response = await test_client.post(
+            "/api/v1/auth/otp/verify", json={"email": user.email, "code": code}
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "registration_token" not in response.json()
+        assert response.json()["detail"] == "LOGIN_BAD_CREDENTIALS"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_register_with_deleted_email_returns_already_exists(
+        self,
+        test_client,
+        create_user: Callable[..., Awaitable[User]],
+        authenticated_superuser: dict,
+    ) -> None:
+        user = await create_user(email="tombstone-otp@example.com")
+        await test_client.delete(
+            f"/api/v1/users/{user.id}",
+            headers=authenticated_superuser["headers"],
+        )
+        registration_token = OtpManager.issue_registration_token(user.email)
+
+        response = await test_client.post(
+            "/api/v1/auth/register/cliente/otp",
+            json={
+                "registration_token": registration_token,
+                "nombre_completo": "Nueva Clienta",
+            },
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["detail"] == "REGISTER_USER_ALREADY_EXISTS"
+
+
 class TestRegisterClienteOtp:
     @pytest.mark.asyncio(loop_scope="function")
     async def test_creates_usuario_and_cliente_then_logs_in(

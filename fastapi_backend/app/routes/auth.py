@@ -157,7 +157,7 @@ async def otp_verify(
         registration_token = OtpManager.issue_registration_token(payload.email)
         return {"status": "new_user", "registration_token": registration_token}
 
-    if not user.is_active:
+    if not user.is_active or user.deleted_at is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=ErrorCode.LOGIN_BAD_CREDENTIALS,
@@ -232,7 +232,9 @@ async def google_callback(
         logger.warning(f"Google Sign-In cancelled or malformed callback: error={error}")
         return RedirectResponse(f"{login_url}?error=google_auth_failed")
 
-    if not GoogleOAuthManager.is_configured() or not GoogleOAuthManager.verify_state(state):
+    if not GoogleOAuthManager.is_configured() or not GoogleOAuthManager.verify_state(
+        state
+    ):
         logger.warning("Google Sign-In callback with invalid/expired state")
         return RedirectResponse(f"{login_url}?error=google_auth_failed")
 
@@ -251,7 +253,7 @@ async def google_callback(
 
     if user is None:
         user = await user_manager.user_db.get_by_email(profile.email)
-        if user is not None and user.google_sub is None:
+        if user is not None and user.google_sub is None and user.deleted_at is None:
             # Existing account (created via OTP) signing in with Google for
             # the first time — link by verified email, matching how this
             # app already treats email as the canonical identity.
@@ -283,12 +285,16 @@ async def google_callback(
             params += f"&name={quote(profile.name)}"
         return RedirectResponse(f"{register_url}?{params}")
 
-    if not user.is_active:
+    if not user.is_active or user.deleted_at is not None:
         logger.warning(f"Google Sign-In rejected: user {user.id} is inactive")
         return RedirectResponse(f"{login_url}?error=google_auth_failed")
 
-    session_token = GoogleOAuthManager.issue_session_token(user.id, picture=profile.picture)
-    logger.info(f"User {user.id} authenticated via Google from {get_client_ip(request)}")
+    session_token = GoogleOAuthManager.issue_session_token(
+        user.id, picture=profile.picture
+    )
+    logger.info(
+        f"User {user.id} authenticated via Google from {get_client_ip(request)}"
+    )
     # Hands off to a Next.js Route Handler (not a page) so the session is
     # established server-side and the browser lands straight on /dashboard —
     # no intermediate screen between Google's consent flow and the app.
@@ -344,7 +350,7 @@ async def google_session(
         )
 
     user = await user_manager.get(UUID(payload["user_id"]))
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or user.deleted_at is not None:
         logger.warning(
             f"Google session exchange failed: user {payload['user_id']} "
             "not found or inactive"
@@ -369,7 +375,9 @@ async def google_session(
         },
     )
     await user_manager.on_after_login(user, request, response)
-    logger.info(f"User {user.id} session established via Google from {get_client_ip(request)}")
+    logger.info(
+        f"User {user.id} session established via Google from {get_client_ip(request)}"
+    )
     return response
 
 
@@ -433,7 +441,7 @@ async def refresh(
         )
 
     user = await user_manager.get(user_id)
-    if not user or not user.is_active:
+    if not user or not user.is_active or user.deleted_at is not None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User inactive or deleted",

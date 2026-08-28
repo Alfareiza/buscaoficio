@@ -67,6 +67,58 @@ class TestUserAdminAuthenticate:
         assert result is None
 
 
+class TestUserAdminSoftDelete:
+    """Tests for soft-delete via FastAdmin."""
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_delete_model_sets_deleted_at(
+        self, user_admin: UserAdmin, create_user, db_session
+    ):
+        """Keep the row and stamp deleted_at instead of removing it."""
+        user = await create_user(email="admin-delete@example.com")
+
+        await user_admin.delete_model(user.id)
+
+        await db_session.refresh(user)
+        assert user.deleted_at is not None
+        assert user.is_active is False
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_list_hides_deleted_users(self, user_admin: UserAdmin, create_user):
+        """Omit tombstones from the Usuarios list."""
+        live = await create_user(email="live@example.com")
+        gone = await create_user(email="gone@example.com")
+        await user_admin.delete_model(gone.id)
+
+        objs, total = await user_admin.orm_get_list()
+
+        ids = {obj.id for obj in objs}
+        assert live.id in ids
+        assert gone.id not in ids
+        assert total == 1
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_get_obj_returns_none_for_deleted_user(
+        self, user_admin: UserAdmin, create_user
+    ):
+        """Change-page fetch of a tombstone looks like a missing row."""
+        user = await create_user(email="hidden@example.com")
+        await user_admin.delete_model(user.id)
+
+        assert await user_admin.orm_get_obj(user.id) is None
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_authenticate_rejects_deleted_superuser(
+        self, user_admin: UserAdmin, superuser: User
+    ):
+        """A soft-deleted superuser cannot sign into /admin."""
+        await user_admin.delete_model(superuser.id)
+
+        result = await user_admin.authenticate(superuser.email, DEFAULT_USER_PASSWORD)
+
+        assert result is None
+
+
 class TestUserAdminChangePassword:
     """Tests for ``UserAdmin.change_password``."""
 

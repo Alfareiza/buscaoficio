@@ -1,6 +1,7 @@
 import uuid
 import re
 
+from datetime import datetime, timezone
 from typing import Optional, Callable
 
 from fastapi import Depends, Request
@@ -22,6 +23,7 @@ from .config import logger, settings
 from .database import get_user_db
 from .email import send_reset_password_email
 from .models import User
+from .refresh_token_manager import RefreshTokenManager
 from .schemas import UserCreate
 
 AUTH_URL_PATH = "auth"
@@ -44,6 +46,20 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         self, user: User, token: str, request: Optional[Request] = None
     ):
         logger.info(f"Verification requested for user {user.id}")
+
+    async def delete(self, user: User, request: Optional[Request] = None) -> None:
+        """Soft-delete: set deleted_at, deactivate, revoke sessions.
+
+        The row stays so unique email/google_sub keep blocking reuse.
+        FastAdmin and DELETE /users/{id} both go through this method.
+        """
+        await self.on_before_delete(user, request)
+        user.deleted_at = datetime.now(timezone.utc)
+        user.is_active = False
+        self.user_db.session.add(user)
+        # Commits the user mutation too — same session, one transaction.
+        await RefreshTokenManager.revoke_all_user_tokens(self.user_db.session, user.id)
+        await self.on_after_delete(user, request)
 
     async def validate_password(
         self,

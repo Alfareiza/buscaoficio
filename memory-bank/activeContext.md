@@ -1,6 +1,14 @@
 # Active Context
 
 ## Current focus
+- **User soft-delete (`deleted_at`), 2026-08-28.** FastAdmin `/admin` (and
+  `DELETE /api/v1/users/{id}`) could not remove a logged-in user:
+  `refresh_tokens_user_id_fkey` blocked a hard `DELETE` on `usuarios`.
+  Delete now stamps `usuarios.deleted_at`, sets `is_active=False`, and
+  revokes refresh tokens. The row stays so unique email/`google_sub` still
+  block reuse. Tombstones are hidden from FastAdmin lists/detail. Needs
+  Alembic `c8f3a91d4e20` applied on prod RDS before admin delete works
+  there. See Recent changes.
 - **Production deploy on EC2 (working, branch `18-deployment-workflow`,
   not yet merged to `main`).** `.github/workflows/deploy.yml` builds FE/BE
   images in Actions, pushes to ECR tagged with the commit SHA (push is
@@ -61,6 +69,16 @@
   steps.
 
 ## Recent changes
+- **User soft-delete (`deleted_at`), 2026-08-28.** Production FastAdmin
+  delete failed with `ForeignKeyViolationError` on `refresh_tokens`.
+  Grilled decisions: no email/Google reuse (unique indexes unchanged);
+  hide tombstones from Usuarios/Cliente/Profesional admin lists; set both
+  `deleted_at` and `is_active=False`; no undelete in this pass.
+  `UserManager.delete` is the single write path (API + `UserAdmin.delete_model`).
+  OTP/Google treat a deleted email as occupied (login fails like inactive,
+  register returns already-exists) and do not attach `google_sub` to a
+  tombstone. Migration `c8f3a91d4e20_add_usuarios_deleted_at`. Backend
+  147/147 tests green. Not committed.
 - **Deploy pipeline stabilized + ECR immutable-tag fix, 2026-08-26
   (branch `18-deployment-workflow`).** Production is now running
   end-to-end: login, Google Sign-In, RDS Postgres, FastAdmin. Pipeline
