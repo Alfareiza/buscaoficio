@@ -1,8 +1,36 @@
 name: pre-commit
 
+# Skip when the diff is only files no hook actually targets. In-scope:
+# .py (ruff, debug-statements, OpenAPI), nextjs-frontend js/jsx/ts/tsx
+# (eslint/prettier/tsc), pyproject.toml + openapi.json (schema/client
+# generation), plus this workflow and .pre-commit-config.yaml.
+# Out of scope (do not add to `paths` below): .md, .yml/.yaml, .html,
+# .css, .svg, .png/.jpg/.jpeg/.webp/.gif/.ico, .woff/.woff2, .json
+# (except openapi.json), .lock, .ini, .txt, .sh, .mjs, Dockerfiles,
+# Makefile, Caddyfile.
 on:
   push:
+    paths:
+      - ".pre-commit-config.yaml"
+      - ".github/workflows/pre-commit.yml"
+      - "**/*.py"
+      - "nextjs-frontend/**/*.js"
+      - "nextjs-frontend/**/*.jsx"
+      - "nextjs-frontend/**/*.ts"
+      - "nextjs-frontend/**/*.tsx"
+      - "**/pyproject.toml"
+      - "**/openapi.json"
   pull_request:
+    paths:
+      - ".pre-commit-config.yaml"
+      - ".github/workflows/pre-commit.yml"
+      - "**/*.py"
+      - "nextjs-frontend/**/*.js"
+      - "nextjs-frontend/**/*.jsx"
+      - "nextjs-frontend/**/*.ts"
+      - "nextjs-frontend/**/*.tsx"
+      - "**/pyproject.toml"
+      - "**/openapi.json"
 
 jobs:
   pre-commit:

@@ -1,8 +1,54 @@
 name: CI
 
+# Skip when the diff is only files neither test job uses. In-scope:
+# FastAPI pytest (*.py, pyproject.toml, uv.lock, pytest.ini, alembic.ini,
+# email templates, static assets, test fixtures), Next.js Jest
+# (js/jsx/ts/tsx, package.json, pnpm-lock.yaml, tsconfig.json,
+# next.config.mjs, openapi.json), plus this workflow.
+# Out of scope (do not add to `paths` below): .md, other .yml/.yaml, .css,
+# public/docs images, .woff/.woff2, .json (except the files listed), .txt,
+# .sh, eslint .mjs, Dockerfiles, Makefile, Caddyfile.
 on:
   push:
+    paths:
+      - ".github/workflows/ci.yml"
+      - "**/*.py"
+      - "**/pyproject.toml"
+      - "fastapi_backend/uv.lock"
+      - "fastapi_backend/pytest.ini"
+      - "fastapi_backend/alembic.ini"
+      - "fastapi_backend/app/email_templates/**"
+      - "fastapi_backend/app/static/**"
+      - "fastapi_backend/tests/**"
+      - "nextjs-frontend/**/*.js"
+      - "nextjs-frontend/**/*.jsx"
+      - "nextjs-frontend/**/*.ts"
+      - "nextjs-frontend/**/*.tsx"
+      - "nextjs-frontend/package.json"
+      - "nextjs-frontend/pnpm-lock.yaml"
+      - "nextjs-frontend/tsconfig.json"
+      - "nextjs-frontend/next.config.mjs"
+      - "**/openapi.json"
   pull_request:
+    paths:
+      - ".github/workflows/ci.yml"
+      - "**/*.py"
+      - "**/pyproject.toml"
+      - "fastapi_backend/uv.lock"
+      - "fastapi_backend/pytest.ini"
+      - "fastapi_backend/alembic.ini"
+      - "fastapi_backend/app/email_templates/**"
+      - "fastapi_backend/app/static/**"
+      - "fastapi_backend/tests/**"
+      - "nextjs-frontend/**/*.js"
+      - "nextjs-frontend/**/*.jsx"
+      - "nextjs-frontend/**/*.ts"
+      - "nextjs-frontend/**/*.tsx"
+      - "nextjs-frontend/package.json"
+      - "nextjs-frontend/pnpm-lock.yaml"
+      - "nextjs-frontend/tsconfig.json"
+      - "nextjs-frontend/next.config.mjs"
+      - "**/openapi.json"
 
 jobs:
   build-fastapi:
