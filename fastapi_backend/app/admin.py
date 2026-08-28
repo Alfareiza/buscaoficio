@@ -102,6 +102,48 @@ class ClienteProfesionalSharedFieldsMixin:
         return [id_mirror, *fields]
 
 
+class HideDeletedUsuarioRowsMixin:
+    """Keep soft-deleted usuarios' cliente/profesional rows off admin pages."""
+
+    async def orm_get_list(
+        self,
+        offset: int | None = None,
+        limit: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        filters: dict | None = None,
+    ) -> tuple[list, int]:
+        objs, _ = await super().orm_get_list(
+            offset=None,
+            limit=None,
+            search=search,
+            sort_by=sort_by,
+            filters=filters,
+        )
+        if not objs:
+            return [], 0
+        usuario_ids = [obj.usuario_id for obj in objs]
+        sessionmaker = self.get_sessionmaker()
+        async with sessionmaker() as session:
+            live_ids = set(
+                (
+                    await session.execute(
+                        select(User.id).where(
+                            User.id.in_(usuario_ids),
+                            User.deleted_at.is_(None),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        live = [obj for obj in objs if obj.usuario_id in live_ids]
+        total = len(live)
+        if offset is not None and limit is not None:
+            live = live[offset : offset + limit]
+        return live, total
+
+
 class ClienteInline(ClienteProfesionalSharedFieldsMixin, SqlAlchemyInlineModelAdmin):
     """Shows a User's cliente profile inline on UserAdmin's change page.
 
@@ -158,7 +200,7 @@ class ProfesionalInline(
 class UserAdmin(SqlAlchemyModelAdmin):
     verbose_name = "Usuarios"
     verbose_name_plural = "Usuarios"
-    exclude = ("hashed_password",)
+    exclude = ("hashed_password", "deleted_at")
     list_display = (  # noqa: RUF012
         "nombre_completo",
         "email",
@@ -234,7 +276,12 @@ class UserAdmin(SqlAlchemyModelAdmin):
         sessionmaker = self.get_sessionmaker()
         async with sessionmaker() as session:
             qry = await session.scalars(
-                select(self.model_cls).filter_by(email=email, is_superuser=True)
+                select(self.model_cls).filter_by(
+                    email=email,
+                    is_superuser=True,
+                    is_active=True,
+                    deleted_at=None,
+                )
             )
             if not (user := qry.first()):
                 return None
@@ -256,8 +303,44 @@ class UserAdmin(SqlAlchemyModelAdmin):
             await session.execute(query)
             await session.commit()
 
+    async def orm_get_list(
+        self,
+        offset: int | None = None,
+        limit: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        filters: dict | None = None,
+    ) -> tuple[list, int]:
+        merged = dict(filters) if filters else {}
+        merged[("deleted_at", "exact")] = None
+        return await super().orm_get_list(offset, limit, search, sort_by, merged)
 
-class UsuarioProvisioningAdminMixin(ClienteProfesionalSharedFieldsMixin):
+    async def orm_get_obj(self, id: uuid.UUID | int | str):
+        obj = await super().orm_get_obj(id)
+        if obj is None or obj.deleted_at is not None:
+            return None
+        return obj
+
+    async def orm_serialize_obj_by_id(self, id: uuid.UUID | int | str) -> dict | None:
+        obj = await self.orm_get_obj(id)
+        if obj is None:
+            return None
+        return await self.serialize_obj(obj)
+
+    async def delete_model(self, id: uuid.UUID | int | str) -> None:
+        sessionmaker = self.get_sessionmaker()
+        async with sessionmaker() as session:
+            user = await session.get(User, id)
+            if user is None:
+                raise ValueError(f"{self.model_cls.__name__} not found.")
+            if user.deleted_at is not None:
+                return
+            await UserManager(SQLAlchemyUserDatabase(session, User)).delete(user)
+
+
+class UsuarioProvisioningAdminMixin(
+    ClienteProfesionalSharedFieldsMixin, HideDeletedUsuarioRowsMixin
+):
     """Lets Cliente/Profesional admin forms create and edit their linked Usuario.
 
     On create: usuario_email/usuario_nombre_completo/usuario_password
@@ -373,9 +456,14 @@ class UsuarioProvisioningAdminMixin(ClienteProfesionalSharedFieldsMixin):
     async def orm_get_obj(self, id: uuid.UUID | int | str):
         sessionmaker = self.get_sessionmaker()
         async with sessionmaker() as session:
-            return await session.get(
+            obj = await session.get(
                 self.model_cls, id, options=[selectinload(self.model_cls.usuario)]
             )
+            if obj is None:
+                return None
+            if obj.usuario is None or obj.usuario.deleted_at is not None:
+                return None
+            return obj
 
     async def orm_serialize_obj_by_id(self, id: uuid.UUID | int | str) -> dict | None:
         sessionmaker = self.get_sessionmaker()
@@ -384,6 +472,8 @@ class UsuarioProvisioningAdminMixin(ClienteProfesionalSharedFieldsMixin):
                 self.model_cls, id, options=[selectinload(self.model_cls.usuario)]
             )
             if obj is None:
+                return None
+            if obj.usuario is None or obj.usuario.deleted_at is not None:
                 return None
             return await self.serialize_obj(obj)
 

@@ -229,6 +229,44 @@ class TestGoogleCallbackExistingUser:
         assert "inactive" in caplog.text
 
     @pytest.mark.asyncio(loop_scope="function")
+    async def test_deleted_user_is_not_linked_and_does_not_register(
+        self,
+        test_client,
+        mocker,
+        create_user: Callable[..., Awaitable[User]],
+        authenticated_superuser: dict,
+        db_session,
+        caplog,
+    ) -> None:
+        user = await create_user(email="deleted-google@example.com")
+        await test_client.delete(
+            f"/api/v1/users/{user.id}",
+            headers=authenticated_superuser["headers"],
+        )
+        _mock_profile(mocker, sub="google-sub-deleted", email=user.email)
+        state = GoogleOAuthManager.issue_state()
+
+        with caplog.at_level("WARNING", logger="buscaoficio"):
+            response = await test_client.get(
+                "/api/v1/auth/google/callback",
+                params={"code": "auth-code", "state": state},
+                follow_redirects=False,
+            )
+
+        location = urlparse(response.headers["location"])
+        assert location.path == "/login"
+        assert parse_qs(location.query)["error"] == ["google_auth_failed"]
+        leftover = (
+            await db_session.execute(
+                select(User)
+                .where(User.id == user.id)
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one()
+        assert leftover.google_sub is None
+        assert leftover.deleted_at is not None
+
+    @pytest.mark.asyncio(loop_scope="function")
     async def test_matched_by_email_backfills_google_sub(
         self,
         test_client,

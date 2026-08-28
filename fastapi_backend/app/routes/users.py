@@ -33,10 +33,14 @@ async def get_user_or_404(
 ) -> User:
     try:
         parsed_id = user_manager.parse_id(id)
-        return await user_manager.get(parsed_id)
+        user = await user_manager.get(parsed_id)
     except (exceptions.UserNotExists, exceptions.InvalidID) as exc:
         logger.warning(f"User not found id={id}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from exc
+    if user.deleted_at is not None:
+        logger.warning(f"User not found id={id}")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return user
 
 
 @router.get(
@@ -167,8 +171,9 @@ async def delete_user(
 ):
     """Delete user by id.
 
-    Superuser only after POST /auth/jwt/login. This also removes that
-    user's items.
+    Superuser only after POST /auth/jwt/login. Soft-deletes the account
+    (sets deleted_at, deactivates, revokes sessions). Cliente/profesional
+    profiles and items stay attached to the tombstone.
     """
     await user_manager.delete(user, request=request)
     logger.info(f"User deleted user_id={user.id}")

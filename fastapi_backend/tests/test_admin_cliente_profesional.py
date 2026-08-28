@@ -2,12 +2,14 @@
 
 import pytest
 from fastadmin import AdminApiException
+from fastapi_users.db import SQLAlchemyUserDatabase
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.admin import ClienteAdmin, ProfesionalAdmin, UserAdmin
 from app.enums import EstadoVerificacionProfesional, TipoDocumento
 from app.models import Cliente, Profesional, User
+from app.users import UserManager
 
 
 @pytest.fixture
@@ -333,3 +335,38 @@ class TestProfesionalAdminSaveModelCreate:
             profesional_row.estado_verificacion
             == EstadoVerificacionProfesional.PENDIENTE.value
         )
+
+
+class TestClienteAdminHidesDeletedUsuario:
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_list_omits_cliente_of_deleted_usuario(
+        self,
+        cliente_admin: ClienteAdmin,
+        db_session: AsyncSession,
+        create_user,
+    ):
+        user = await create_user(email="deleted.cliente@example.com")
+        db_session.add(Cliente(usuario_id=user.id, direccion_default="Calle 1"))
+        await db_session.commit()
+
+        await UserManager(SQLAlchemyUserDatabase(db_session, User)).delete(user)
+
+        objs, total = await cliente_admin.orm_get_list()
+
+        assert total == 0
+        assert objs == []
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_get_obj_returns_none_for_deleted_usuario(
+        self,
+        cliente_admin: ClienteAdmin,
+        db_session: AsyncSession,
+        create_user,
+    ):
+        user = await create_user(email="hidden.cliente@example.com")
+        db_session.add(Cliente(usuario_id=user.id))
+        await db_session.commit()
+
+        await UserManager(SQLAlchemyUserDatabase(db_session, User)).delete(user)
+
+        assert await cliente_admin.orm_get_obj(user.id) is None

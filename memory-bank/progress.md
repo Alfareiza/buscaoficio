@@ -10,6 +10,11 @@
   which flow created the session.
 - JWT refresh token rotation with DB-backed revocation + double-submit
   fingerprint cookie — **merged to `main`** (`0a8376b`, issue #9)
+- User delete is a **soft-delete** (`usuarios.deleted_at` + `is_active=False`,
+  refresh tokens revoked). FastAdmin and `DELETE /users/{id}` both go through
+  `UserManager.delete`. Email/`google_sub` stay unique (no reuse). Apply
+  migration `c8f3a91d4e20` on any database that already has the initial schema
+  (including prod RDS).
 - Frontend cookie forwarding + middleware-based silent refresh + reactive
   401 fallback — **merged to `main`** (`4d75bde`, issue #10)
 - `AuthCard` component (`components/auth/AuthCard.tsx`) drives the OTP
@@ -85,6 +90,11 @@
 
 ## Known issues / gotchas
 - Changing `models.py` alone does **not** update OpenAPI client or DB schema.
+- User delete is **soft**: `UserManager.delete` sets `deleted_at` and
+  `is_active=False` rather than removing the row. FastAdmin lists hide
+  tombstones. Unique email/`google_sub` still occupy the identity. Apply
+  migration `c8f3a91d4e20` on prod or admin delete will 500 on a missing
+  column (and the old FK error returns if you somehow hard-delete).
 - Bare `pnpm run dev` / `uv run fastapi` skips watchers - use Makefile/`start.sh`.
 - Production is EC2 + ECR, not Vercel. GitHub OIDC `sub` is
   `repo:Owner@id/repo@id:…` — a slug-form IAM trust policy fails AssumeRole.
@@ -347,3 +357,11 @@
   a transient race with the locally-running `watcher.js`/`next dev`
   processes — passed cleanly on retry), committed, and pushed. **Not yet
   opened as a PR.**
+
+## Session log (2026-08-28) — user soft-delete
+- Production FastAdmin could not delete a user: `refresh_tokens_user_id_fkey`.
+  Implemented `usuarios.deleted_at` (migration `c8f3a91d4e20`). Delete
+  stamps `deleted_at`, sets `is_active=False`, revokes refresh tokens.
+  Email/`google_sub` uniqueness unchanged (no reuse). FastAdmin hides
+  tombstones. 147/147 backend tests green. Migration not applied (review
+  first, then `make docker-migrate-db` / prod alembic).
