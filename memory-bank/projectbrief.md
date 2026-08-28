@@ -7,7 +7,8 @@ This repo is based on Vinta Software’s **Next.js FastAPI Template** (`vintasof
 - Provide a production-shaped MVP foundation (auth + CRUD + typed FE/BE contract).
 - Keep frontend and backend in sync via OpenAPI-generated TypeScript clients.
 - Support local Docker Compose development and production deploy to EC2
-  (GitHub Actions → ECR → Docker Compose on the box).
+  (GitHub Actions → ECR → Docker Compose on the box). Prod RDS schema
+  via a separate migrate Action, not bundled into deploy.
 
 ## Scope (current template)
 - JWT authentication — passwordless email OTP for login/registration (the

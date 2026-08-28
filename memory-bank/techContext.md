@@ -63,7 +63,8 @@ Changed from defaults (Postgres 5432/5433, API 8000) to avoid conflict with anot
 - Shared volume `local-shared-data` for OpenAPI schema between BE and FE containers
 - Makefile for start, migrate, test, shells
 - GitHub Actions: CI (FastAPI + Next.js), pre-commit, release, **deploy**
-  (`.github/workflows/deploy.yml`)
+  (`.github/workflows/deploy.yml`), **migrate** (`.github/workflows/migrate.yml`
+  — SSH + `alembic upgrade head` in the prod backend container, not Vercel)
 - **Production deploy target: EC2 + ECR + Docker Compose**, not Vercel.
   Region `us-east-1`, account `502993831706`. Images
   `buscaoficio-backend` / `buscaoficio-frontend` tagged with `github.sha`.
@@ -74,7 +75,8 @@ Changed from defaults (Postgres 5432/5433, API 8000) to avoid conflict with anot
   form `repo:Alfareiza@63620799/buscaoficio@1329243606:*`, not
   `repo:Alfareiza/buscaoficio:*`. The `*` is repo-wide; branch filtering
   lives in the workflow YAML.
-- Template Vercel workflows/docs still exist; they are not the prod path.
+- Template Vercel workflows/docs may still exist; they are not the prod
+  path. Prod migrate is EC2 SSH, not Vercel env pull.
 - Quality: pre-commit, Ruff, mypy, ESLint/Prettier
 - Docs: MkDocs Material
 
@@ -84,11 +86,9 @@ Changed from defaults (Postgres 5432/5433, API 8000) to avoid conflict with anot
   - **Operator key** — `~/.ssh/aag.pem` (key pair name `aag`), full admin
     access, used for manual ops (this file, deploys, debugging). Not
     rotated as part of this procedure.
-  - **Deploy-only key** — used exclusively by the `deploy` job in
-    `.github/workflows/deploy.yml`, which SSHes in to rewrite
-    `BACKEND_IMAGE`/`FRONTEND_IMAGE` in `/opt/buscaoficio/.env` and run
-    `docker compose -f docker-compose.prod.yml pull && up -d`. It needs no
-    other permissions on the box. Stored solely as the `EC2_SSH_KEY`
+  - **Deploy-only key** — used by `deploy.yml` (rewrite image tags +
+    compose pull/up) and `migrate.yml` (`compose exec` Alembic). It needs
+    no other permissions on the box. Stored solely as the `EC2_SSH_KEY`
     GitHub Actions secret — never committed to the repo, never printed to
     a terminal/transcript other than the user's own when first generated.
 - **Rotation procedure** (same steps used 2026-08-22, see below):

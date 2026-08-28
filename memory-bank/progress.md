@@ -36,8 +36,11 @@
   production runs login, Google Sign-In, RDS Postgres, FastAdmin. ECR
   pushes are idempotent ("already exists" = success) so re-runs can't fail
   on immutable SHA tags. Branch `18-deployment-workflow` is not yet merged
-  to `main`. Vercel template workflows/docs remain but are not the prod
-  path.
+  to `main`. Vercel template leftovers remain but are not the prod path.
+- Production **migrate** workflow (`.github/workflows/migrate.yml`):
+  rewritten 2026-08-28 off Vercel. Path-filtered; SSH into EC2 and
+  `alembic upgrade head` in the running backend container (RDS via
+  container `DATABASE_URL`). Kept separate from deploy.
 
 ## Local customizations done
 - [x] Postgres host ports remapped to **5434** (db) and **5435** (db_test)
@@ -77,6 +80,10 @@
 - [ ] Domain product features for "busca oficio" (not started)
 - [ ] Production email provider (beyond MailHog)
 - [x] Finish Deploy to EC2 job (SCP/SSH); box should run the SHA that ECR has
+- [x] Rewrite `migrate.yml` for EC2/RDS (SSH + in-container Alembic), keep
+  it separate from deploy
+- [ ] Run prod Alembic (incl. `c8f3a91d4e20`) after the image with those
+  revisions is on the box
 - [ ] Create the first superuser to log into FastAdmin
   (https://api.buscaoficio.co/admin) — the 3-step bootstrap the user
   provided
@@ -98,6 +105,10 @@
 - Bare `pnpm run dev` / `uv run fastapi` skips watchers - use Makefile/`start.sh`.
 - Production is EC2 + ECR, not Vercel. GitHub OIDC `sub` is
   `repo:Owner@id/repo@id:…` — a slug-form IAM trust policy fails AssumeRole.
+- Prod schema changes: `migrate.yml` execs Alembic in the **current**
+  backend container. If the same commit also deploys a new image, wait
+  for deploy (or dispatch migrate after) so revision files exist in the
+  container.
 - Leftover Vercel serverless path has no `$PORT` wiring; ignore it for prod.
 - Mixing local and Docker runs is discouraged by upstream docs.
 - Default DB credentials (`postgres`/`password`) are local-only.
@@ -358,10 +369,14 @@
   processes — passed cleanly on retry), committed, and pushed. **Not yet
   opened as a PR.**
 
-## Session log (2026-08-28) — user soft-delete
+## Session log (2026-08-28) — user soft-delete + prod migrate workflow
 - Production FastAdmin could not delete a user: `refresh_tokens_user_id_fkey`.
   Implemented `usuarios.deleted_at` (migration `c8f3a91d4e20`). Delete
   stamps `deleted_at`, sets `is_active=False`, revokes refresh tokens.
   Email/`google_sub` uniqueness unchanged (no reuse). FastAdmin hides
   tombstones. 147/147 backend tests green. Migration not applied (review
-  first, then `make docker-migrate-db` / prod alembic).
+  first, then `make docker-migrate-db` / prod `migrate.yml`).
+- Rewrote `.github/workflows/migrate.yml` from Vercel CLI + `vercel env
+  pull` + runner Alembic to the same SSH pattern as `deploy.yml`:
+  `compose exec -T backend alembic upgrade head`. Triggers only on
+  Alembic paths (plus the workflow file). Deploy stays independent.

@@ -43,6 +43,21 @@ and runs `docker-compose.prod.yml` (Caddy in front). The box never builds.
 - SSH into the box for that job uses the deploy-only key (`EC2_SSH_KEY`);
   ECR login *on the box* uses the instance profile, not the GitHub OIDC role.
 
+## Production migrate pattern
+- Workflow: `.github/workflows/migrate.yml` — **not** part of `deploy.yml`.
+- Trigger: push to `main` that touches `fastapi_backend/alembic_migrations/**`,
+  `fastapi_backend/alembic.ini`, or the workflow itself; plus
+  `workflow_dispatch`.
+- Runner does not talk to RDS. It SSHes with `EC2_HOST` / `EC2_SSH_KEY`
+  and runs Alembic **inside** the already-running backend container:
+  `docker compose -f docker-compose.prod.yml exec -T backend alembic upgrade head`.
+- `DATABASE_URL` (RDS) is the container env from `/opt/buscaoficio/.env`.
+  No Vercel env pull, no GitHub-hosted `pip install`.
+- Alembic code in that container is whatever image is currently up.
+  A push that also rebuilds the backend should finish **deploy** first
+  (new SHA on the box), then migrate — otherwise `upgrade head` may not
+  see new revision files yet.
+
 ## OpenAPI sync pipeline (dev only)
 Core of E2E type safety. Production does **not** run watchers; generated client is baked into the frontend image.
 

@@ -1,6 +1,13 @@
 # Active Context
 
 ## Current focus
+- **Prod Alembic workflow rewritten for EC2/RDS, 2026-08-28.**
+  `.github/workflows/migrate.yml` no longer pulls Vercel env. It SSHes
+  to the box (same `EC2_HOST` / `EC2_SSH_KEY` as deploy) and runs
+  `alembic upgrade head` inside the running `backend` container. Still
+  **separate from** `deploy.yml`. Path filter:
+  `fastapi_backend/alembic_migrations/**`, `alembic.ini`, and the
+  workflow file. See Recent changes.
 - **User soft-delete (`deleted_at`), 2026-08-28.** FastAdmin `/admin` (and
   `DELETE /api/v1/users/{id}`) could not remove a logged-in user:
   `refresh_tokens_user_id_fkey` blocked a hard `DELETE` on `usuarios`.
@@ -69,6 +76,18 @@
   steps.
 
 ## Recent changes
+- **`migrate.yml` retargeted from Vercel to EC2, 2026-08-28.** Dropped
+  `VERCEL_*` secrets, Vercel CLI, `vercel env pull`, and runner-side
+  `pip install` + `source .env.local`. The job now uses
+  `appleboy/ssh-action` like deploy: `docker compose -f
+  docker-compose.prod.yml exec -T backend alembic upgrade head`. Env
+  (including `DATABASE_URL` for RDS) comes from the on-box `.env`
+  already injected into the container. Intentionally **not** folded into
+  `deploy.yml`. Concurrent with deploy when a commit also changes
+  backend/frontend: migrate uses whatever backend image is currently
+  running — new migration files are only on the box after that image is
+  pulled. Prefer running migrate after deploy has finished, or
+  `workflow_dispatch` once the new SHA is up.
 - **User soft-delete (`deleted_at`), 2026-08-28.** Production FastAdmin
   delete failed with `ForeignKeyViolationError` on `refresh_tokens`.
   Grilled decisions: no email/Google reuse (unique indexes unchanged);
@@ -459,9 +478,9 @@
   `tunnelRoute` unless we explicitly decide to.
 
 ## Next steps (suggested)
-1. Finish the EC2 deploy job in `.github/workflows/deploy.yml` (build/push
-   already works; SSH/SCP to the box is the remaining failure). Confirm
-   the box is running the SHA that ECR just received.
+1. Apply prod RDS migrations (including `c8f3a91d4e20`) via the new
+   `migrate.yml` once the backend image that contains those revisions is
+   running on the box — or `workflow_dispatch` after deploy.
 2. Open a PR for branch `otp-ux-polish-required-whatsapp` (issue #15,
    pushed 2026-08-20) once ready for review.
 3. **Resolve the frontend architecture question** (server-mediated vs. SPA
@@ -514,8 +533,13 @@
   2026-08-18 cleanup (unconfirmed scope), but worth a deliberate decision
   rather than leaving them as silent dead weight indefinitely.
 - Whether to migrate MailHog → Mailpit.
-- Whether to delete the leftover Vercel serverless path (`api/index.py`,
-  template deploy workflows) now that production is EC2.
+- Whether to delete leftover Vercel serverless files (`api/index.py`,
+  template deploy docs). `migrate.yml` is no longer Vercel.
+- Race if the same push triggers both `deploy.yml` and `migrate.yml`:
+  migrate may `exec` Alembic in the **old** backend container before
+  `docker compose pull && up -d` finishes. No `workflow_run` / `needs`
+  coupling by design (keep migrate separate). Operator: wait for deploy,
+  then dispatch migrate.
 - Product domain requirements not yet defined beyond the template MVP.
 - No RBAC or fine-grained permissions — only binary `is_superuser` flag exists today.
 - First real Sentry error from a running app has not been verified end-to-end

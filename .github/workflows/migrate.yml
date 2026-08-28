@@ -1,8 +1,9 @@
 name: Run Database Migrations
 
-env:
-  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_BACKEND }}
+# Runs Alembic migrations by SSH-ing into the EC2 box and executing
+# `alembic upgrade head` inside the running backend container.
+# The container already has all env vars (DATABASE_URL, etc.) loaded
+# from the on-box .env, so no secrets need to be passed here.
 
 on:
   push:
@@ -18,27 +19,15 @@ jobs:
   migrate:
     name: Run Alembic Migration
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: fastapi_backend
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Vercel CLI
-        run: npm install --global vercel@latest
-
-      - name: Pull Vercel Environment Information
-        run: vercel pull --yes --environment=production --local-config=vercel.prod.json --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Pull Vercel Environment Variables
-        run: vercel env pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Install Alembic and dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run alembic migration
-        run: |
-          set -o allexport
-          source .env.local
-          set +o allexport
-          alembic upgrade head
+      - name: Run alembic upgrade head on EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /opt/buscaoficio
+            docker compose -f docker-compose.prod.yml exec -T backend \
+              alembic upgrade head
