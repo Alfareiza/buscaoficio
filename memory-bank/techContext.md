@@ -45,7 +45,15 @@
 - Migrations: Alembic (async)
 - Models: `User` (UUID, fastapi-users) ↔ `Item` (name, description, quantity, FK user, cascade delete); `RefreshToken` (hash, fingerprint hash, expiry, revoked_at, FK user — merged to `main`, see `systemPatterns.md` § JWT refresh token rotation); `EmailOtp` (`email_otps` table, migration `a067ad066d81` — `email`, `code_hash`, `attempts`, `expires_at`, `consumed_at`, `created_ip`; keyed by email, not `user_id`, since the account may not exist yet — see `systemPatterns.md` § Passwordless OTP auth pattern)
 - Separate test DB: `db_test`
-- Engine uses **NullPool** (serverless / Vercel friendly)
+- **Prod Postgres is temporarily Supabase** (transaction-mode pooler
+  `*.pooler.supabase.com:6543`). After launch, switch `DATABASE_URL` to
+  RDS `buscaoficio-1` (direct 5432). Local stays Docker Postgres.
+- Engine uses **NullPool** plus `ASYNC_CONNECT_ARGS`: `ssl="prefer"` and
+  `statement_cache_size=0`. The cache disable is required on the Supabase
+  pooler — asyncpg's default prepared-statement names collide across
+  NullPool checkouts (`DuplicatePreparedStatementError`,
+  BUSCAOFICIO-BACKEND-T). Alembic's engine uses the same args. Harmless
+  on local Docker and on RDS after the switch.
 
 ### Local host ports (customized for this machine)
 | Service | Host port | Container port |
@@ -127,7 +135,8 @@ Not “E2W”. End-to-end type safety means:
 - **Local:** Docker Compose (`make docker-start-*`) or host processes + Docker Postgres.
 - **Production:** GitHub Actions builds images → ECR → EC2 `docker compose pull/up`.
   Frontend uses `nextjs-frontend/Dockerfile.prod`. Backend uses
-  `fastapi_backend/Dockerfile`.
+  `fastapi_backend/Dockerfile`. Prod Postgres is temporarily Supabase
+  (pooler `:6543`); switch `DATABASE_URL` to RDS after launch.
 - Template Vercel path (serverless Next + `api/index.py`) still exists in
   the repo but is **not** what production uses. `$PORT` is still not
   mapped for that unused path. Local `start.sh` hardcodes `--port 8001`.

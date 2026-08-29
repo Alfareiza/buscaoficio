@@ -1,6 +1,6 @@
 # Deployment
 
-Production runs on **AWS**: a single EC2 instance (Docker Compose) behind Caddy, backed by RDS Postgres, with images built in GitHub Actions and pushed to ECR.
+Production runs on **AWS**: a single EC2 instance (Docker Compose) behind Caddy, with images built in GitHub Actions and pushed to ECR. Postgres is **temporarily Supabase** (transaction-mode pooler `:6543`). After launch, switch `DATABASE_URL` to RDS (`buscaoficio-1`) — the app engine is already compatible with both.
 
 ```
 GitHub Actions ──build──▶ ECR (buscaoficio-backend / buscaoficio-frontend, git-SHA tags)
@@ -8,7 +8,8 @@ GitHub Actions ──build──▶ ECR (buscaoficio-backend / buscaoficio-front
         └──deploy job──▶ EC2 (SSH): docker compose pull && up -d
                               │
                               ├─ Caddy: TLS (Let's Encrypt), app.buscaoficio.co → frontend, api.buscaoficio.co → backend
-                              └─ backend ──asyncpg (SSL)──▶ RDS buscaoficio-1
+                              └─ backend ──asyncpg (SSL)──▶ Supabase pooler :6543  (temporary)
+                                                            RDS buscaoficio-1     (after launch)
 ```
 
 The deployment operator's full knowledge base is the `aws-deployer` agent (`.claude/agents/aws-deployer.md`): resource IDs, verified facts, and runbooks. This file is the compact human-facing summary.
@@ -41,14 +42,18 @@ Three env files live only on the EC2 box, at `/opt/buscaoficio/`:
 
 `Caddyfile` and `docker-compose.prod.yml` are **copied to the box manually** — editing them in git does not update production (documented in `deploy.yml` itself). `docker compose restart` does *not* pick up `env_file` changes; use `up -d` (recreates containers).
 
-## First-time RDS setup
+## Production database
 
-RDS enforces SSL (`rds.force_ssl=1`); both `app/database.py` and Alembic use asyncpg `ssl="prefer"`, so no URL flag is needed. `DATABASE_URL` is rebuilt from components — the query string is ignored, so don't rely on `?ssl=true`.
+**Now (pre-launch): Supabase.** `DATABASE_URL` on the box is the transaction-mode pooler (`*.pooler.supabase.com:6543` / PgBouncer). `app/database.py` and Alembic rebuild the URL from components — the query string is ignored, so don't rely on `?ssl=true` or `?pgbouncer=true`. SSL is `ssl="prefer"` in `ASYNC_CONNECT_ARGS`. Prepared statements must stay off (`statement_cache_size=0`); leaving the default cache up produces `DuplicatePreparedStatementError` on a new checkout (BUSCAOFICIO-BACKEND-T, first seen on `GET /auth/google/callback`).
+
+Point `DATABASE_URL` at the pooler, set the four `*_SECRET_KEY`s (`openssl rand -hex 32`), then `docker compose -f docker-compose.prod.yml up -d backend` and `exec backend alembic upgrade head`. Empty secret keys mean tokens are signed with an empty string — check with `grep -E "^[A-Z_]+=$"`.
+
+**After launch: RDS** (`buscaoficio-1`). Same `DATABASE_URL` env var, different host — no app code change required (`statement_cache_size=0` is harmless on a direct `5432` connection). RDS enforces SSL (`rds.force_ssl=1`). First-time RDS steps when you switch:
 
 1. Reset/set the master password: `aws rds modify-db-instance --db-instance-identifier buscaoficio-1 --master-user-password <pw> --apply-immediately`
-2. Create the app database: from the backend container, connect to the `postgres` maintenance DB and `CREATE DATABASE buscaoficio` (asyncpg one-liner — see the `aws-deployer` agent).
-3. Fill `DATABASE_URL` plus the four `*_SECRET_KEY`s in `fastapi_backend/.env` (generate with `openssl rand -hex 32`). Empty secret keys mean tokens are signed with an empty string — check with `grep -E "^[A-Z_]+=$"`.
-4. `docker compose -f docker-compose.prod.yml up -d backend` then `exec backend alembic upgrade head`.
+2. Create the app database: from the backend container, connect to the `postgres` maintenance DB and `CREATE DATABASE buscaoficio`.
+3. Dump/restore from Supabase (or re-run Alembic on empty RDS, then copy data).
+4. Point on-box `DATABASE_URL` at the RDS endpoint and `up -d` the backend.
 
 ## Post-deployment env checklist (backend)
 

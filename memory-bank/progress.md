@@ -14,11 +14,15 @@
   refresh tokens revoked). FastAdmin and `DELETE /users/{id}` both go through
   `UserManager.delete`. Email/`google_sub` stay unique (no reuse). Apply
   migration `c8f3a91d4e20` on any database that already has the initial schema
-  (including prod RDS).
+  (including the current prod Supabase DB).
 - Frontend cookie forwarding + middleware-based silent refresh + reactive
   401 fallback — **merged to `main`** (`4d75bde`, issue #10). `proxy.ts`
   must not 307 Server Action POSTs (`next-action`); that made Logout a
   no-op in prod (2026-08-29). Actions `redirect()` themselves.
+- Prod Postgres is **temporarily Supabase** (transaction pooler `:6543`);
+  switch to RDS after launch. App + Alembic engines set asyncpg
+  `statement_cache_size=0` so NullPool checkouts do not collide on
+  prepared-statement names (BUSCAOFICIO-BACKEND-T, 2026-08-29).
 - `AuthCard` component (`components/auth/AuthCard.tsx`) drives the OTP
   flow on both `/login` and `/register`, which now share a route-group
   layout (`app/(auth)/layout.tsx`) so toggling between them feels instant
@@ -35,14 +39,15 @@
 - CI workflows (FastAPI + Next.js), pre-commit, MkDocs
 - Production deploy workflow (`.github/workflows/deploy.yml`): OIDC →
   ECR image push → SSH deploy to EC2 **works end-to-end** (2026-08-26);
-  production runs login, Google Sign-In, RDS Postgres, FastAdmin. ECR
+  production runs login, Google Sign-In, Supabase Postgres (temporary;
+  RDS after launch), FastAdmin. ECR
   pushes are idempotent ("already exists" = success) so re-runs can't fail
   on immutable SHA tags. Branch `18-deployment-workflow` is not yet merged
   to `main`. Vercel template leftovers remain but are not the prod path.
 - Production **migrate** workflow (`.github/workflows/migrate.yml`):
   rewritten 2026-08-28 off Vercel. Path-filtered; SSH into EC2 and
-  `alembic upgrade head` in the running backend container (RDS via
-  container `DATABASE_URL`). Kept separate from deploy.
+  `alembic upgrade head` in the running backend container (`DATABASE_URL`
+  on the box — Supabase now, RDS after launch). Kept separate from deploy.
 
 ## Local customizations done
 - [x] Postgres host ports remapped to **5434** (db) and **5435** (db_test)
@@ -82,7 +87,7 @@
 - [ ] Domain product features for "busca oficio" (not started)
 - [ ] Production email provider (beyond MailHog)
 - [x] Finish Deploy to EC2 job (SCP/SSH); box should run the SHA that ECR has
-- [x] Rewrite `migrate.yml` for EC2/RDS (SSH + in-container Alembic), keep
+- [x] Rewrite `migrate.yml` for EC2 (SSH + in-container Alembic), keep
   it separate from deploy
 - [ ] Run prod Alembic (incl. `c8f3a91d4e20`) after the image with those
   revisions is on the box
@@ -173,6 +178,12 @@
   to `/login`. `logout()` always clears cookies and redirects.
 - Documented in memory bank, `docs/auth.md`, `.cursorrules`,
   `nextjs-frontend/.CLAUDE.md`.
+- After logout worked, Google callback 500'd
+  (BUSCAOFICIO-BACKEND-T): `DuplicatePreparedStatementError` through
+  Supabase pooler `:6543`. Set asyncpg `statement_cache_size=0` on the
+  app engine and Alembic.
+- Documented that prod Postgres is **temporarily Supabase**; switch to
+  RDS after launch (`docs/deployment.md`, memory bank, `.cursorrules`).
 
 ## Session log (2026-08-10 / 2026-08-11)
 - Indexed codebase; reviewed stack by section (FE/BE/DB/DevOps).
@@ -333,9 +344,10 @@
   has not pulled them yet.
 
 ## Session log (2026-08-26) — Deploy pipeline stabilization + ECR immutable-tag fix
-- Production is up end-to-end (login, Google Sign-In, RDS Postgres,
-  FastAdmin) on branch `18-deployment-workflow`; the only remaining action
-  is creating the first superuser for FastAdmin (3-step bootstrap).
+- Production is up end-to-end (login, Google Sign-In, Postgres, FastAdmin)
+  on branch `18-deployment-workflow`; the only remaining action is creating
+  the first superuser for FastAdmin (3-step bootstrap). Prod Postgres was
+  later pointed at Supabase temporarily (RDS after launch).
 - Fixed the recurring `"image tag … already exists … tag is immutable"`
   ECR failure: `deploy.yml`'s build jobs now treat that push rejection as
   success (same SHA = same content, immutability guarantees it), so GitHub

@@ -48,11 +48,13 @@ and runs `docker-compose.prod.yml` (Caddy in front). The box never builds.
 - Trigger: push to `main` that touches `fastapi_backend/alembic_migrations/**`,
   `fastapi_backend/alembic.ini`, or the workflow itself; plus
   `workflow_dispatch`.
-- Runner does not talk to RDS. It SSHes with `EC2_HOST` / `EC2_SSH_KEY`
-  and runs Alembic **inside** the already-running backend container:
-  `docker compose -f docker-compose.prod.yml exec -T backend alembic upgrade head`.
-- `DATABASE_URL` (RDS) is the container env from `/opt/buscaoficio/.env`.
-  No Vercel env pull, no GitHub-hosted `pip install`.
+- Runner does not talk to the database host. It SSHes with `EC2_HOST` /
+  `EC2_SSH_KEY` and runs Alembic **inside** the already-running backend
+  container: `docker compose -f docker-compose.prod.yml exec -T backend
+  alembic upgrade head`.
+- `DATABASE_URL` is the container env from `/opt/buscaoficio/.env`
+  (Supabase pooler today; RDS after launch). No Vercel env pull, no
+  GitHub-hosted `pip install`.
 - Alembic code in that container is whatever image is currently up.
   A push that also rebuilds the backend should finish **deploy** first
   (new SHA on the box), then migrate — otherwise `upgrade head` may not
@@ -227,6 +229,15 @@ Do **not** add a wrapper in `lib/utils.ts`.
 - Paginated list with fastapi-pagination
 
 ## Database patterns
+- **Prod Postgres is temporarily Supabase** (transaction pooler `:6543`).
+  After launch, point `DATABASE_URL` at RDS — no engine-code change.
+- Engine connect args live in `app/database.py` as `ASYNC_CONNECT_ARGS`
+  (`ssl="prefer"`, `statement_cache_size=0`). Alembic
+  (`alembic_migrations/env.py`) must copy the same dict — do not add
+  prepared-statement caching back while on the pooler. NullPool +
+  PgBouncer + asyncpg defaults = `DuplicatePreparedStatementError`
+  (BUSCAOFICIO-BACKEND-T, first seen on Google callback after a real
+  logout forced a fresh checkout).
 - Alembic is source of truth for schema; `create_db_and_tables` exists but is not the official path
 - Changing `models.py` alone: FastAPI `--reload` restarts, but **watcher does not regenerate OpenAPI** and **DB does not migrate**
 - After model change: also update schemas/routes if API should change; then Alembic:

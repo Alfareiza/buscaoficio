@@ -285,7 +285,7 @@ Tests use `TEST_DATABASE_URL` and recreate schema in `tests/conftest.py`.
 
 ### Connection pooling
 
-The engine uses `NullPool` so connection behavior is uniform across dev and prod (no sticky pool).
+The engine uses `NullPool` so connection behavior is uniform across dev and prod (no sticky pool). `connect_args` always include `ssl="prefer"` and `statement_cache_size=0` — the latter is required while prod uses Supabase's transaction-mode pooler (`:6543`); prepared statements collide there (`DuplicatePreparedStatementError`). Keep it after the RDS switch (harmless on a direct connection). Alembic's engine in `alembic_migrations/env.py` must use the same args.
 
 ---
 
@@ -323,11 +323,11 @@ Production: configure real SMTP (or a provider) via `MAIL_*` env vars - do not u
 
 ## Deploy - backend perspective
 
-Production is AWS (EC2 + Docker + Caddy), not Vercel. The container runs `fastapi run app/main.py --workers 2`. RDS enforces SSL; asyncpg uses `ssl="prefer"` in `app/database.py` and Alembic, so no URL flag is needed.
+Production is AWS (EC2 + Docker + Caddy), not Vercel. The container runs `fastapi run app/main.py --workers 2`. Postgres is **temporarily Supabase** (pooler `:6543`); switch `DATABASE_URL` to RDS after launch. asyncpg uses `ssl="prefer"` and `statement_cache_size=0` in `app/database.py` and Alembic, so no URL flags are needed.
 
 ### Required production env
 
-- `DATABASE_URL` (RDS endpoint, TLS enforced)
+- `DATABASE_URL` (today: Supabase transaction pooler; after launch: RDS endpoint)
 - `ACCESS_SECRET_KEY`, `RESET_PASSWORD_SECRET_KEY`, `VERIFICATION_SECRET_KEY` (strong secrets)
 - `CORS_ORIGINS` - start broad only temporarily; then set to the real frontend origin(s)
 - `FRONTEND_URL` - production frontend URL (for email links)
@@ -337,9 +337,9 @@ Production is AWS (EC2 + Docker + Caddy), not Vercel. The container runs `fastap
 
 ### Checklist
 
-1. Create the app database on RDS (see `docs/deployment.md` first-time setup) and set `DATABASE_URL` + all `*_SECRET_KEY`s.
+1. Set `DATABASE_URL` (Supabase pooler now; RDS after launch — see `docs/deployment.md`) + all `*_SECRET_KEY`s.
 2. CI builds the image and the box pulls it via `docker-compose.prod.yml` — nothing to do by hand.
-3. Run migrations manually against RDS: `docker compose -f docker-compose.prod.yml exec -T backend alembic upgrade head` (reviewed before applying, by project convention).
+3. Run migrations manually against whatever `DATABASE_URL` the container has: `docker compose -f docker-compose.prod.yml exec -T backend alembic upgrade head` (reviewed before applying, by project convention).
 4. After frontend URL is known, tighten `CORS_ORIGINS` to the real origin(s).
 
 ---

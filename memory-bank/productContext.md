@@ -18,7 +18,8 @@ The template gives a clean, typed full-stack starting point so product work can 
 3. Users authenticate and manage items via the Next.js dashboard.
 4. Schema changes to Postgres go through Alembic (explicit, not automatic
    on model edit). Local: Makefile/`make docker-migrate-db`. Production
-   RDS: `.github/workflows/migrate.yml` (SSH + Alembic in the backend
+   Postgres (Supabase now, RDS after launch):
+   `.github/workflows/migrate.yml` (SSH + Alembic in the backend
    container), kept separate from image deploy.
 5. Unhandled errors, traces, and app logs go to Sentry when a DSN is set; local without DSN stays silent.
 

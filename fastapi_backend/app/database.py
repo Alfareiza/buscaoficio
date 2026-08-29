@@ -18,15 +18,28 @@ async_db_connection_url = (
     f"{parsed_db_url.path}"
 )
 
-# ssl="prefer": negotiates encryption when the server offers it, falls back
-# to plaintext when it doesn't. Local dev Postgres has no SSL configured, so
-# this stays plaintext there; RDS's rds.force_ssl=1 rejects unencrypted
-# connections outright, so the same setting ends up encrypted there with no
-# environment-specific branching needed.
+# Shared with alembic_migrations/env.py — keep them in lockstep.
 #
-# Disable connection pooling — keeps connection behavior uniform across dev and prod
+# ssl="prefer": encrypts when the server offers it, plaintext otherwise.
+# Local Docker Postgres has no SSL; Supabase (prod, temporary) and RDS
+# (after launch, rds.force_ssl=1) both do. One setting, no env branching.
+#
+# statement_cache_size=0: asyncpg prepared statements are unsafe through
+# PgBouncer transaction mode (Supabase pooler :6543). NullPool opens a
+# new client connection per request; the pooler reuses the backend, so
+# default names (__asyncpg_stmt_N__) collide
+# (BUSCAOFICIO-BACKEND-T / DuplicatePreparedStatementError). Harmless
+# on a direct Postgres connection (local :5434, RDS 5432).
+ASYNC_CONNECT_ARGS: dict[str, str | int] = {
+    "ssl": "prefer",
+    "statement_cache_size": 0,
+}
+
+# Disable connection pooling — uniform across dev and prod.
 engine = create_async_engine(
-    async_db_connection_url, poolclass=NullPool, connect_args={"ssl": "prefer"}
+    async_db_connection_url,
+    poolclass=NullPool,
+    connect_args=ASYNC_CONNECT_ARGS,
 )
 
 async_session_maker = async_sessionmaker(
