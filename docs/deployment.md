@@ -46,7 +46,7 @@ Three env files live only on the EC2 box, at `/opt/buscaoficio/`:
 
 **Now (pre-launch): Supabase.** `DATABASE_URL` on the box is the transaction-mode pooler (`*.pooler.supabase.com:6543` / PgBouncer). `app/database.py` and Alembic rebuild the URL from components — the query string is ignored, so don't rely on `?ssl=true` or `?pgbouncer=true`. SSL is `ssl="prefer"` in `ASYNC_CONNECT_ARGS`. Prepared statements must stay off (`statement_cache_size=0`); leaving the default cache up produces `DuplicatePreparedStatementError` on a new checkout (BUSCAOFICIO-BACKEND-T, first seen on `GET /auth/google/callback`).
 
-Point `DATABASE_URL` at the pooler, set the four `*_SECRET_KEY`s (`openssl rand -hex 32`), then `docker compose -f docker-compose.prod.yml up -d backend` and `exec backend alembic upgrade head`. Empty secret keys mean tokens are signed with an empty string — check with `grep -E "^[A-Z_]+=$"`.
+Point `DATABASE_URL` at the pooler, set the four `*_SECRET_KEY`s (`openssl rand -hex 32`), then `docker compose -f docker-compose.prod.yml up -d backend` and `docker compose -f docker-compose.prod.yml exec -T backend alembic upgrade head`. Empty secret keys mean tokens are signed with an empty string — check with `grep -E "^[A-Z_]+=$"`.
 
 **After launch: RDS** (`buscaoficio-1`). Same `DATABASE_URL` env var, different host — no app code change required (`statement_cache_size=0` is harmless on a direct `5432` connection). RDS enforces SSL (`rds.force_ssl=1`). First-time RDS steps when you switch:
 
