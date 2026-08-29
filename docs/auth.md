@@ -182,9 +182,11 @@ There is no persistent client-side JS holding a refresh timer — instead, `prox
 1. Reads `refreshToken` + `fingerprintToken` from the incoming request's cookies
 2. Calls `POST {API_BASE_URL}/api/v1/auth/jwt/refresh` via a plain `fetch()` (not the axios-based generated client — native `fetch` is simpler to guarantee Edge-runtime-compatible), manually forwarding the cookies as a `Cookie` request header, since server-to-server calls don't auto-attach the browser's cookies
 3. On success: forwards the new cookies via `forwardAuthCookies` onto the outgoing `NextResponse`, and continues the request with the new access token
-4. On failure (refresh token invalid, expired, or revoked — including theft-detection revocation): clears all three cookies and redirects to `/login`
+4. On failure (refresh token invalid, expired, or revoked — including theft-detection revocation): **for a document GET**, clears all three cookies and redirects to `/login`. **For a Server Action POST** (`next-action` header), it does **not** 307 — see below.
 
-If the access token is missing `refreshToken`/`fingerprintToken` cookies at all when a refresh is needed, that's treated as a dead session (redirect to `/login`) rather than attempted.
+If the access token is missing `refreshToken`/`fingerprintToken` cookies at all when a refresh is needed, that's treated as a dead session for document GETs (redirect to `/login`) rather than attempted.
+
+**Never 307 a Server Action to `/login`.** Next.js invokes a Server Action by POSTing to the *current page* (`POST /dashboard` + `next-action`), not to a `/logout` URL. A middleware 307 is followed as another Flight POST (307 keeps method and body), so the client replays the same action onto `/login` while `next-router-state-tree` still says `dashboard`. That is not a navigation — Logout looks like a no-op. Confirmed in production (2026-08-29): dashboard POST 307'd, then an identical Flight POST hit `/login`. `proxy.ts` therefore `NextResponse.next()`s any request with a `next-action` header when it would otherwise redirect, and the action (`logout-action.ts`, or `items-action.ts`'s `isUnauthorizedError()` path) issues `redirect()` itself. `logout()` always clears cookies and redirects, even if the backend revoke fails or there is no token.
 
 ### Reactive fallback in Server Actions
 
@@ -200,7 +202,7 @@ export const config = {
 };
 ```
 
-Any route matching that pattern gets the full treatment before it renders: no `accessToken` cookie → redirect to `/login`; token expired or near-expiry → silent refresh (see above) or redirect if that fails; token present but rejected by the backend → redirect. Any route that does **not** match — `/`, `/login`, `/register`, `/password-recovery`, or any brand-new top-level page you add — gets **none of this**. There is no auth check inside `app/dashboard/layout.tsx` or any other layout; the layout is UI chrome only. The middleware's `matcher` is the entire mechanism.
+Any route matching that pattern gets the full treatment before it renders: no `accessToken` cookie → redirect to `/login`; token expired or near-expiry → silent refresh (see above) or redirect if that fails; token present but rejected by the backend → redirect. Those redirects apply to **document / RSC GETs only**. A Server Action POST (`next-action` header) is passed through so the action can `redirect()` itself — a middleware 307 of that POST is not a client navigation (see [Silent refresh via `proxy.ts`](#silent-refresh-via-proxyts)). Any route that does **not** match — `/`, `/login`, `/register`, `/password-recovery`, or any brand-new top-level page you add — gets **none of this**. There is no auth check inside `app/dashboard/layout.tsx` or any other layout; the layout is UI chrome only. The middleware's `matcher` is the entire mechanism.
 
 **If a new page needs a logged-in user:**
 - Put it under `/dashboard/...` (e.g. `app/dashboard/requests/page.tsx`) — it's covered automatically, no changes needed anywhere else.

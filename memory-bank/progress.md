@@ -16,7 +16,9 @@
   migration `c8f3a91d4e20` on any database that already has the initial schema
   (including prod RDS).
 - Frontend cookie forwarding + middleware-based silent refresh + reactive
-  401 fallback — **merged to `main`** (`4d75bde`, issue #10)
+  401 fallback — **merged to `main`** (`4d75bde`, issue #10). `proxy.ts`
+  must not 307 Server Action POSTs (`next-action`); that made Logout a
+  no-op in prod (2026-08-29). Actions `redirect()` themselves.
 - `AuthCard` component (`components/auth/AuthCard.tsx`) drives the OTP
   flow on both `/login` and `/register`, which now share a route-group
   layout (`app/(auth)/layout.tsx`) so toggling between them feels instant
@@ -96,6 +98,12 @@
   app's OTP flow, or FastAdmin, then promote via SQL)
 
 ## Known issues / gotchas
+- `proxy.ts` must **never 307 a Server Action** (`next-action` header).
+  Next posts actions to the current page (`POST /dashboard`); a
+  middleware 307 is followed as another Flight POST to `/login` and is
+  not a client navigation. Logout looked like a no-op in production
+  (2026-08-29). Pass through; `logout-action.ts` / `items-action.ts`
+  issue `redirect()` themselves.
 - Changing `models.py` alone does **not** update OpenAPI client or DB schema.
 - User delete is **soft**: `UserManager.delete` sets `deleted_at` and
   `is_active=False` rather than removing the row. FastAdmin lists hide
@@ -155,6 +163,16 @@
   public API surface until you've confirmed no other client calls it.
   Worth an explicit question to the user rather than inferring from grep
   results alone before deleting a route (see the 2026-08-18 removal below).
+
+## Session log (2026-08-29)
+- Diagnosed prod Logout no-op: Server Action POST `/dashboard` 307'd by
+  `proxy.ts`, Flight client replayed the same `next-action` onto
+  `/login`, UI stayed on dashboard. Session cookies absent; only
+  `lastGoogleIdentity` was sent.
+- `proxy.ts` now passes `next-action` requests through instead of 307
+  to `/login`. `logout()` always clears cookies and redirects.
+- Documented in memory bank, `docs/auth.md`, `.cursorrules`,
+  `nextjs-frontend/.CLAUDE.md`.
 
 ## Session log (2026-08-10 / 2026-08-11)
 - Indexed codebase; reviewed stack by section (FE/BE/DB/DevOps).

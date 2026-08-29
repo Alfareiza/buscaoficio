@@ -1,6 +1,15 @@
 # Active Context
 
 ## Current focus
+- **Prod logout no-op (Server Action 307), 2026-08-29.** Clicking
+  Logout on `app.buscaoficio.co/dashboard` posted the `logout` Server
+  Action to `/dashboard`; `proxy.ts` 307'd to `/login` before the action
+  ran (no `accessToken` on the request). The Flight client followed that
+  307 as another POST of the same `next-action` to `/login` while the
+  router tree still said `dashboard` — not a navigation. Fix: never 307
+  a `next-action` request; `logout()` always clears cookies and
+  `redirect("/login")` even if the backend revoke fails. See Recent
+  changes.
 - **Prod Alembic workflow rewritten for EC2/RDS, 2026-08-28.**
   `.github/workflows/migrate.yml` no longer pulls Vercel env. It SSHes
   to the box (same `EC2_HOST` / `EC2_SSH_KEY` as deploy) and runs
@@ -76,6 +85,24 @@
   steps.
 
 ## Recent changes
+- **Logout Server Action vs `proxy.ts` 307, 2026-08-29.** Production
+  Logout did nothing. Network: `POST /dashboard` (`next-action`,
+  `accept: text/x-component`, body `["$T"]`) → 307 → identical Flight
+  POST to `/login`. Cookie header was only `lastGoogleIdentity` (also
+  HttpOnly — session cookies were truly absent, not stripped by
+  DevTools). `proxy.ts` matcher includes Server Action POSTs; no
+  `accessToken` → `NextResponse.redirect("/login")` (307). The client
+  does not treat a middleware 307 as `redirect()` from inside an
+  action, so the tab stayed on the already-rendered dashboard (layout
+  has no auth check). Location was `https://app.buscaoficio.co/login`
+  — not the `0.0.0.0:3000` bind-address bug from Google complete.
+  Changes: `denyDashboardAccess()` in `proxy.ts` returns
+  `NextResponse.next()` when `next-action` is present;
+  `logout-action.ts` always clears cookies and redirects (backend
+  revoke is best-effort — a `{ message }` return was never shown).
+  Tests in `proxy.test.ts` / `logout.test.tsx`. Documented in
+  `docs/auth.md`, `systemPatterns.md`, `.cursorrules`,
+  `nextjs-frontend/.CLAUDE.md`.
 - **`migrate.yml` retargeted from Vercel to EC2, 2026-08-28.** Dropped
   `VERCEL_*` secrets, Vercel CLI, `vercel env pull`, and runner-side
   `pip install` + `source .env.local`. The job now uses

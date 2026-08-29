@@ -17,13 +17,25 @@ function makeJwt(payload: Record<string, unknown>): string {
   return `${header}.${body}.signature`;
 }
 
-function makeRequest(cookiePairs: Record<string, string>): NextRequest {
+function makeRequest(
+  cookiePairs: Record<string, string>,
+  extraHeaders?: Record<string, string>,
+): NextRequest {
   const cookieHeader = Object.entries(cookiePairs)
     .map(([name, value]) => `${name}=${value}`)
     .join("; ");
   return new NextRequest("https://frontend.test/dashboard", {
-    headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+    headers: {
+      ...(cookieHeader ? { cookie: cookieHeader } : {}),
+      ...extraHeaders,
+    },
   });
+}
+
+function makeServerActionRequest(
+  cookiePairs: Record<string, string>,
+): NextRequest {
+  return makeRequest(cookiePairs, { "next-action": "test-action-id" });
 }
 
 function mockFetchResponse(options: {
@@ -181,5 +193,46 @@ describe("proxy middleware", () => {
     expect(response.headers.get("location")).toBe(
       "https://frontend.test/login",
     );
+  });
+
+  it("does not 307 a Server Action when there is no access token", async () => {
+    const request = makeServerActionRequest({});
+
+    const response = await proxy(request);
+
+    expect(response.status).not.toBe(307);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("does not 307 a Server Action when the token is invalid", async () => {
+    const token = makeJwt({ sub: "u1", exp: NOT_NEAR_EXPIRY });
+    (usersCurrentUser as jest.Mock).mockResolvedValue({
+      error: { detail: "unauthorized" },
+    });
+    const request = makeServerActionRequest({ accessToken: token });
+
+    const response = await proxy(request);
+
+    expect(response.status).not.toBe(307);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("does not 307 a Server Action when refresh fails", async () => {
+    const oldToken = makeJwt({ sub: "u1", exp: NEAR_EXPIRY });
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(mockFetchResponse({ ok: false }));
+
+    const request = makeServerActionRequest({
+      accessToken: oldToken,
+      refreshToken: "old-refresh",
+      fingerprintToken: "old-fingerprint",
+    });
+
+    const response = await proxy(request);
+
+    expect(response.status).not.toBe(307);
+    expect(response.headers.get("location")).toBeNull();
+    expect(usersCurrentUser).not.toHaveBeenCalled();
   });
 });

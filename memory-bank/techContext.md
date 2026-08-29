@@ -18,7 +18,8 @@
 - Tests: Jest + Testing Library
 - Auth helpers: `lib/auth-cookies.ts` (cookie forwarding/silent-refresh
   support), `lib/api-errors.ts` (`isUnauthorizedError`) — see
-  `systemPatterns.md` § Frontend auth pattern (#10, merged to `main`)
+  `systemPatterns.md` § Frontend auth pattern (#10, merged to `main`).
+  `proxy.ts` must not 307 Server Action POSTs (`next-action` header).
 - OTP auth: `components/actions/otp-auth-action.ts` (Server Actions),
   `components/auth/AuthCard.tsx` (the multi-step client component), split
   logo components in `components/ui/BuscaOficioLogo.tsx`

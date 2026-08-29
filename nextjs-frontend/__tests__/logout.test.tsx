@@ -48,4 +48,19 @@ describe("logout action", () => {
     expect(cookieStore.delete).toHaveBeenCalledWith("fingerprintToken");
     expect(redirect).toHaveBeenCalledWith("/login");
   });
+
+  it("clears cookies and redirects even when the backend logout call fails", async () => {
+    const cookieStore = await cookies();
+    (cookieStore.get as jest.Mock).mockReturnValue({ value: "stale-token" });
+    (authJwtLogout as jest.Mock).mockResolvedValue({
+      error: { detail: "unauthorized" },
+    });
+
+    await logout();
+
+    expect(cookieStore.delete).toHaveBeenCalledWith("accessToken");
+    expect(cookieStore.delete).toHaveBeenCalledWith("refreshToken");
+    expect(cookieStore.delete).toHaveBeenCalledWith("fingerprintToken");
+    expect(redirect).toHaveBeenCalledWith("/login");
+  });
 });

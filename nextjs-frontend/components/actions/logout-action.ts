@@ -9,19 +9,14 @@ export async function logout() {
   const cookieStore = await cookies();
   const token = cookieStore.get("accessToken")?.value;
 
-  if (!token) {
-    clearAuthCookies(cookieStore);
-    return redirect(`/login`);
-  }
-
-  const { error } = await authJwtLogout({
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (error) {
-    return { message: error };
+  // Best-effort revoke. A dead or rejected token must still end the
+  // local session — the Logout button ignores a returned `{ message }`.
+  if (token) {
+    await authJwtLogout({
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
   }
 
   clearAuthCookies(cookieStore);

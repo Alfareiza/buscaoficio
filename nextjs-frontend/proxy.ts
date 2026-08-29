@@ -61,11 +61,29 @@ function redirectToLoginClearingCookies(request: NextRequest) {
   return response;
 }
 
+/**
+ * Document GETs with a dead session 307 to /login. Server Action POSTs
+ * must not: Next posts the action to the current page (POST /dashboard
+ * + `next-action`), and a middleware 307 is followed as another Flight
+ * POST (method and body preserved). The client never treats that as a
+ * navigation, so Logout appears to do nothing. Let the action run; it
+ * issues `redirect()` itself.
+ */
+function denyDashboardAccess(request: NextRequest, clearCookies: boolean) {
+  if (request.headers.has("next-action")) {
+    return NextResponse.next();
+  }
+  if (clearCookies) {
+    return redirectToLoginClearingCookies(request);
+  }
+  return NextResponse.redirect(new URL("/login", request.url));
+}
+
 export async function proxy(request: NextRequest) {
   let accessToken = request.cookies.get("accessToken")?.value;
 
   if (!accessToken) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return denyDashboardAccess(request, false);
   }
 
   const expiryMs = decodeJwtExpiryMs(accessToken);
@@ -77,7 +95,7 @@ export async function proxy(request: NextRequest) {
   if (needsRefresh) {
     const refreshed = await refreshAccessToken(request);
     if (!refreshed) {
-      return redirectToLoginClearingCookies(request);
+      return denyDashboardAccess(request, true);
     }
     accessToken = refreshed.accessToken;
     refreshedSetCookieHeaders = refreshed.setCookieHeaders;
@@ -92,7 +110,7 @@ export async function proxy(request: NextRequest) {
   const { error } = await usersCurrentUser(options);
 
   if (error) {
-    return redirectToLoginClearingCookies(request);
+    return denyDashboardAccess(request, true);
   }
 
   const response = NextResponse.next();
