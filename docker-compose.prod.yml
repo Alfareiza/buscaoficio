@@ -2,7 +2,9 @@
 # NOT deployed yet. Review before copying to the server.
 #
 # Differences from the dev docker-compose.yml at repo root:
-#   - No db / db_test / mailhog containers (RDS + real SMTP provider replace them).
+#   - No db / db_test / mailhog containers (hosted Postgres + real SMTP
+#     replace them). Prod DATABASE_URL is temporarily Supabase's
+#     transaction pooler; switch to RDS after launch.
 #   - No source bind-mounts — services run from the built image, not hot-reloaded.
 #   - backend runs a production ASGI command instead of `fastapi dev --reload`.
 #   - frontend is built at image-build time (nextjs-frontend/Dockerfile.prod) and

@@ -11,7 +11,7 @@
 </p>
 
 
-The repo is based on [Vinta Software’s Next.js FastAPI Template](https://github.com/vintasoftware/nextjs-fastapi-template). Domain-specific product features are not built yet; this is the production-shaped foundation (auth, CRUD, typed FE/BE contract, local Docker, AWS deployment (EC2 + RDS)).
+The repo is based on [Vinta Software’s Next.js FastAPI Template](https://github.com/vintasoftware/nextjs-fastapi-template). Domain-specific product features are not built yet; this is the production-shaped foundation (auth, CRUD, typed FE/BE contract, local Docker, AWS deployment on EC2). Production Postgres is **temporarily Supabase**; switch to RDS after launch.
 
 | App | Details |
 | --- | ------- |

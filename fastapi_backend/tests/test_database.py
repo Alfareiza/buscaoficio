@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine
 from fastapi_users.db import SQLAlchemyUserDatabase
 
 from app.database import (
+    ASYNC_CONNECT_ARGS,
     async_session_maker,
     create_db_and_tables,
     get_async_session,
@@ -83,6 +84,13 @@ async def test_get_user_db(mock_session):
     assert user_db.session == mock_session
     # Verify the model class is correct
     assert user_db.user_table == User
+
+
+def test_connect_args_disable_asyncpg_statement_cache():
+    # PgBouncer transaction mode (Supabase :6543) cannot reuse asyncpg's
+    # default prepared-statement names across NullPool checkouts.
+    assert ASYNC_CONNECT_ARGS["statement_cache_size"] == 0
+    assert ASYNC_CONNECT_ARGS["ssl"] == "prefer"
 
 
 def test_engine_creation(mocker):

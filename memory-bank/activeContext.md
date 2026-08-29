@@ -1,6 +1,16 @@
 # Active Context
 
 ## Current focus
+- **Supabase pooler prepared statements (BUSCAOFICIO-BACKEND-T), 2026-08-29.**
+  After the logout 307 fix, Google Sign-In hit
+  `DuplicatePreparedStatementError` on `/auth/google/callback`. Prod
+  `DATABASE_URL` is **temporarily** Supabase transaction-mode PgBouncer
+  (`:6543`); after launch it becomes RDS `buscaoficio-1`. asyncpg's
+  default statement cache is unsafe on the pooler. Fix:
+  `statement_cache_size=0` in `ASYNC_CONNECT_ARGS` (app + Alembic).
+  The proxy change did not cause the SQL error — it unmasked it by
+  making logout actually succeed so the next request opened a fresh
+  checkout. See Recent changes.
 - **Prod logout no-op (Server Action 307), 2026-08-29.** Clicking
   Logout on `app.buscaoficio.co/dashboard` posted the `logout` Server
   Action to `/dashboard`; `proxy.ts` 307'd to `/login` before the action
@@ -23,14 +33,15 @@
   Delete now stamps `usuarios.deleted_at`, sets `is_active=False`, and
   revokes refresh tokens. The row stays so unique email/`google_sub` still
   block reuse. Tombstones are hidden from FastAdmin lists/detail. Needs
-  Alembic `c8f3a91d4e20` applied on prod RDS before admin delete works
+  Alembic `c8f3a91d4e20` applied on the current prod DB (Supabase) before
+  admin delete works
   there. See Recent changes.
 - **Production deploy on EC2 (working, branch `18-deployment-workflow`,
   not yet merged to `main`).** `.github/workflows/deploy.yml` builds FE/BE
   images in Actions, pushes to ECR tagged with the commit SHA (push is
   idempotent — "tag already exists" is treated as success), then SSHes to
   the box to `docker compose pull && up -d`. Production is live: login,
-  Google Sign-In, RDS Postgres, FastAdmin
+  Google Sign-In, Supabase Postgres (temporary; RDS after launch), FastAdmin
   (https://api.buscaoficio.co/admin) all work. **Remaining action: create
   the first superuser** to log into FastAdmin, following the 3-step
   bootstrap the user provided. See Recent changes.
@@ -85,6 +96,16 @@
   steps.
 
 ## Recent changes
+- **asyncpg `statement_cache_size=0` for PgBouncer, 2026-08-29.**
+  Sentry [BUSCAOFICIO-BACKEND-T](https://aag-k0.sentry.io/issues/BUSCAOFICIO-BACKEND-T)
+  on `GET /api/v1/auth/google/callback`:
+  `DuplicatePreparedStatementError: prepared statement "__asyncpg_stmt_3__"
+  already exists` during dialect init (`select pg_catalog.version()`).
+  Engine host was `*.pooler.supabase.com:6543`. `database.py` had
+  NullPool + only `ssl=prefer`. Shared `ASYNC_CONNECT_ARGS` now also
+  sets `statement_cache_size=0`; Alembic `env.py` matches. Test in
+  `tests/test_database.py`. Docs: `docs/deployment.md`, `.cursorrules`,
+  `systemPatterns.md`, `techContext.md`.
 - **Logout Server Action vs `proxy.ts` 307, 2026-08-29.** Production
   Logout did nothing. Network: `POST /dashboard` (`next-action`,
   `accept: text/x-component`, body `["$T"]`) → 307 → identical Flight
@@ -127,7 +148,8 @@
   147/147 tests green. Not committed.
 - **Deploy pipeline stabilized + ECR immutable-tag fix, 2026-08-26
   (branch `18-deployment-workflow`).** Production is now running
-  end-to-end: login, Google Sign-In, RDS Postgres, FastAdmin. Pipeline
+  end-to-end: login, Google Sign-In, Postgres (now temporarily
+  Supabase; RDS after launch), FastAdmin. Pipeline
   commits this week: `0713267` (opaque prod 500s, migrations squashed to a
   clean initial schema), `73ae711` (serialize runs per ref for duplicate
   push triggers), `9372d34` (image prune ordering — the 8GB EC2 disk had
@@ -448,6 +470,11 @@
   for email verification (backend email + template + frontend `/verify` page).
 
 ## Active decisions
+- **Prod Postgres is temporarily Supabase** (transaction-mode pooler
+  `:6543`), decided 2026-08-29. After the app launches, switch
+  `DATABASE_URL` to RDS `buscaoficio-1`. No engine-code change planned
+  — `ASYNC_CONNECT_ARGS` already works on both. Keep
+  `statement_cache_size=0` through the switch.
 - JWT strategy: **refresh token rotation with DB-backed revocation +
   double-submit fingerprint cookie** (Option B), decided 2026-08-15 after a
   `grill-me` design session. Access token 15 min, refresh token 30 days.
@@ -505,9 +532,10 @@
   `tunnelRoute` unless we explicitly decide to.
 
 ## Next steps (suggested)
-1. Apply prod RDS migrations (including `c8f3a91d4e20`) via the new
-   `migrate.yml` once the backend image that contains those revisions is
-   running on the box — or `workflow_dispatch` after deploy.
+1. Apply prod migrations (including `c8f3a91d4e20`) via `migrate.yml`
+   against the current Supabase `DATABASE_URL` once the backend image
+   that contains those revisions is running — or `workflow_dispatch`
+   after deploy. After launch: cut `DATABASE_URL` over to RDS.
 2. Open a PR for branch `otp-ux-polish-required-whatsapp` (issue #15,
    pushed 2026-08-20) once ready for review.
 3. **Resolve the frontend architecture question** (server-mediated vs. SPA
