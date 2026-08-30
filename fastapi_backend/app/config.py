@@ -1,10 +1,34 @@
 import logging
+import sys
 from pathlib import Path
 from typing import Set
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger("buscaoficio")
+
+
+def configure_app_logger() -> logging.Logger:
+    """Emit INFO+ from ``buscaoficio``. Sentry does not need this handler.
+
+    A logger at NOTSET inherits the root WARNING default, so ``logger.info``
+    never reaches ``Logger.callHandlers`` — the hook sentry-sdk 2.68+ uses
+    instead of a root handler.
+    """
+    logger.setLevel(logging.INFO)
+    if "pytest" in sys.modules:
+        return logger
+    if any(handler.get_name() == "buscaoficio.stderr" for handler in logger.handlers):
+        return logger
+    handler = logging.StreamHandler()
+    handler.set_name("buscaoficio.stderr")
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(logging.Formatter("%(levelname)s [%(name)s] %(message)s"))
+    logger.addHandler(handler)
+    return logger
+
+
+configure_app_logger()
 
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"

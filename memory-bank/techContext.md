@@ -148,9 +148,12 @@ Not “E2W”. End-to-end type safety means:
 - Org: `aag-k0`. Projects: `buscaoficio-backend` (python-fastapi),
   `buscaoficio-frontend` (javascript-nextjs). Team slug: `aag`.
 - Signals: errors + tracing + logs. No Session Replay / profiling unless decided later.
-- Backend: `sentry-sdk[fastapi]`; init in `app/main.py` if `SENTRY_DSN` is set.
-  Logger: `from app.config import logger`. Sample rate 1.0 unless
-  `SENTRY_ENVIRONMENT=production` (then 0.1).
+- Backend: `sentry-sdk[fastapi]`; init in `app/__init__.py` if `SENTRY_DSN` is set.
+  Logger: `from app.config import logger` (INFO via `configure_app_logger()`).
+  `traces_sample_rate` 1.0 unless `SENTRY_ENVIRONMENT=production` (then 0.1)
+  — traces only, not logs.
+  Stdlib → Sentry Logs: `LoggingIntegration(capture_sentry_logs=True)` —
+  `enable_logs` is a no-op since sentry-sdk 2.68.
 - Frontend: `@sentry/nextjs`. Official files only (see `systemPatterns.md`).
   Sample rate via `NODE_ENV` (1.0 development, 0.1 otherwise).
 - This app uses **Webpack** (`next dev --webpack` / `next build --webpack`),
