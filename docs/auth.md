@@ -186,7 +186,15 @@ There is no persistent client-side JS holding a refresh timer — instead, `prox
 
 If the access token is missing `refreshToken`/`fingerprintToken` cookies at all when a refresh is needed, that's treated as a dead session for document GETs (redirect to `/login`) rather than attempted.
 
-**Never 307 a Server Action to `/login`.** Next.js invokes a Server Action by POSTing to the *current page* (`POST /dashboard` + `next-action`), not to a `/logout` URL. A middleware 307 is followed as another Flight POST (307 keeps method and body), so the client replays the same action onto `/login` while `next-router-state-tree` still says `dashboard`. That is not a navigation — Logout looks like a no-op. Confirmed in production (2026-08-29): dashboard POST 307'd, then an identical Flight POST hit `/login`. `proxy.ts` therefore `NextResponse.next()`s any request with a `next-action` header when it would otherwise redirect, and the action (`logout-action.ts`, or `items-action.ts`'s `isUnauthorizedError()` path) issues `redirect()` itself. `logout()` always clears cookies and redirects, even if the backend revoke fails or there is no token.
+**Never 307 a Server Action to `/login`.** Next.js invokes a Server Action by POSTing to the *current page* (`POST /dashboard` + `next-action`). A middleware 307 is followed as another Flight POST (307 keeps method and body), so the client replays the same action onto `/login` while `next-router-state-tree` still says `dashboard`. That is not a navigation. Confirmed in production (2026-08-29). `proxy.ts` therefore `NextResponse.next()`s any request with a `next-action` header when it would otherwise redirect, and actions such as `items-action.ts`'s `isUnauthorizedError()` path issue `redirect()` themselves.
+
+**Logout is not a Server Action.** The dashboard posts a native form to `POST /api/auth/logout` (stable URL). A hashed Server Action id is invalid after a frontend deploy if the tab still has the old JS (`404` + `x-nextjs-action-not-found`). The route handler best-effort revokes on FastAPI, always clears the three auth cookies, and `303`s to `/login`. It is outside `proxy.ts`'s matcher. Behind Caddy, Location uses `FRONTEND_URL` (same as `/api/auth/google/complete`). Logout is the one action that must work with zero/stale JS; do not convert every Server Action into a Route Handler for that reason.
+
+### Stale Server Actions after a frontend deploy
+
+Server Action ids are **build-specific hashes**. After `Deploy to production` pulls a new frontend image, a tab that still has the previous dashboard JS will POST an unknown `next-action` id. Next answers with HTTP `404`, `x-nextjs-action-not-found: 1`, and body `Server action not found.` — a handled response, not an uncaught server exception (so Sentry's `onRequestError` never sees it). The browser Flight client then throws `"An unexpected response was received from the server."`
+
+**Scalable mitigation:** `app/global-error.tsx` detects that message, calls `window.location.reload()` (so the tab picks up the new JS), and **does not** `captureException` it. That covers every Server Action (items, OTP, future product actions) without per-action Route Handlers. Today there is no nested `error.tsx`; if you add one, copy the same check — nested boundaries run before the global one.
 
 ### Reactive fallback in Server Actions
 

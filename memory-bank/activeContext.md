@@ -1,6 +1,12 @@
 # Active Context
 
 ## Current focus
+- **Stale Server Action after frontend deploy, 2026-08-30.** A tab left
+  open across `Deploy to production` posts an old action id → `404` +
+  `x-nextjs-action-not-found`. Logout is now a stable
+  `POST /api/auth/logout` form. All other actions stay Server Actions;
+  `global-error.tsx` reloads on the Flight "unexpected response" message
+  (no Sentry). See Recent changes.
 - **Sentry Logs empty for `logger.info` (logout, etc.), 2026-08-30.**
   Production errors reached Sentry; **zero** backend logs in 90 days.
   sentry-sdk 2.68 made `enable_logs` a no-op and turned off stdlib
@@ -102,6 +108,15 @@
   steps.
 
 ## Recent changes
+- **Stale Server Action after deploy + Logout Route Handler, 2026-08-30.**
+  Reproduced: logged-in tab → deploy frontend → Logout →
+  `Server action not found` (no Sentry — handled Next 404). Logout is
+  now native form → `POST /api/auth/logout` (`app/api/auth/logout/route.ts`).
+  Broader case (any Server Action with stale JS): `global-error.tsx`
+  reloads on `"An unexpected response was received from the server."`
+  without capturing to Sentry. Documented in `docs/auth.md`,
+  `.cursorrules`, `.CLAUDE.md`, `systemPatterns.md`. Do not convert every
+  action to a Route Handler.
 - **Sentry stdlib logs (sentry-sdk 2.68), 2026-08-30.** Logout
   `logger.info` never appeared in Sentry Logs. Two gates: (1)
   `enable_logs=True` no longer bridges stdlib — need

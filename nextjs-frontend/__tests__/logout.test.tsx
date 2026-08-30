@@ -1,66 +1,98 @@
-import { logout } from "@/components/actions/logout-action";
+/** @jest-environment node */
+// next/server's NextRequest needs Request/Response, which jsdom lacks.
+
+import { NextRequest, type NextResponse } from "next/server";
+
+import { POST } from "@/app/api/auth/logout/route";
 import { authJwtLogout } from "@/app/clientService";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 
 jest.mock("../app/clientService", () => ({
   authJwtLogout: jest.fn(),
 }));
 
-jest.mock("next/headers", () => {
-  const mockGet = jest.fn();
-  const mockDelete = jest.fn();
-  return {
-    cookies: jest.fn().mockResolvedValue({ get: mockGet, delete: mockDelete }),
-  };
+function makeRequest(cookieHeader?: string) {
+  return new NextRequest("http://localhost:3000/api/auth/logout", {
+    method: "POST",
+    headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+  });
+}
+
+function expectClearedAuthCookies(response: NextResponse) {
+  for (const name of ["accessToken", "refreshToken", "fingerprintToken"]) {
+    const cookie = response.cookies.get(name);
+    expect(cookie).toBeDefined();
+    expect(cookie?.value === "" || cookie?.maxAge === 0).toBe(true);
+  }
+}
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  delete process.env.FRONTEND_URL;
 });
 
-jest.mock("next/navigation", () => ({
-  redirect: jest.fn(),
-}));
-
-describe("logout action", () => {
-  it("clears all three auth cookies and redirects on success", async () => {
-    const cookieStore = await cookies();
-    (cookieStore.get as jest.Mock).mockReturnValue({ value: "some-token" });
+describe("POST /api/auth/logout", () => {
+  it("revokes on the backend, clears auth cookies, and 303s to /login", async () => {
     (authJwtLogout as jest.Mock).mockResolvedValue({ error: undefined });
 
-    await logout();
+    const response = await POST(
+      makeRequest("accessToken=some-token; refreshToken=r; fingerprintToken=f"),
+    );
 
     expect(authJwtLogout).toHaveBeenCalledWith({
       headers: { Authorization: "Bearer some-token" },
     });
-    expect(cookieStore.delete).toHaveBeenCalledWith("accessToken");
-    expect(cookieStore.delete).toHaveBeenCalledWith("refreshToken");
-    expect(cookieStore.delete).toHaveBeenCalledWith("fingerprintToken");
-    expect(redirect).toHaveBeenCalledWith("/login");
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(
+      "http://localhost:3000/login",
+    );
+    expectClearedAuthCookies(response);
   });
 
   it("clears cookies and redirects even when there is no access token", async () => {
-    const cookieStore = await cookies();
-    (cookieStore.get as jest.Mock).mockReturnValue(undefined);
-
-    await logout();
+    const response = await POST(makeRequest());
 
     expect(authJwtLogout).not.toHaveBeenCalled();
-    expect(cookieStore.delete).toHaveBeenCalledWith("accessToken");
-    expect(cookieStore.delete).toHaveBeenCalledWith("refreshToken");
-    expect(cookieStore.delete).toHaveBeenCalledWith("fingerprintToken");
-    expect(redirect).toHaveBeenCalledWith("/login");
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(
+      "http://localhost:3000/login",
+    );
+    expectClearedAuthCookies(response);
   });
 
   it("clears cookies and redirects even when the backend logout call fails", async () => {
-    const cookieStore = await cookies();
-    (cookieStore.get as jest.Mock).mockReturnValue({ value: "stale-token" });
     (authJwtLogout as jest.Mock).mockResolvedValue({
       error: { detail: "unauthorized" },
     });
 
-    await logout();
+    const response = await POST(makeRequest("accessToken=stale-token"));
 
-    expect(cookieStore.delete).toHaveBeenCalledWith("accessToken");
-    expect(cookieStore.delete).toHaveBeenCalledWith("refreshToken");
-    expect(cookieStore.delete).toHaveBeenCalledWith("fingerprintToken");
-    expect(redirect).toHaveBeenCalledWith("/login");
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(
+      "http://localhost:3000/login",
+    );
+    expectClearedAuthCookies(response);
+  });
+
+  it("clears cookies and redirects when the backend logout call throws", async () => {
+    (authJwtLogout as jest.Mock).mockRejectedValue(new Error("network"));
+
+    const response = await POST(makeRequest("accessToken=some-token"));
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(
+      "http://localhost:3000/login",
+    );
+    expectClearedAuthCookies(response);
+  });
+
+  it("uses FRONTEND_URL for Location when set (Caddy / bind-address)", async () => {
+    process.env.FRONTEND_URL = "https://app.buscaoficio.co";
+    (authJwtLogout as jest.Mock).mockResolvedValue({ error: undefined });
+
+    const response = await POST(makeRequest("accessToken=some-token"));
+
+    expect(response.headers.get("location")).toBe(
+      "https://app.buscaoficio.co/login",
+    );
   });
 });
