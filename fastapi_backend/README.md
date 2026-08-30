@@ -21,6 +21,7 @@ For the UI, see `[nextjs-frontend/README.md](../nextjs-frontend/README.md)`.
 | Validation / settings | Pydantic v2 + pydantic-settings                 |
 | Pagination            | fastapi-pagination                              |
 | Email                 | fastapi-mail + Jinja templates                  |
+| Observability         | sentry-sdk (errors, traces, logs)               |
 | Quality               | Ruff, mypy, pytest, pytest-asyncio              |
 | Local SMTP catcher    | MailHog (via Compose)                           |
 | Deploy                | AWS EC2 (Docker, `fastapi run app/main.py` — see [`docs/deployment.md`](../docs/deployment.md)) |
@@ -127,6 +128,8 @@ python3 -c "import secrets; print(secrets.token_hex(32))"  # run 3× for the sec
 | `CORS_ORIGINS`              | Allowed origins (JSON-like set, e.g. `["*"]` locally) |
 | `FRONTEND_URL`              | Used in email links (default `http://localhost:3000`) |
 | `OPENAPI_OUTPUT_FILE`       | Where schema is written                               |
+| `SENTRY_DSN`                | Optional; empty disables the SDK                      |
+| `SENTRY_ENVIRONMENT`        | e.g. `development` / `production`                     |
 
 
 
@@ -307,7 +310,15 @@ Production: configure real SMTP (or a provider) via `MAIL_*` env vars - do not u
 
 ---
 
+## Logging & Sentry
 
+App logs use `from app.config import logger` (`buscaoficio`, INFO via `configure_app_logger()`). Empty `SENTRY_DSN` disables the SDK.
+
+INFO+ from that logger goes to **Sentry Logs** (Explore → Logs), not Issues. Issues are ERROR+ plus unhandled exceptions. `traces_sample_rate` (0.1 in production) samples **traces only**, not logs.
+
+sentry-sdk 2.68: `enable_logs` is a no-op. Stdlib → Logs needs `LoggingIntegration(capture_sentry_logs=True)` in `app/sentry.py`. Init runs from `app/__init__.py` before `Settings()`.
+
+---
 
 ## Auth behavior notes
 
@@ -352,6 +363,8 @@ Production is AWS (EC2 + Docker + Caddy), not Vercel. The container runs `fastap
 fastapi_backend/
 ├── app/
 │   ├── main.py          # App + routers
+│   ├── sentry.py        # SDK init (DSN from env)
+│   ├── config.py        # Settings + app logger
 │   ├── users.py         # Auth backend + UserManager
 │   ├── models.py        # SQLAlchemy models
 │   ├── schemas.py       # Pydantic schemas

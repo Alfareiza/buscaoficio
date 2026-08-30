@@ -1,6 +1,14 @@
 # Active Context
 
 ## Current focus
+- **Sentry Logs empty for `logger.info` (logout, etc.), 2026-08-30.**
+  Production errors reached Sentry; **zero** backend logs in 90 days.
+  sentry-sdk 2.68 made `enable_logs` a no-op and turned off stdlib
+  auto-collection unless `LoggingIntegration(capture_sentry_logs=True)`.
+  Separately, `buscaoficio` inherited root WARNING so `logger.info` never
+  called `callHandlers` (the 2.68 bridge — not a root handler uvicorn
+  could strip). Fix: `capture_sentry_logs=True` + `configure_app_logger()`
+  at INFO. See Recent changes.
 - **Supabase pooler prepared statements (BUSCAOFICIO-BACKEND-W), 2026-08-29.**
   `statement_cache_size=0` alone did not fix Google re-login after
   logout. SQLAlchemy still calls `connection.prepare(name=None)`;
@@ -94,6 +102,12 @@
   steps.
 
 ## Recent changes
+- **Sentry stdlib logs (sentry-sdk 2.68), 2026-08-30.** Logout
+  `logger.info` never appeared in Sentry Logs. Two gates: (1)
+  `enable_logs=True` no longer bridges stdlib — need
+  `capture_sentry_logs=True`; (2) logger effective level was WARNING.
+  SDK patches `Logger.callHandlers`; fastapi-cli uvicorn `dictConfig`
+  only names `uvicorn.*`.
 - **SQLAlchemy + asyncpg named prepares on PgBouncer, 2026-08-29.**
   First pass (`statement_cache_size=0`) was insufficient:
   [BUSCAOFICIO-BACKEND-W](https://aag-k0.sentry.io/issues/BUSCAOFICIO-BACKEND-W)

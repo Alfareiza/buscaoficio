@@ -126,6 +126,9 @@
   container.
 - Leftover Vercel serverless path has no `$PORT` wiring; ignore it for prod.
 - Mixing local and Docker runs is discouraged by upstream docs.
+- sentry-sdk 2.68: `enable_logs` does not collect stdlib logs. Use
+  `LoggingIntegration(capture_sentry_logs=True)` and keep the
+  `buscaoficio` logger at INFO (`configure_app_logger()`).
 - Default DB credentials (`postgres`/`password`) are local-only.
 - `on_after_request_verify` logs `user.id` only — verification email not yet sent.
 - No `createsuperuser` command; must promote via SQL (`UPDATE "user" SET is_superuser = true WHERE email = '...'`).
@@ -170,6 +173,14 @@
   public API surface until you've confirmed no other client calls it.
   Worth an explicit question to the user rather than inferring from grep
   results alone before deleting a route (see the 2026-08-18 removal below).
+
+## Session log (2026-08-30)
+- Logout `logger.info` never appeared in Sentry Logs (zero backend logs
+  in 90d; errors still arrived). sentry-sdk 2.68 made `enable_logs` a
+  no-op and requires `capture_sentry_logs=True` on LoggingIntegration.
+  App logger was at inherited WARNING so INFO never hit `callHandlers`.
+  Not uvicorn stripping a Sentry handler — 2.68 patches callHandlers
+  and fastapi-cli's log_config only names uvicorn.* loggers.
 
 ## Session log (2026-08-29)
 - Diagnosed prod Logout no-op: Server Action POST `/dashboard` 307'd by

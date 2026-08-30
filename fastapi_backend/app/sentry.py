@@ -14,6 +14,21 @@ import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration, ignore_logger
 
 
+def build_logging_integration() -> LoggingIntegration:
+    """Bridge stdlib logging into Sentry without depending on a root handler.
+
+    sentry-sdk 2.68+ patches ``Logger.callHandlers`` (it does not install a
+    handler uvicorn's ``dictConfig`` could strip). ``enable_logs`` is a no-op
+    in that release; stdlib → Sentry Logs requires ``capture_sentry_logs``.
+    """
+    return LoggingIntegration(
+        sentry_logs_level=logging.INFO,
+        level=logging.INFO,
+        event_level=logging.ERROR,
+        capture_sentry_logs=True,
+    )
+
+
 def init_sentry() -> None:
     dsn = os.environ.get("SENTRY_DSN")
     if not dsn or "pytest" in sys.modules:
@@ -25,14 +40,7 @@ def init_sentry() -> None:
         environment=environment,
         send_default_pii=False,
         traces_sample_rate=0.1 if environment == "production" else 1.0,
-        enable_logs=True,
-        integrations=[
-            LoggingIntegration(
-                sentry_logs_level=logging.INFO,
-                level=logging.INFO,
-                event_level=logging.ERROR,
-            ),
-        ],
+        integrations=[build_logging_integration()],
     )
     # fastapi-cli re-logs an import-time failure as logger.error before
     # re-raising it, which would open a second, stack-trace-less issue for

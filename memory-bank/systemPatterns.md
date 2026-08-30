@@ -164,10 +164,14 @@ The current frontend is **Server Actions + Edge middleware based** — every bac
 ### Backend
 - Single logger: `from app.config import logger` (`logging.getLogger("buscaoficio")`).
 - Use **f-strings** in log messages (`logger.info(f"User {user.id} logged in")`), not `%s`.
-- `sentry_sdk.init()` lives in `app/main.py` **before** `app = FastAPI()`, only if
-  `settings.SENTRY_DSN` is set and `"pytest" not in sys.modules`.
-- `LoggingIntegration` forwards INFO+ to Sentry Logs / breadcrumbs and ERROR+
-  to issues. Signals enabled: errors + tracing + logs. No profiling.
+- `init_sentry()` lives in `app/__init__.py` (via `app/sentry.py`), before
+  `Settings()` runs. Empty DSN or pytest skips init.
+- `configure_app_logger()` sets `buscaoficio` to INFO. Root defaults to
+  WARNING, so `logger.info` would otherwise be dropped before the SDK sees it.
+- sentry-sdk 2.68+ patches `Logger.callHandlers` — it does not install a
+  root handler. `enable_logs` is a no-op; stdlib → Sentry Logs requires
+  `LoggingIntegration(capture_sentry_logs=True)`. INFO+ → Logs/breadcrumbs,
+  ERROR+ → issues. No profiling.
 - `send_default_pii=False`. Never log tokens, passwords, or JWTs.
 - Watcher / OpenAPI CLI `print()` stay as-is (dev tools, not app logs).
 
