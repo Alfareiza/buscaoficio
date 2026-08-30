@@ -95,7 +95,7 @@ async def logout(
         "fingerprintToken", path="/api/v1/auth/jwt/refresh", secure=True, httponly=True
     )
 
-    logger.info(f"User {user.id} logged out, all sessions revoked")
+    logger.info(f"User {user} logged out, all sessions revoked")
     return response
 
 
@@ -293,7 +293,7 @@ async def google_callback(
         user.id, picture=profile.picture
     )
     logger.info(
-        f"User {user.id} authenticated via Google from {get_client_ip(request)}"
+        f"User {user} authenticated via Google from {get_client_ip(request)}"
     )
     # Hands off to a Next.js Route Handler (not a page) so the session is
     # established server-side and the browser lands straight on /dashboard —
@@ -376,7 +376,7 @@ async def google_session(
     )
     await user_manager.on_after_login(user, request, response)
     logger.info(
-        f"User {user.id} session established via Google from {get_client_ip(request)}"
+        f"User {user} session established via Google from {get_client_ip(request)}"
     )
     return response
 

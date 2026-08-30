@@ -92,7 +92,7 @@ class User(SQLAlchemyBaseUserTableUUID, TimestampMixin, Base):
     )
 
     def __str__(self) -> str:
-        return f"{self.nombre_completo} ({self.email})"
+        return f"<{self.nombre_completo} ({self.email} - {self.whatsapp})>"
 
 
 class Cliente(TimestampMixin, UsuarioProvisioningDisplayMixin, Base):
