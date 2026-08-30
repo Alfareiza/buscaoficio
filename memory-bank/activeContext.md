@@ -1,16 +1,14 @@
 # Active Context
 
 ## Current focus
-- **Supabase pooler prepared statements (BUSCAOFICIO-BACKEND-T), 2026-08-29.**
-  After the logout 307 fix, Google Sign-In hit
-  `DuplicatePreparedStatementError` on `/auth/google/callback`. Prod
-  `DATABASE_URL` is **temporarily** Supabase transaction-mode PgBouncer
-  (`:6543`); after launch it becomes RDS `buscaoficio-1`. asyncpg's
-  default statement cache is unsafe on the pooler. Fix:
-  `statement_cache_size=0` in `ASYNC_CONNECT_ARGS` (app + Alembic).
-  The proxy change did not cause the SQL error — it unmasked it by
-  making logout actually succeed so the next request opened a fresh
-  checkout. See Recent changes.
+- **Supabase pooler prepared statements (BUSCAOFICIO-BACKEND-W), 2026-08-29.**
+  `statement_cache_size=0` alone did not fix Google re-login after
+  logout. SQLAlchemy still calls `connection.prepare(name=None)`;
+  asyncpg 0.29 treats that as a named statement (`__asyncpg_stmt_a__`)
+  which collides on the transaction pooler. Real fix: also
+  `prepared_statement_cache_size=0` + `prepared_statement_name_func=str`
+  in `app/database.py`. See Recent
+  changes.
 - **Prod logout no-op (Server Action 307), 2026-08-29.** Clicking
   Logout on `app.buscaoficio.co/dashboard` posted the `logout` Server
   Action to `/dashboard`; `proxy.ts` 307'd to `/login` before the action
@@ -96,16 +94,21 @@
   steps.
 
 ## Recent changes
+- **SQLAlchemy + asyncpg named prepares on PgBouncer, 2026-08-29.**
+  First pass (`statement_cache_size=0`) was insufficient:
+  [BUSCAOFICIO-BACKEND-W](https://aag-k0.sentry.io/issues/BUSCAOFICIO-BACKEND-W)
+  still 500'd `GET /auth/google/callback` after logout→Google, on
+  `SELECT … FROM usuarios WHERE google_sub = $1`, name
+  `__asyncpg_stmt_a__`. SQLAlchemy 2.0.36 always `prepare()`s; a `None`
+  name becomes a named statement in asyncpg 0.29 regardless of
+  asyncpg's cache size. `app/database.py` now sets both caches to 0
+  and `prepared_statement_name_func=str` (`str()` → unnamed prepare).
+  Alembic imports `ASYNC_CONNECT_ARGS` from `app.database` after
+  `load_dotenv()`.
 - **asyncpg `statement_cache_size=0` for PgBouncer, 2026-08-29.**
   Sentry [BUSCAOFICIO-BACKEND-T](https://aag-k0.sentry.io/issues/BUSCAOFICIO-BACKEND-T)
-  on `GET /api/v1/auth/google/callback`:
-  `DuplicatePreparedStatementError: prepared statement "__asyncpg_stmt_3__"
-  already exists` during dialect init (`select pg_catalog.version()`).
-  Engine host was `*.pooler.supabase.com:6543`. `database.py` had
-  NullPool + only `ssl=prefer`. Shared `ASYNC_CONNECT_ARGS` now also
-  sets `statement_cache_size=0`; Alembic `env.py` matches. Test in
-  `tests/test_database.py`. Docs: `docs/deployment.md`, `.cursorrules`,
-  `systemPatterns.md`, `techContext.md`.
+  on `GET /api/v1/auth/google/callback` during dialect init. First
+  incomplete fix; superseded by the named-prepare change above.
 - **Logout Server Action vs `proxy.ts` 307, 2026-08-29.** Production
   Logout did nothing. Network: `POST /dashboard` (`next-action`,
   `accept: text/x-component`, body `["$T"]`) → 307 → identical Flight
@@ -473,8 +476,8 @@
 - **Prod Postgres is temporarily Supabase** (transaction-mode pooler
   `:6543`), decided 2026-08-29. After the app launches, switch
   `DATABASE_URL` to RDS `buscaoficio-1`. No engine-code change planned
-  — `ASYNC_CONNECT_ARGS` already works on both. Keep
-  `statement_cache_size=0` through the switch.
+  — `ASYNC_CONNECT_ARGS` already works on both (caches off +
+  `prepared_statement_name_func=str`). Keep the dict through the switch.
 - JWT strategy: **refresh token rotation with DB-backed revocation +
   double-submit fingerprint cookie** (Option B), decided 2026-08-15 after a
   `grill-me` design session. Access token 15 min, refresh token 30 days.

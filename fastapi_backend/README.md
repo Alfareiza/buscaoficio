@@ -285,7 +285,7 @@ Tests use `TEST_DATABASE_URL` and recreate schema in `tests/conftest.py`.
 
 ### Connection pooling
 
-The engine uses `NullPool` so connection behavior is uniform across dev and prod (no sticky pool). `connect_args` always include `ssl="prefer"` and `statement_cache_size=0` — the latter is required while prod uses Supabase's transaction-mode pooler (`:6543`); prepared statements collide there (`DuplicatePreparedStatementError`). Keep it after the RDS switch (harmless on a direct connection). Alembic's engine in `alembic_migrations/env.py` must use the same args.
+The engine uses `NullPool` so connection behavior is uniform across dev and prod (no sticky pool). `ASYNC_CONNECT_ARGS` in `app/database.py` is `ssl="prefer"`, `statement_cache_size=0` (asyncpg), `prepared_statement_cache_size=0` (SQLAlchemy), and `prepared_statement_name_func=str` (`str()` is `""` — unnamed prepares). `statement_cache_size=0` alone is not enough: SQLAlchemy still `prepare()`s, and asyncpg 0.29 auto-names those `__asyncpg_stmt_N__`, which collide on Supabase's transaction pooler (`:6543`, BUSCAOFICIO-BACKEND-W). The URL is built inline in `create_async_engine` from `DATABASE_URL` components (query string dropped). Alembic imports the same `ASYNC_CONNECT_ARGS` after `load_dotenv()`. Keep the dict after the RDS switch — it is harmless on a direct connection.
 
 ---
 
@@ -323,7 +323,7 @@ Production: configure real SMTP (or a provider) via `MAIL_*` env vars - do not u
 
 ## Deploy - backend perspective
 
-Production is AWS (EC2 + Docker + Caddy), not Vercel. The container runs `fastapi run app/main.py --workers 2`. Postgres is **temporarily Supabase** (pooler `:6543`); switch `DATABASE_URL` to RDS after launch. asyncpg uses `ssl="prefer"` and `statement_cache_size=0` in `app/database.py` and Alembic, so no URL flags are needed.
+Production is AWS (EC2 + Docker + Caddy), not Vercel. The container runs `fastapi run app/main.py --workers 2`. Postgres is **temporarily Supabase** (pooler `:6543`); switch `DATABASE_URL` to RDS after launch. Engine connect args are `ASYNC_CONNECT_ARGS` in `app/database.py` (and Alembic) — no `?ssl=` / `?pgbouncer=` URL flags.
 
 ### Required production env
 

@@ -20,9 +20,11 @@
   must not 307 Server Action POSTs (`next-action`); that made Logout a
   no-op in prod (2026-08-29). Actions `redirect()` themselves.
 - Prod Postgres is **temporarily Supabase** (transaction pooler `:6543`);
-  switch to RDS after launch. App + Alembic engines set asyncpg
-  `statement_cache_size=0` so NullPool checkouts do not collide on
-  prepared-statement names (BUSCAOFICIO-BACKEND-T, 2026-08-29).
+  switch to RDS after launch. App + Alembic use `ASYNC_CONNECT_ARGS` in
+  `app/database.py`: both statement caches off and
+  `prepared_statement_name_func=str` (unnamed prepares).
+  `statement_cache_size=0` alone left named `__asyncpg_stmt_*`
+  collisions (BUSCAOFICIO-BACKEND-W).
 - `AuthCard` component (`components/auth/AuthCard.tsx`) drives the OTP
   flow on both `/login` and `/register`, which now share a route-group
   layout (`app/(auth)/layout.tsx`) so toggling between them feels instant
@@ -179,9 +181,12 @@
 - Documented in memory bank, `docs/auth.md`, `.cursorrules`,
   `nextjs-frontend/.CLAUDE.md`.
 - After logout worked, Google callback 500'd
-  (BUSCAOFICIO-BACKEND-T): `DuplicatePreparedStatementError` through
-  Supabase pooler `:6543`. Set asyncpg `statement_cache_size=0` on the
-  app engine and Alembic.
+  (BUSCAOFICIO-BACKEND-T / **W**): `DuplicatePreparedStatementError`
+  through Supabase pooler `:6543`. `statement_cache_size=0` alone was
+  not enough — SQLAlchemy still `prepare()`s named statements.
+  `ASYNC_CONNECT_ARGS` now also sets `prepared_statement_cache_size=0`
+  and `prepared_statement_name_func=str`. URL is inlined in
+  `create_async_engine`.
 - Documented that prod Postgres is **temporarily Supabase**; switch to
   RDS after launch (`docs/deployment.md`, memory bank, `.cursorrules`).
 

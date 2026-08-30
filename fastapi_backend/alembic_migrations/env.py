@@ -88,13 +88,14 @@ async def run_async_migrations() -> None:
 
     """
 
-    # Must match app.database.ASYNC_CONNECT_ARGS (ssl + no prepared-statement
-    # cache — PgBouncer transaction mode / Supabase :6543).
+    # Imported here so Settings() runs after load_dotenv() above.
+    from app.database import ASYNC_CONNECT_ARGS
+
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        connect_args={"ssl": "prefer", "statement_cache_size": 0},
+        connect_args=ASYNC_CONNECT_ARGS,
     )
 
     async with connectable.connect() as connection:

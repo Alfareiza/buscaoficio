@@ -44,11 +44,11 @@ Three env files live only on the EC2 box, at `/opt/buscaoficio/`:
 
 ## Production database
 
-**Now (pre-launch): Supabase.** `DATABASE_URL` on the box is the transaction-mode pooler (`*.pooler.supabase.com:6543` / PgBouncer). `app/database.py` and Alembic rebuild the URL from components — the query string is ignored, so don't rely on `?ssl=true` or `?pgbouncer=true`. SSL is `ssl="prefer"` in `ASYNC_CONNECT_ARGS`. Prepared statements must stay off (`statement_cache_size=0`); leaving the default cache up produces `DuplicatePreparedStatementError` on a new checkout (BUSCAOFICIO-BACKEND-T, first seen on `GET /auth/google/callback`).
+**Now (pre-launch): Supabase.** `DATABASE_URL` on the box is the transaction-mode pooler (`*.pooler.supabase.com:6543` / PgBouncer). `create_async_engine` in `app/database.py` builds the URL inline from host/user/password/path — the query string is ignored, so don't rely on `?ssl=true` or `?pgbouncer=true`. Connect args are `ASYNC_CONNECT_ARGS` in the same file: `ssl="prefer"`, both statement caches off, and `prepared_statement_name_func=str` (`str()` is `""`, so prepares are unnamed). There is no project function or lambda for names. `statement_cache_size=0` alone is not enough (BUSCAOFICIO-BACKEND-W: SQLAlchemy still `prepare()`s named `__asyncpg_stmt_*` statements). Alembic imports that dict after `load_dotenv()`.
 
 Point `DATABASE_URL` at the pooler, set the four `*_SECRET_KEY`s (`openssl rand -hex 32`), then `docker compose -f docker-compose.prod.yml up -d backend` and `docker compose -f docker-compose.prod.yml exec -T backend alembic upgrade head`. Empty secret keys mean tokens are signed with an empty string — check with `grep -E "^[A-Z_]+=$"`.
 
-**After launch: RDS** (`buscaoficio-1`). Same `DATABASE_URL` env var, different host — no app code change required (`statement_cache_size=0` is harmless on a direct `5432` connection). RDS enforces SSL (`rds.force_ssl=1`). First-time RDS steps when you switch:
+**After launch: RDS** (`buscaoficio-1`). Same `DATABASE_URL` env var, different host — no app code change required (`ASYNC_CONNECT_ARGS` is harmless on a direct `5432` connection). RDS enforces SSL (`rds.force_ssl=1`). First-time RDS steps when you switch:
 
 1. Reset/set the master password: `aws rds modify-db-instance --db-instance-identifier buscaoficio-1 --master-user-password <pw> --apply-immediately`
 2. Create the app database: from the backend container, connect to the `postgres` maintenance DB and `CREATE DATABASE buscaoficio`.

@@ -232,12 +232,12 @@ Do **not** add a wrapper in `lib/utils.ts`.
 - **Prod Postgres is temporarily Supabase** (transaction pooler `:6543`).
   After launch, point `DATABASE_URL` at RDS — no engine-code change.
 - Engine connect args live in `app/database.py` as `ASYNC_CONNECT_ARGS`
-  (`ssl="prefer"`, `statement_cache_size=0`). Alembic
-  (`alembic_migrations/env.py`) must copy the same dict — do not add
-  prepared-statement caching back while on the pooler. NullPool +
-  PgBouncer + asyncpg defaults = `DuplicatePreparedStatementError`
-  (BUSCAOFICIO-BACKEND-T, first seen on Google callback after a real
-  logout forced a fresh checkout).
+  (`ssl="prefer"`, both statement caches off,
+  `prepared_statement_name_func=str` so `str()` is an unnamed prepare —
+  no project function or lambda). The engine URL is built inline in
+  `create_async_engine`. Alembic imports the same dict after
+  `load_dotenv()`. NullPool + PgBouncer + named `__asyncpg_stmt_N__` =
+  `DuplicatePreparedStatementError` (BUSCAOFICIO-BACKEND-W).
 - Alembic is source of truth for schema; `create_db_and_tables` exists but is not the official path
 - Changing `models.py` alone: FastAPI `--reload` restarts, but **watcher does not regenerate OpenAPI** and **DB does not migrate**
 - After model change: also update schemas/routes if API should change; then Alembic:

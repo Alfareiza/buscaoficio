@@ -86,11 +86,15 @@ async def test_get_user_db(mock_session):
     assert user_db.user_table == User
 
 
-def test_connect_args_disable_asyncpg_statement_cache():
-    # PgBouncer transaction mode (Supabase :6543) cannot reuse asyncpg's
-    # default prepared-statement names across NullPool checkouts.
-    assert ASYNC_CONNECT_ARGS["statement_cache_size"] == 0
+def test_connect_args_disable_prepared_statement_reuse():
+    # statement_cache_size=0 alone is not enough: SQLAlchemy still calls
+    # prepare(name=None), and asyncpg 0.29 then auto-names __asyncpg_stmt_N__
+    # (BUSCAOFICIO-BACKEND-W). str() is "" — unnamed prepares.
     assert ASYNC_CONNECT_ARGS["ssl"] == "prefer"
+    assert ASYNC_CONNECT_ARGS["statement_cache_size"] == 0
+    assert ASYNC_CONNECT_ARGS["prepared_statement_cache_size"] == 0
+    assert ASYNC_CONNECT_ARGS["prepared_statement_name_func"] is str
+    assert ASYNC_CONNECT_ARGS["prepared_statement_name_func"]() == ""
 
 
 def test_engine_creation(mocker):

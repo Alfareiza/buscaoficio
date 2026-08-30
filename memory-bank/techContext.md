@@ -48,12 +48,15 @@
 - **Prod Postgres is temporarily Supabase** (transaction-mode pooler
   `*.pooler.supabase.com:6543`). After launch, switch `DATABASE_URL` to
   RDS `buscaoficio-1` (direct 5432). Local stays Docker Postgres.
-- Engine uses **NullPool** plus `ASYNC_CONNECT_ARGS`: `ssl="prefer"` and
-  `statement_cache_size=0`. The cache disable is required on the Supabase
-  pooler — asyncpg's default prepared-statement names collide across
-  NullPool checkouts (`DuplicatePreparedStatementError`,
-  BUSCAOFICIO-BACKEND-T). Alembic's engine uses the same args. Harmless
-  on local Docker and on RDS after the switch.
+- Engine uses **NullPool** plus `ASYNC_CONNECT_ARGS` from
+  `app/database.py`: `ssl="prefer"`, both statement caches off,
+  `prepared_statement_name_func=str` (unnamed prepares).
+  `statement_cache_size=0` alone is not enough —
+  SQLAlchemy still `prepare()`s and asyncpg auto-names
+  `__asyncpg_stmt_N__` (BUSCAOFICIO-BACKEND-W). The URL is built inline
+  in `create_async_engine` (no `async_db_connection_url` variable).
+  Alembic imports the same dict. Harmless on local Docker and on RDS
+  after the switch.
 
 ### Local host ports (customized for this machine)
 | Service | Host port | Container port |
