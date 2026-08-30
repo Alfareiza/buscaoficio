@@ -295,7 +295,7 @@ export function AuthCard({
                     </span>
                   </span>
                   <Image
-                    src="/images/logo/google.svg"
+                    src="/images/logo/google.webp"
                     alt=""
                     width={16}
                     height={16}
