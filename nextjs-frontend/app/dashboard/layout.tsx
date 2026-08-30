@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { BuscaOficioMark } from "@/components/ui/BuscaOficioLogo";
-import { logout } from "@/components/actions/logout-action";
 
 export default function DashboardLayout({
   children,
@@ -92,12 +91,14 @@ export default function DashboardLayout({
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem>
-                  <button
-                    onClick={logout}
-                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                  >
-                    Logout
-                  </button>
+                  <form method="POST" action="/api/auth/logout">
+                    <button
+                      type="submit"
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      Logout
+                    </button>
+                  </form>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

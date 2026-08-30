@@ -488,7 +488,7 @@ async def refresh(
         path="/api/v1/auth/jwt/refresh",
     )
 
-    logger.info(f"User {user.id} refreshed token from {client_ip}")
+    logger.info(f"User {user} refreshed token from {client_ip}")
     return response
 
 

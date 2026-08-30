@@ -108,9 +108,13 @@
 - `proxy.ts` must **never 307 a Server Action** (`next-action` header).
   Next posts actions to the current page (`POST /dashboard`); a
   middleware 307 is followed as another Flight POST to `/login` and is
-  not a client navigation. Logout looked like a no-op in production
-  (2026-08-29). Pass through; `logout-action.ts` / `items-action.ts`
-  issue `redirect()` themselves.
+  not a client navigation. Pass through; `items-action.ts` issues
+  `redirect()` itself. Logout is `POST /api/auth/logout`, not a Server
+  Action.
+- After a frontend deploy, a stale tab's Server Action id 404s
+  (`x-nextjs-action-not-found`). `global-error.tsx` reloads on the
+  Flight "unexpected response" message (no Sentry). Nested `error.tsx`
+  would need the same check. Only Logout uses a stable Route Handler URL.
 - Changing `models.py` alone does **not** update OpenAPI client or DB schema.
 - User delete is **soft**: `UserManager.delete` sets `deleted_at` and
   `is_active=False` rather than removing the row. FastAdmin lists hide
@@ -175,6 +179,9 @@
   results alone before deleting a route (see the 2026-08-18 removal below).
 
 ## Session log (2026-08-30)
+- Stale Server Action after deploy: Logout → Route Handler
+  `POST /api/auth/logout`; other actions keep Server Actions;
+  `global-error.tsx` reloads on Flight unexpected-response (no Sentry).
 - Logout `logger.info` never appeared in Sentry Logs (zero backend logs
   in 90d; errors still arrived). sentry-sdk 2.68 made `enable_logs` a
   no-op and requires `capture_sentry_logs=True` on LoggingIntegration.

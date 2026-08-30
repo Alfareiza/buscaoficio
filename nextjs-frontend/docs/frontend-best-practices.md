@@ -9,7 +9,7 @@ This file is project-specific conventions only — patterns this codebase has al
 - `params`/`searchParams` are `Promise`s (Next 15+ API) — always `await` them, as in `app/dashboard/page.tsx`'s `DashboardPageProps`.
 
 ## Data mutations: Server Actions, never a client-side fetch to FastAPI
-- New backend-touching operations belong in `components/actions/*.ts` (`"use server"` at the top of the file), calling the generated SDK functions from `app/clientService.ts` / `app/openapi-client` — never `fetch()` FastAPI directly from a client component, and don't add a `route.ts` Route Handler for this (none exist in this codebase; the Server Action is the established seam).
+- New backend-touching operations belong in `components/actions/*.ts` (`"use server"` at the top of the file), calling the generated SDK functions from `app/clientService.ts` / `app/openapi-client` — never `fetch()` FastAPI directly from a client component. Do **not** add a Route Handler per feature: Server Actions stay the seam. Exception: `POST /api/auth/logout` is a Route Handler + native form so sign-out survives a frontend deploy with a stale tab (hashed action ids do not). Stale-tab failures for other actions are handled by `app/global-error.tsx` (reload), not by more route files.
 - Established action shape (see `components/actions/items-action.ts`):
   1. Read `accessToken` from `await cookies()`; if missing, return an error object (don't throw).
   2. Call the typed SDK function, destructure `{ data, error }`.
