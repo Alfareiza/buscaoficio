@@ -87,6 +87,10 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: Set[str]
+    # Optional regex for dynamic origins (e.g. Vercel preview deployments).
+    # Example: "https://buscaoficio-front.*\\.vercel\\.app"
+    # Set to None (default) when not needed (EC2/local).
+    CORS_ORIGIN_REGEX: str | None = None
 
     # Sentry (optional — SDK stays disabled when DSN is empty)
     SENTRY_DSN: str | None = None

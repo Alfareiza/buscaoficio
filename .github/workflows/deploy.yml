@@ -1,19 +1,25 @@
-name: Deploy to production (EC2)
+name: Deploy to production (EC2) — DISABLED on main
 
-# Builds backend/frontend images, pushes them to ECR tagged with the commit SHA,
-# then tells the EC2 box to pull those exact tags and restart via Docker Compose.
-# No build ever happens on the box (913MB RAM makes that unreliable) - the box
-# only runs `docker compose pull` + `up -d` against docker-compose.prod.yml.
+# ⚠️  EC2 instance and RDS were terminated on 2026-09-05 to eliminate charges
+# during active development. This workflow is preserved for documentation and
+# for when EC2 deployment resumes. The live version of this file (with the
+# push trigger pointing at the `ec2` branch) lives in the `ec2` branch.
+#
+# Current production: Vercel (frontend) + Vercel serverless (backend).
+# To re-enable EC2 deployment: see branch `ec2` and its memory-bank disclosure.
+#
+# Original purpose: builds FE/BE images, pushes them to ECR tagged with the
+# commit SHA, then tells the EC2 box to pull those tags and restart via
+# Docker Compose. No build ever happens on the box (913MB RAM).
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "fastapi_backend/**"
-      - "nextjs-frontend/**"
-      - ".github/workflows/deploy.yml"
-  workflow_dispatch: {}
+  # Push trigger intentionally removed — this workflow only runs manually
+  # from this branch. The ec2 branch's version triggers on pushes to `ec2`.
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type 'deploy-ec2' to confirm (EC2 must be running)"
+        required: true
 
 # Serializes runs per branch so two runs for the same push (a rare but
 # observed GitHub platform duplicate-delivery) don't race to SSH into the

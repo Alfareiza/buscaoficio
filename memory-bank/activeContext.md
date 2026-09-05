@@ -1,18 +1,21 @@
 # Active Context
 
 ## Current focus
-- **Deployment pivot: EC2 → Vercel (2026-09-05).** The EC2 instance
-  (`i-0b3ac8e7768cb4b5d`) and the RDS database (`buscaoficio-1`) were
-  **terminated on 2026-09-05** to eliminate AWS charges during active
-  development. A `ec2` branch was created from `main` as a snapshot of
-  the full EC2 deployment configuration (`.github/workflows/deploy.yml`,
-  `migrate.yml`, `docker-compose.prod.yml`, OIDC trust-policy details).
-  See that branch's `memory-bank/activeContext.md` for a restoration guide.
-  **Active work:** issue #XX (to be created) — adapt the project to deploy
-  the frontend on **Vercel** and the backend on a TBD managed host.
-  Database: **Supabase** remains the prod DB (already configured).
-  Pending decisions: backend host (Railway / Render / Fly.io), whether to
-  use Vercel preview deployments for PRs, domain setup.
+- **Deployment pivot: EC2 → Vercel (2026-09-05), branch `28-vercel-deployment`
+  (issue [#28](https://github.com/Alfareiza/buscaoficio/issues/28)).** The EC2
+  instance and RDS were terminated. All Vercel config implemented:
+  - `buscaoficio-front` project: `nextjs-frontend/`, `vercel.json`, pnpm/Corepack
+    install, `output: "standalone"` removed from `next.config.mjs`
+  - `buscaoficio-back` project: `fastapi_backend/`, ASGI entry `api/index.py`,
+    `vercel.json` rewrites, `requirements.txt` (generated from `pyproject.toml`
+    via `make backend-requirements`), `.python-version` = 3.12
+  - `migrate.yml` now runs `uv run alembic upgrade head` directly with only
+    `DATABASE_URL` secret (Alembic env.py inlines `ASYNC_CONNECT_ARGS`)
+  - `CORS_ORIGIN_REGEX` setting added for Vercel preview deployments
+  - `deploy.yml` push trigger removed on `main`; owned by `ec2` branch
+  **Pending:** push branch, create both Vercel projects, set env vars (see
+  issue #28 checklist), point `app.buscaoficio.co` DNS to Vercel, add
+  `DATABASE_URL` GitHub secret for migrate.yml.
 - **Stale Server Action after frontend deploy, 2026-08-30.** A tab left
   open across `Deploy to production` posts an old action id → `404` +
   `x-nextjs-action-not-found`. Logout is now a stable

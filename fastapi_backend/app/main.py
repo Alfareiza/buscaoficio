@@ -30,10 +30,17 @@ app.mount(
     name="static",
 )
 
-# Middleware for CORS configuration
+# Middleware for CORS configuration.
+# CORS_ORIGINS: explicit list (production domain, localhost, etc.)
+# CORS_ORIGIN_REGEX: optional regex for dynamic origins such as Vercel
+#   preview deployments (e.g. "https://buscaoficio-front.*\\.vercel\\.app").
+#   Vercel preview URLs change per-deploy; enumerating them in CORS_ORIGINS
+#   is not feasible. allow_origin_regex and allow_origins are checked
+#   independently — both can match, either is sufficient.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

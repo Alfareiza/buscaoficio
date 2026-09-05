@@ -73,20 +73,27 @@ Changed from defaults (Postgres 5432/5433, API 8000) to avoid conflict with anot
 ### DevOps / Infrastructure
 - Docker Compose: `backend`, `frontend`, `db`, `db_test`, `mailhog` (local)
 - Shared volume `local-shared-data` for OpenAPI schema between BE and FE containers
-- Makefile for start, migrate, test, shells
-- GitHub Actions: CI (FastAPI + Next.js), pre-commit, release, **deploy**
-  (`.github/workflows/deploy.yml` — currently EC2-specific, being replaced),
-  **migrate** (`.github/workflows/migrate.yml` — currently EC2 SSH, being retargeted)
-- **Production deploy target: Vercel** (frontend) + **TBD managed host**
-  (backend — Railway / Render / Fly.io). EC2 instance
-  (`i-0b3ac8e7768cb4b5d`) and RDS (`buscaoficio-1`) were **terminated
-  2026-09-05** to eliminate charges. Branch `ec2` preserves the full EC2
-  deploy configuration for restoration later. See `activeContext.md`.
-- AWS OIDC config (`AWS_DEPLOY_ROLE_ARN`, numeric-ID trust policy
-  `repo:Alfareiza@63620799/buscaoficio@1329243606:*`) stays documented in
-  branch `ec2` for when EC2 deploy resumes.
-- Prod Postgres: **Supabase** (transaction-mode pooler `:6543`) — was
-  "temporary" pending RDS, but RDS is gone; Supabase remains indefinitely.
+- Makefile for start, migrate, test, shells. `make backend-requirements`
+  regenerates `fastapi_backend/requirements.txt` after dep changes.
+- GitHub Actions: CI (FastAPI + Next.js — includes `requirements.txt` staleness
+  check), pre-commit, release, **deploy** (disabled push trigger on `main`;
+  EC2-specific, owned by `ec2` branch), **migrate** (direct `uv run alembic
+  upgrade head` with `DATABASE_URL` secret — no EC2 SSH)
+- **Production deploy: Vercel** for both frontend and backend.
+  - `buscaoficio-front` Vercel project — root: `nextjs-frontend/`
+  - `buscaoficio-back` Vercel project — root: `fastapi_backend/`, ASGI
+    entry `api/index.py`, all traffic rewritten via `vercel.json`,
+    Python 3.12 (`.python-version`), deps from `requirements.txt`
+  - EC2 instance (`i-0b3ac8e7768cb4b5d`) and RDS (`buscaoficio-1`) terminated
+    2026-09-05. Branch `ec2` preserves that full configuration.
+- `next.config.mjs` no longer sets `output: "standalone"` (Docker-only;
+  the `ec2` branch retains it for Docker builds).
+- CORS: `CORS_ORIGINS` (env var, explicit set) + `CORS_ORIGIN_REGEX` (optional
+  env var for Vercel preview URLs, e.g. `https://buscaoficio-front.*\\.vercel\\.app`).
+- AWS OIDC config (`AWS_DEPLOY_ROLE_ARN`, numeric-ID trust policy) stays in
+  branch `ec2` for future EC2 restoration.
+- Prod Postgres: **Supabase** (transaction-mode pooler `:6543`) — RDS gone;
+  Supabase stays indefinitely. `ASYNC_CONNECT_ARGS` unchanged.
 - Quality: pre-commit, Ruff, mypy, ESLint/Prettier
 - Docs: MkDocs Material
 

@@ -1,9 +1,11 @@
 name: Run Database Migrations
 
-# Runs Alembic migrations by SSH-ing into the EC2 box and executing
-# `alembic upgrade head` inside the running backend container.
-# The container already has all env vars (DATABASE_URL, etc.) loaded
-# from the on-box .env, so no secrets need to be passed here.
+# Runs Alembic migrations directly against the database using uv.
+# No EC2 SSH required — DATABASE_URL is supplied as a GitHub Actions secret
+# and is the only env var Alembic needs (see alembic_migrations/env.py).
+#
+# Previous approach (EC2 era): SSH into the box and exec Alembic inside the
+# running backend container. That config is preserved in the `ec2` branch.
 
 on:
   push:
@@ -20,14 +22,19 @@ jobs:
     name: Run Alembic Migration
     runs-on: ubuntu-latest
     steps:
-      - name: Run alembic upgrade head on EC2
-        uses: appleboy/ssh-action@v1.0.3
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            set -euo pipefail
-            cd /opt/buscaoficio
-            docker compose -f docker-compose.prod.yml exec -T backend \
-              alembic upgrade head
+          python-version: "3.12"
+
+      - name: Install backend dependencies (including dev group for Alembic)
+        working-directory: fastapi_backend
+        run: uv sync --group dev
+
+      - name: Run Alembic migrations
+        working-directory: fastapi_backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: uv run alembic upgrade head
