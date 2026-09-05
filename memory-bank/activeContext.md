@@ -1,5 +1,34 @@
 # Active Context
 
+## ⚠️ Branch disclosure — `ec2`
+
+This branch (`ec2`) was created **2026-09-05** as a snapshot of the project
+at the moment it was running on AWS EC2 + RDS.
+
+**Why:** The EC2 instance (`i-0b3ac8e7768cb4b5d`, Elastic IP `44.207.170.68`)
+and the RDS database (`buscaoficio-1`) were **terminated on 2026-09-05** to
+eliminate AWS charges during the active development phase. Costs were not
+justified before the product is ready to go live.
+
+**What this branch preserves:**
+- `.github/workflows/deploy.yml` — GitHub Actions → ECR → EC2 SSH deploy
+- `.github/workflows/migrate.yml` — Alembic via SSH into the EC2 container
+- `docker-compose.prod.yml` + `Caddyfile` — production Compose stack on the box
+- Full `techContext.md` / `systemPatterns.md` describing the EC2 + ECR + RDS
+  architecture and OIDC trust-policy numeric-ID convention
+
+**How to resume EC2 deployment from this branch:**
+1. Provision a new EC2 instance + RDS (or re-use any existing box).
+2. Update `EC2_HOST`, `EC2_SSH_KEY`, `AWS_DEPLOY_ROLE_ARN` GitHub secrets.
+3. Update the IAM trust policy `sub` with the new numeric instance/repo IDs.
+4. Restore/copy the `.env` file to `/opt/buscaoficio/` on the box.
+5. Merge relevant changes from `main` into this branch, resolve conflicts,
+   and re-enable `deploy.yml` + `migrate.yml` triggers.
+
+**Active deployment target while `ec2` is dormant:** Vercel (see `main`).
+
+---
+
 ## Current focus
 - **Stale Server Action after frontend deploy, 2026-08-30.** A tab left
   open across `Deploy to production` posts an old action id → `404` +
