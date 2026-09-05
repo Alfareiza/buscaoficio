@@ -1,6 +1,18 @@
 # Active Context
 
 ## Current focus
+- **Deployment pivot: EC2 → Vercel (2026-09-05).** The EC2 instance
+  (`i-0b3ac8e7768cb4b5d`) and the RDS database (`buscaoficio-1`) were
+  **terminated on 2026-09-05** to eliminate AWS charges during active
+  development. A `ec2` branch was created from `main` as a snapshot of
+  the full EC2 deployment configuration (`.github/workflows/deploy.yml`,
+  `migrate.yml`, `docker-compose.prod.yml`, OIDC trust-policy details).
+  See that branch's `memory-bank/activeContext.md` for a restoration guide.
+  **Active work:** issue #XX (to be created) — adapt the project to deploy
+  the frontend on **Vercel** and the backend on a TBD managed host.
+  Database: **Supabase** remains the prod DB (already configured).
+  Pending decisions: backend host (Railway / Render / Fly.io), whether to
+  use Vercel preview deployments for PRs, domain setup.
 - **Stale Server Action after frontend deploy, 2026-08-30.** A tab left
   open across `Deploy to production` posts an old action id → `404` +
   `x-nextjs-action-not-found`. Logout is now a stable
@@ -502,11 +514,15 @@
   for email verification (backend email + template + frontend `/verify` page).
 
 ## Active decisions
-- **Prod Postgres is temporarily Supabase** (transaction-mode pooler
-  `:6543`), decided 2026-08-29. After the app launches, switch
-  `DATABASE_URL` to RDS `buscaoficio-1`. No engine-code change planned
-  — `ASYNC_CONNECT_ARGS` already works on both (caches off +
-  `prepared_statement_name_func=str`). Keep the dict through the switch.
+- **Production deploy target changed to Vercel (2026-09-05).** EC2 instance
+  and RDS terminated to avoid charges. Branch `ec2` snapshots the full
+  AWS deploy configuration for future restoration. Vercel handles the
+  Next.js frontend; backend host TBD (Railway / Render / Fly.io).
+- **Prod Postgres stays on Supabase** (transaction-mode pooler `:6543`).
+  The "switch to RDS after launch" plan is deferred — RDS no longer
+  exists. Supabase remains until a clear cost/scale reason to move.
+  `ASYNC_CONNECT_ARGS` already works on Supabase and will work on any
+  PgBouncer-fronted Postgres. No engine-code change needed.
 - JWT strategy: **refresh token rotation with DB-backed revocation +
   double-submit fingerprint cookie** (Option B), decided 2026-08-15 after a
   `grill-me` design session. Access token 15 min, refresh token 30 days.

@@ -75,20 +75,18 @@ Changed from defaults (Postgres 5432/5433, API 8000) to avoid conflict with anot
 - Shared volume `local-shared-data` for OpenAPI schema between BE and FE containers
 - Makefile for start, migrate, test, shells
 - GitHub Actions: CI (FastAPI + Next.js), pre-commit, release, **deploy**
-  (`.github/workflows/deploy.yml`), **migrate** (`.github/workflows/migrate.yml`
-  — SSH + `alembic upgrade head` in the prod backend container, not Vercel)
-- **Production deploy target: EC2 + ECR + Docker Compose**, not Vercel.
-  Region `us-east-1`, account `502993831706`. Images
-  `buscaoficio-backend` / `buscaoficio-frontend` tagged with `github.sha`.
-  The box (`i-0b3ac8e7768cb4b5d`, Elastic IP `44.207.170.68`) only pulls
-  and runs `docker-compose.prod.yml` — it never builds (913MB RAM).
-- GitHub Actions authenticates to AWS via **OIDC** (secret
-  `AWS_DEPLOY_ROLE_ARN`). Trust-policy `sub` must use GitHub's numeric-ID
-  form `repo:Alfareiza@63620799/buscaoficio@1329243606:*`, not
-  `repo:Alfareiza/buscaoficio:*`. The `*` is repo-wide; branch filtering
-  lives in the workflow YAML.
-- Template Vercel workflows/docs may still exist; they are not the prod
-  path. Prod migrate is EC2 SSH, not Vercel env pull.
+  (`.github/workflows/deploy.yml` — currently EC2-specific, being replaced),
+  **migrate** (`.github/workflows/migrate.yml` — currently EC2 SSH, being retargeted)
+- **Production deploy target: Vercel** (frontend) + **TBD managed host**
+  (backend — Railway / Render / Fly.io). EC2 instance
+  (`i-0b3ac8e7768cb4b5d`) and RDS (`buscaoficio-1`) were **terminated
+  2026-09-05** to eliminate charges. Branch `ec2` preserves the full EC2
+  deploy configuration for restoration later. See `activeContext.md`.
+- AWS OIDC config (`AWS_DEPLOY_ROLE_ARN`, numeric-ID trust policy
+  `repo:Alfareiza@63620799/buscaoficio@1329243606:*`) stays documented in
+  branch `ec2` for when EC2 deploy resumes.
+- Prod Postgres: **Supabase** (transaction-mode pooler `:6543`) — was
+  "temporary" pending RDS, but RDS is gone; Supabase remains indefinitely.
 - Quality: pre-commit, Ruff, mypy, ESLint/Prettier
 - Docs: MkDocs Material
 

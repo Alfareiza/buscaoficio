@@ -39,17 +39,13 @@
 - Docker Compose stack (backend, frontend, db, db_test, mailhog)
 - Alembic migrations (user + item revisions present)
 - CI workflows (FastAPI + Next.js), pre-commit, MkDocs
-- Production deploy workflow (`.github/workflows/deploy.yml`): OIDC →
-  ECR image push → SSH deploy to EC2 **works end-to-end** (2026-08-26);
-  production runs login, Google Sign-In, Supabase Postgres (temporary;
-  RDS after launch), FastAdmin. ECR
-  pushes are idempotent ("already exists" = success) so re-runs can't fail
-  on immutable SHA tags. Branch `18-deployment-workflow` is not yet merged
-  to `main`. Vercel template leftovers remain but are not the prod path.
-- Production **migrate** workflow (`.github/workflows/migrate.yml`):
-  rewritten 2026-08-28 off Vercel. Path-filtered; SSH into EC2 and
-  `alembic upgrade head` in the running backend container (`DATABASE_URL`
-  on the box — Supabase now, RDS after launch). Kept separate from deploy.
+- Production deploy workflow: **EC2 deploy retired 2026-09-05.** EC2
+  instance and RDS deleted. Branch `ec2` preserves the working deploy
+  config (OIDC → ECR → SSH Compose). Transitioning to **Vercel** for the
+  frontend; backend host TBD (Railway / Render / Fly.io). See issue #XX.
+- Production **migrate** workflow (`.github/workflows/migrate.yml`): EC2
+  SSH-based. Must be retargeted for Vercel era (run Alembic directly
+  against `DATABASE_URL` without SSH). Tracked in issue #XX.
 
 ## Local customizations done
 - [x] Postgres host ports remapped to **5434** (db) and **5435** (db_test)
@@ -89,20 +85,18 @@
 - [ ] Domain product features for "busca oficio" (not started)
 - [ ] Production email provider (beyond MailHog)
 - [x] Finish Deploy to EC2 job (SCP/SSH); box should run the SHA that ECR has
-- [x] Rewrite `migrate.yml` for EC2 (SSH + in-container Alembic), keep
-  it separate from deploy
-- [ ] Run prod Alembic (incl. `c8f3a91d4e20`) after the image with those
-  revisions is on the box
-- [ ] Create the first superuser to log into FastAdmin
-  (https://api.buscaoficio.co/admin) — the 3-step bootstrap the user
-  provided
-- [ ] Prod secrets on the box, including Sentry DSN +
-  `SENTRY_ENVIRONMENT=production` (frontend `SENTRY_AUTH_TOKEN` is already
-  a GitHub Actions secret used at image-build time)
+- [x] ~~Rewrite `migrate.yml` for EC2~~ — EC2 retired; must be retargeted
+  for direct-DB Alembic (no SSH), tracked in Vercel migration issue
+- [ ] **Vercel migration** — frontend to Vercel, backend to managed host
+  (Railway/Render/Fly.io TBD), `migrate.yml` retargeted, CORS updated
+- [ ] Apply pending Alembic revision `c8f3a91d4e20` against Supabase
+  (blocked until new migrate workflow in place)
+- [ ] Prod secrets: Sentry DSN + `SENTRY_ENVIRONMENT=production` in new
+  hosting env (`SENTRY_AUTH_TOKEN` already a GitHub Actions secret)
 - [ ] Confirm a real error from the running app lands in Sentry (not done yet)
 - [ ] Optional: replace MailHog with Mailpit
 - [ ] `createsuperuser` management command (workaround now: sign up via the
-  app's OTP flow, or FastAdmin, then promote via SQL)
+  app's OTP flow, then promote via SQL)
 
 ## Known issues / gotchas
 - `proxy.ts` must **never 307 a Server Action** (`next-action` header).
