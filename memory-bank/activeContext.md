@@ -17,13 +17,19 @@ justified before the product is ready to go live.
 - Full `techContext.md` / `systemPatterns.md` describing the EC2 + ECR + RDS
   architecture and OIDC trust-policy numeric-ID convention
 
-**How to resume EC2 deployment from this branch:**
-1. Provision a new EC2 instance + RDS (or re-use any existing box).
-2. Update `EC2_HOST`, `EC2_SSH_KEY`, `AWS_DEPLOY_ROLE_ARN` GitHub secrets.
-3. Update the IAM trust policy `sub` with the new numeric instance/repo IDs.
-4. Restore/copy the `.env` file to `/opt/buscaoficio/` on the box.
-5. Merge relevant changes from `main` into this branch, resolve conflicts,
-   and re-enable `deploy.yml` + `migrate.yml` triggers.
+**How to resume EC2 deployment from this branch:** follow the full
+checklist in [`docs/ec2-recovery.md`](../docs/ec2-recovery.md). Short version:
+
+1. Merge `origin/main` into this branch; keep `output: "standalone"` and the
+   EC2 `deploy.yml` push trigger (retarget the branch name).
+2. Provision a **new** EC2 + EIP (old `i-0b3ac8e7768cb4b5d` /
+   `44.207.170.68` are gone). Prefer keeping Supabase over recreating RDS.
+3. Update GitHub secrets `EC2_HOST` / `EC2_SSH_KEY`. OIDC `sub` uses repo
+   numeric IDs (`repo:Alfareiza@63620799/buscaoficio@1329243606:*`) — not
+   instance IDs.
+4. Copy compose, Caddyfile, and `.env` files to `/opt/buscaoficio`.
+5. Flip Hostinger A records `app` / `api` from Vercel `76.76.21.21` to the
+   new EIP, then detach those domains on Vercel.
 
 **Active deployment target while `ec2` is dormant:** Vercel (see `main`).
 

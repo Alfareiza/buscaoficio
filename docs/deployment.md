@@ -1,6 +1,11 @@
 # Deployment
 
-Production runs on **AWS**: a single EC2 instance (Docker Compose) behind Caddy, with images built in GitHub Actions and pushed to ECR. Postgres is **temporarily Supabase** (transaction-mode pooler `:6543`). After launch, switch `DATABASE_URL` to RDS (`buscaoficio-1`) — the app engine is already compatible with both.
+**This branch (`ec2`) is a frozen AWS stack.** The live site after 2026-09-05
+is Vercel — see `docs/deployment.md` on `main` / `28-vercel-deployment`.
+
+To bring EC2 back: **[`docs/ec2-recovery.md`](ec2-recovery.md)**.
+
+Production on this branch is **AWS**: a single EC2 instance (Docker Compose) behind Caddy, with images built in GitHub Actions and pushed to ECR. Postgres is **Supabase** (transaction-mode pooler `:6543`). RDS `buscaoficio-1` was terminated 2026-09-05; recreate it only if you choose not to keep Supabase.
 
 ```
 GitHub Actions ──build──▶ ECR (buscaoficio-backend / buscaoficio-frontend, git-SHA tags)
