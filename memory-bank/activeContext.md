@@ -31,6 +31,10 @@ checklist in [`docs/ec2-recovery.md`](../docs/ec2-recovery.md). Short version:
 5. Flip Hostinger A records `app` / `api` from Vercel `76.76.21.21` to the
    new EIP, then detach those domains on Vercel.
 
+When merging `main` into this branch, **keep** `Caddyfile` and
+`.github/workflows/infra-manual-reminder.yml` — `main` deleted both
+(Vercel does TLS). Why they matter: `docs/ec2-recovery.md` § 1a.
+
 **Active deployment target while `ec2` is dormant:** Vercel (see `main`).
 
 ---

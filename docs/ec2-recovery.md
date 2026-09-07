@@ -48,13 +48,55 @@ inlining, CORS regex, etc.).
     Alembic **inside** the backend container. Do not keep the Vercel-era
     `uv run alembic` job unless you deliberately want Actions to talk to
     Supabase directly (that also works; pick one).
-  - `.github/workflows/infra-manual-reminder.yml` — re-enable push on
-    `Caddyfile` / `docker-compose.prod.yml` so someone copies them to the box.
+  - **`Caddyfile` — keep ours.** `main` / `28-vercel-deployment` **deleted**
+    it (Vercel terminates TLS). Without this file the box has no HTTPS and
+    no `app.` / `api.` routing. See § 1a.
+  - **`.github/workflows/infra-manual-reminder.yml` — keep ours.** Same
+    deletion on `main`. See § 1a. Re-enable its push trigger so a Caddyfile
+    or `docker-compose.prod.yml` edit fails CI until someone copies the
+    file onto `/opt/buscaoficio`.
 - [ ] Vercel-only files can stay unused: `fastapi_backend/api/index.py`,
       `*/vercel.json`, `fastapi_backend/requirements.txt`. They do not break
       Docker.
 - [ ] Confirm `nextjs-frontend/Dockerfile.prod` still uses the standalone
       output (`HOSTNAME=0.0.0.0`, `PORT=3000`).
+
+### 1a. Why `Caddyfile` and `infra-manual-reminder.yml` stay on this branch
+
+Vercel does TLS and hostname routing (`app.buscaoficio.co` /
+`api.buscaoficio.co`). Those two files do nothing there, so they were
+removed from `28-vercel-deployment` / `main` on 2026-09-07. They are
+**load-bearing on EC2**. If a merge from `main` deletes them, stop and
+restore from this branch (`git checkout HEAD -- Caddyfile
+.github/workflows/infra-manual-reminder.yml`).
+
+**`Caddyfile` (repo root, copied to `/opt/buscaoficio/Caddyfile`)**
+
+- Only process that publishes **80/443** on the box. Compose bind-mounts
+  it into `caddy:2-alpine` (`docker-compose.prod.yml`).
+- Terminates TLS via Let’s Encrypt (`ACME_EMAIL` in `/opt/buscaoficio/.env`).
+  There is no Route 53 and no ACM. If this file is missing, DNS can point
+  at the EIP and browsers still fail HTTPS.
+- Routes `DOMAIN` → frontend container and `API_DOMAIN` → backend
+  container. FastAdmin is `/admin` on FastAPI, so the backend **must**
+  have its own public hostname. Caddy does not path-split, so Next
+  `/api/auth/google/complete` and FastAPI `/api/v1/auth/google/*` never
+  collide.
+- A bind-mount change does **not** recreate the container. After you
+  `scp` a new Caddyfile: `caddy reload --config /etc/caddy/Caddyfile
+  --adapter caddyfile`.
+- `deploy.yml` never SCPs this file (`824f2f1`). Editing it in git does
+  not update the box.
+
+**`.github/workflows/infra-manual-reminder.yml`**
+
+- Intentionally **fails CI** when `Caddyfile` or `docker-compose.prod.yml`
+  changes, because those files are copied by hand. Without the reminder,
+  a merge looks green and production still runs the old Caddy/compose.
+- Not used under Vercel (no box to copy onto). Keep the workflow on
+  `ec2`; do not take the delete from `main`.
+- After restore, the push trigger must be on again (the Vercel-era copy
+  was `workflow_dispatch` only).
 
 ---
 
@@ -110,8 +152,9 @@ Copy from this repo, then fill secrets by hand:
 ```
 
 GitHub Actions does **not** SCP compose/Caddy (`824f2f1`). After you edit
-those files in git, copy them yourself. `infra-manual-reminder.yml` exists
-to fail CI if you forget.
+those files in git, copy them yourself. That is why
+`infra-manual-reminder.yml` exists (see § 1a). A green CI run does **not**
+mean the box has the new Caddyfile.
 
 ### `/opt/buscaoficio/.env` (compose + Caddy)
 
@@ -233,6 +276,8 @@ Google Sign-In: `redirect_uri` is
 
 | File | Role |
 | --- | --- |
+| `Caddyfile` | **Required on EC2.** TLS + `app`/`api` reverse proxy. Deleted on `main`. |
+| `.github/workflows/infra-manual-reminder.yml` | **Required on EC2.** Fails CI until compose/Caddy are copied to the box. Deleted on `main`. |
 | `docs/deployment.md` | Compact EC2 deploy summary (pre-Vercel wording). |
 | `memory-bank/activeContext.md` | Banner at top of this branch. |
 | `memory-bank/techContext.md` / `systemPatterns.md` | OIDC, ECR, SSH rotation. |
