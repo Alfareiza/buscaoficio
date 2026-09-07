@@ -310,12 +310,51 @@ describe("AuthCard", () => {
     );
 
     fireEvent.click(
-      screen.getByText(/ofrezco mis servicios como profesional/i),
+      screen.getByRole("radio", {
+        name: /ofrezco mis servicios como profesional/i,
+      }),
     );
 
     expect(
       screen.getByRole("button", { name: /crear cuenta/i }),
     ).toBeDisabled();
+  });
+
+  it("presents the role choice as a radio list and Volver returns to the name step", async () => {
+    await goToOnboardingName();
+    fireEvent.change(screen.getByLabelText(/nombre completo/i), {
+      target: { value: "Ana Pérez" },
+    });
+    fireEvent.change(screen.getByLabelText(/whatsapp/i), {
+      target: { value: "3001234567" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("radiogroup", { name: /qué te trae a buscaoficio/i }),
+      ).toBeInTheDocument();
+    });
+
+    const cliente = screen.getByRole("radio", {
+      name: /busco un profesional para un trabajo/i,
+    });
+    const profesional = screen.getByRole("radio", {
+      name: /ofrezco mis servicios como profesional/i,
+    });
+    expect(cliente).toHaveAttribute("aria-checked", "false");
+    expect(profesional).toHaveAttribute("aria-checked", "false");
+
+    fireEvent.click(cliente);
+    expect(cliente).toHaveAttribute("aria-checked", "true");
+    expect(profesional).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByRole("button", { name: /crear cuenta/i })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Volver" }));
+    expect(screen.getByLabelText(/nombre completo/i)).toHaveValue("Ana Pérez");
+    expect(
+      screen.queryByRole("radiogroup", { name: /qué te trae a buscaoficio/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("does not show a Continuar button on the code step and verifies as soon as six digits are entered", async () => {
