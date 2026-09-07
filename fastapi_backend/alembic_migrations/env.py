@@ -88,14 +88,23 @@ async def run_async_migrations() -> None:
 
     """
 
-    # Imported here so Settings() runs after load_dotenv() above.
-    from app.database import ASYNC_CONNECT_ARGS
+    # Inlined from app.database.ASYNC_CONNECT_ARGS to avoid importing
+    # app.database at module level, which pulls in app.config.Settings()
+    # and requires every settings env var — not just DATABASE_URL — to be
+    # set in the migration runner environment. These values are static;
+    # keep them in sync with app/database.py if either changes.
+    _ASYNC_CONNECT_ARGS: dict = {
+        "ssl": "prefer",
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+        "prepared_statement_name_func": str,
+    }
 
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        connect_args=ASYNC_CONNECT_ARGS,
+        connect_args=_ASYNC_CONNECT_ARGS,
     )
 
     async with connectable.connect() as connection:

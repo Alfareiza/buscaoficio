@@ -1,67 +1,89 @@
 # Deployment
 
-Production runs on **AWS**: a single EC2 instance (Docker Compose) behind Caddy, with images built in GitHub Actions and pushed to ECR. Postgres is **temporarily Supabase** (transaction-mode pooler `:6543`). After launch, switch `DATABASE_URL` to RDS (`buscaoficio-1`) — the app engine is already compatible with both.
+**Active production is Vercel** (Hobby team `alfareizas-projects`). Postgres is
+**Supabase** (transaction-mode pooler `:6543`). TLS and hostname routing are
+Vercel’s. The EC2 + ECR + Caddy stack was retired 2026-09-05; restore it from
+branch `ec2` using
+[`docs/ec2-recovery.md`](https://github.com/Alfareiza/buscaoficio/blob/ec2/docs/ec2-recovery.md)
+on that branch. `Caddyfile` and `infra-manual-reminder.yml` live **only** there.
 
 ```
-GitHub Actions ──build──▶ ECR (buscaoficio-backend / buscaoficio-frontend, git-SHA tags)
-        │
-        └──deploy job──▶ EC2 (SSH): docker compose pull && up -d
-                              │
-                              ├─ Caddy: TLS (Let's Encrypt), app.buscaoficio.co → frontend, api.buscaoficio.co → backend
-                              └─ backend ──asyncpg (SSL)──▶ Supabase pooler :6543  (temporary)
-                                                            RDS buscaoficio-1     (after launch)
+GitHub (Alfareiza/buscaoficio)
+        │  git push / PR
+        ▼
+Vercel  ├─ buscaoficio-front  (root: nextjs-frontend/)  → https://app.buscaoficio.co
+        └─ buscaoficio-back   (root: fastapi_backend/,
+                               ASGI api/index.py)        → https://api.buscaoficio.co
+                    │
+                    └── asyncpg ──▶ Supabase pooler :6543
 ```
 
-The deployment operator's full knowledge base is the `aws-deployer` agent (`.claude/agents/aws-deployer.md`): resource IDs, verified facts, and runbooks. This file is the compact human-facing summary.
+Local development is unchanged: Docker Compose + Makefile. Production images
+(`Dockerfile`, `Dockerfile.prod`) are unused while Vercel is the host.
 
-## CI/CD — `.github/workflows/deploy.yml`
+## Vercel projects
 
-Triggered on push to `main` / `18-deployment-workflow` (paths-filtered) or manually via `workflow_dispatch`:
+| Project | Root | Framework | Production URL |
+| --- | --- | --- | --- |
+| `buscaoficio-front` | `nextjs-frontend/` | Next.js 16 (Node 20) | `https://app.buscaoficio.co` |
+| `buscaoficio-back` | `fastapi_backend/` | Python 3.12 ASGI (`api/index.py`) | `https://api.buscaoficio.co` |
 
-1. **Build jobs** (parallel): assume the AWS role via GitHub OIDC, build the backend (`fastapi_backend/Dockerfile`) and frontend (`nextjs-frontend/Dockerfile.prod`) images with `--provenance=false` (see below), push both to ECR tagged with the commit SHA.
-2. **Deploy job**: SSHes to the box, rewrites `BACKEND_IMAGE`/`FRONTEND_IMAGE` in `/opt/buscaoficio/.env`, then `docker compose pull && up -d` and prunes superseded images (the box has 8GB — pruning order matters, see the workflow comments).
+Git integration deploys **production** from `main` once this branch is merged.
+PRs get preview URLs (`*.vercel.app`). `CORS_ORIGIN_REGEX` on the backend
+allows `https://buscaoficio-front.*\.vercel\.app`.
 
-Required GitHub **secrets**: `AWS_DEPLOY_ROLE_ARN`, `EC2_HOST`, `EC2_SSH_KEY` (`SENTRY_AUTH_TOKEN` optional — source-map upload only).
+`output: "standalone"` is **not** set in `next.config.mjs` on this branch
+(Docker/EC2 only; restore it from `ec2`).
 
-Notes from real operation:
+## Env vars (dashboard, not git)
 
-- **If a push produces no run** (observed GitHub delivery flakiness): `gh workflow run "Deploy to production (EC2)" --ref <branch>`. `workflow_dispatch` reliably picks up the branch HEAD.
-- **Concurrency guard** (`deploy-${{ github.ref }}`) serializes runs per ref — a duplicated push-event delivery can't race itself into immutable-tag collisions.
-- **`--provenance=false` is load-bearing.** Without it buildx pushes an OCI index whose real layers sit in an *untagged* child manifest; the ECR lifecycle rule (expire untagged after 7 days) would strand the tag pointing at deleted content.
-- **No migration step in the pipeline** — migrations are run manually (see below) and reviewed before applying, by project convention.
+Backend (`buscaoficio-back`): `DATABASE_URL` (Supabase pooler, Production **and**
+Preview), `FRONTEND_URL=https://app.buscaoficio.co`,
+`BACKEND_URL=https://api.buscaoficio.co`, `CORS_ORIGINS`, `CORS_ORIGIN_REGEX`,
+auth secrets, `GOOGLE_OAUTH_*`, `MAIL_*`, `ADMIN_*`, `SENTRY_DSN`,
+`SENTRY_ENVIRONMENT=production`.
 
-## On-box files (not in git)
+Frontend (`buscaoficio-front`): `API_BASE_URL=https://api.buscaoficio.co`,
+`SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`, optional `SENTRY_AUTH_TOKEN` (source maps).
 
-Three env files live only on the EC2 box, at `/opt/buscaoficio/`:
+Vercel injects env at **deploy** time. After adding or changing a variable,
+create a new deployment (git push or Redeploy). Existing lambdas keep the old snapshot.
 
-| File | Contents |
+## Database migrations
+
+`.github/workflows/migrate.yml` runs `uv run alembic upgrade head` on GitHub
+Actions with secret `DATABASE_URL`. It does not SSH to EC2.
+
+Engine connect args (`ASYNC_CONNECT_ARGS` in `app/database.py`) stay: caches
+off + unnamed prepares for PgBouncer. Do not rely on `?ssl=` / `?pgbouncer=`
+in the URL.
+
+## DNS
+
+Hostinger zone for `buscaoficio.co` (`*.dns-parking.com` nameservers).
+Production records:
+
+| Name | Type | Target |
+| --- | --- | --- |
+| `app` | A | `76.76.21.21` (Vercel) |
+| `api` | A | `76.76.21.21` (Vercel) |
+
+CNAME to `cname.vercel-dns.com` is also valid. TLS is Vercel-managed.
+
+## Google Sign-In
+
+`redirect_uri` is `{BACKEND_URL}/api/v1/auth/google/callback`. Do **not**
+change the Google Cloud Console URI while `BACKEND_URL` stays
+`https://api.buscaoficio.co` — the hostname is the same whether Caddy or
+Vercel answers it. JS origin stays `https://app.buscaoficio.co`.
+
+## GitHub Actions
+
+| Workflow | Role on this branch |
 | --- | --- |
-| `.env` | `DOMAIN`, `API_DOMAIN`, `ACME_EMAIL`, `BACKEND_IMAGE`, `FRONTEND_IMAGE` (template: `.env.prod.example`) |
-| `fastapi_backend/.env` | app config following `fastapi_backend/.env.example` |
-| `nextjs-frontend/.env` | app config following `nextjs-frontend/.env.example` |
+| `ci.yml` | Tests; `requirements.txt` staleness check |
+| `migrate.yml` | Alembic via `uv` + `DATABASE_URL` secret |
 
-`Caddyfile` and `docker-compose.prod.yml` are **copied to the box manually** — editing them in git does not update production (documented in `deploy.yml` itself). `docker compose restart` does *not* pick up `env_file` changes; use `up -d` (recreates containers).
+EC2 `deploy.yml` lives only on branch `ec2`. Do not add it here.
 
-## Production database
-
-**Now (pre-launch): Supabase.** `DATABASE_URL` on the box is the transaction-mode pooler (`*.pooler.supabase.com:6543` / PgBouncer). `create_async_engine` in `app/database.py` builds the URL inline from host/user/password/path — the query string is ignored, so don't rely on `?ssl=true` or `?pgbouncer=true`. Connect args are `ASYNC_CONNECT_ARGS` in the same file: `ssl="prefer"`, both statement caches off, and `prepared_statement_name_func=str` (`str()` is `""`, so prepares are unnamed). There is no project function or lambda for names. `statement_cache_size=0` alone is not enough (BUSCAOFICIO-BACKEND-W: SQLAlchemy still `prepare()`s named `__asyncpg_stmt_*` statements). Alembic imports that dict after `load_dotenv()`.
-
-Point `DATABASE_URL` at the pooler, set the four `*_SECRET_KEY`s (`openssl rand -hex 32`), then `docker compose -f docker-compose.prod.yml up -d backend` and `docker compose -f docker-compose.prod.yml exec -T backend alembic upgrade head`. Empty secret keys mean tokens are signed with an empty string — check with `grep -E "^[A-Z_]+=$"`.
-
-**After launch: RDS** (`buscaoficio-1`). Same `DATABASE_URL` env var, different host — no app code change required (`ASYNC_CONNECT_ARGS` is harmless on a direct `5432` connection). RDS enforces SSL (`rds.force_ssl=1`). First-time RDS steps when you switch:
-
-1. Reset/set the master password: `aws rds modify-db-instance --db-instance-identifier buscaoficio-1 --master-user-password <pw> --apply-immediately`
-2. Create the app database: from the backend container, connect to the `postgres` maintenance DB and `CREATE DATABASE buscaoficio`.
-3. Dump/restore from Supabase (or re-run Alembic on empty RDS, then copy data).
-4. Point on-box `DATABASE_URL` at the RDS endpoint and `up -d` the backend.
-
-## Post-deployment env checklist (backend)
-
-| Var | Production value |
-| --- | --- |
-| `FRONTEND_URL` / `BACKEND_URL` | `https://app.buscaoficio.co` / `https://api.buscaoficio.co` |
-| `CORS_ORIGINS` | `["https://app.buscaoficio.co"]` (never `["*"]` in prod) |
-| `ADMIN_SESSION_COOKIE_SECURE` | `true` |
-| `SENTRY_ENVIRONMENT` | `production` |
-
-Email uses Hostinger SMTP (`MAIL_*` values identical to local dev). DNS: `app.` / `api.buscaoficio.co` are A records on Hostinger pointing at the EC2 Elastic IP; TLS is Caddy + Let's Encrypt, fully automatic.
+GitHub user for this repo: **Alfareiza** (not `alfonsorevin`).

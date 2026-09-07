@@ -8,60 +8,37 @@ Next.js (FE) ──typed client──▶ FastAPI (BE) ──asyncpg──▶ Pos
             openapi.json         fastapi-mail ──▶ MailHog (local)
 ```
 
-Production (not shown above): GitHub Actions builds FE/BE images, pushes
-them to ECR tagged with the git SHA, then the EC2 box pulls those tags
-and runs `docker-compose.prod.yml` (Caddy in front). The box never builds.
+Production (not shown above): two Vercel projects from this monorepo.
+`buscaoficio-front` (Next.js, root `nextjs-frontend/`) and
+`buscaoficio-back` (FastAPI ASGI `api/index.py`, root `fastapi_backend/`).
+Postgres is Supabase (transaction pooler `:6543`). The EC2 + ECR + Caddy
+stack lives on branch `ec2` (`docs/ec2-recovery.md` there).
 
 ## Production deploy pattern
-- Workflow: `.github/workflows/deploy.yml` (`build-backend` +
-  `build-frontend` in parallel, then `deploy` over SSH).
-- Auth to AWS from Actions is **OIDC** (`aws-actions/configure-aws-credentials`
-  + `permissions: id-token: write`), not long-lived access keys. The role
-  ARN lives in the GitHub secret `AWS_DEPLOY_ROLE_ARN`.
-- GitHub's OIDC `sub` uses numeric IDs, not the slug:
-  `repo:Alfareiza@63620799/buscaoficio@1329243606:...`. A trust policy
-  written as `repo:Alfareiza/buscaoficio:...` fails with
-  `Not authorized to perform sts:AssumeRoleWithWebIdentity`.
-- The trust policy's `*` covers every branch of this repo; **which branches
-  actually run** is decided by `deploy.yml` (`on.push.branches`).
-- Images: `502993831706.dkr.ecr.us-east-1.amazonaws.com/buscaoficio-{backend,frontend}:<sha>`.
-  Built with `--provenance=false` so ECR lifecycle expiry of untagged
-  images cannot strand a tag.
-- ECR repos are **tag-immutable** and `deploy.yml` tags with `github.sha`,
-  so a re-run or duplicate run re-pushes an existing tag. The push step
-  therefore treats ECR's `"already exists"` rejection as success (same
-  SHA = same content, immutability guarantees the existing image is the
-  right one) — never delete ECR tags by hand to unblock a re-run.
-- `docker-compose.prod.yml` and `Caddyfile` live on the box at
-  `/opt/buscaoficio`, copied by hand. GitHub-hosted runners cannot reach
-  `:22` (SG is operator-IP-only), so Actions does not SCP them. A push
-  that edits those files fails `.github/workflows/infra-manual-reminder.yml`
-  on purpose. Env files stay on the box and are never in the repo.
-- The `deploy` job SSHes in to rewrite `BACKEND_IMAGE`/`FRONTEND_IMAGE` in
-  `/opt/buscaoficio/.env`, then `docker compose pull && up -d` and
-  `caddy reload`. Same `:22` SG restriction applies to this SSH step.
-- SSH into the box for that job uses the deploy-only key (`EC2_SSH_KEY`);
-  ECR login *on the box* uses the instance profile, not the GitHub OIDC role.
+- Host: Vercel Hobby, team `alfareizas-projects`. Git user **Alfareiza**.
+- Frontend: `next.config.mjs` has **no** `output: "standalone"` (that is
+  Docker/EC2 only). `nextjs-frontend/vercel.json` uses Corepack/pnpm.
+- Backend: `fastapi_backend/api/index.py` re-exports `app`; `vercel.json`
+  rewrites all traffic to `/api/index`; Python 3.12; `requirements.txt`
+  from `make backend-requirements` (`uv export --no-dev`).
+- Env vars are a **deploy snapshot**. Adding `DATABASE_URL` in the
+  dashboard does nothing until a new deployment.
+- Preview URLs: `CORS_ORIGIN_REGEX` (e.g.
+  `https://buscaoficio-front.*\.vercel\.app`).
+- EC2 `deploy.yml`, `Caddyfile`, and `infra-manual-reminder.yml` were
+  removed here; they exist only on branch `ec2`. Restore from
+  `docs/ec2-recovery.md` there.
 
 ## Production migrate pattern
-- Workflow: `.github/workflows/migrate.yml` — **not** part of `deploy.yml`.
-- Trigger: push to `main` that touches `fastapi_backend/alembic_migrations/**`,
-  `fastapi_backend/alembic.ini`, or the workflow itself; plus
-  `workflow_dispatch`.
-- Runner does not talk to the database host. It SSHes with `EC2_HOST` /
-  `EC2_SSH_KEY` and runs Alembic **inside** the already-running backend
-  container: `docker compose -f docker-compose.prod.yml exec -T backend
-  alembic upgrade head`.
-- `DATABASE_URL` is the container env from `/opt/buscaoficio/.env`
-  (Supabase pooler today; RDS after launch). No Vercel env pull, no
-  GitHub-hosted `pip install`.
-- Alembic code in that container is whatever image is currently up.
-  A push that also rebuilds the backend should finish **deploy** first
-  (new SHA on the box), then migrate — otherwise `upgrade head` may not
-  see new revision files yet.
+- Workflow: `.github/workflows/migrate.yml` — **not** part of deploy.
+- Trigger: push to `main` that touches Alembic paths, or `workflow_dispatch`.
+- Runner: `uv sync --group dev` then `uv run alembic upgrade head` with
+  GitHub secret `DATABASE_URL`. Alembic `env.py` inlines
+  `ASYNC_CONNECT_ARGS` so the job does not import `Settings()`.
+- Do not SSH to a box. Do not run Alembic inside a Docker container.
 
 ## OpenAPI sync pipeline (dev only)
-Core of E2E type safety. Production does **not** run watchers; generated client is baked into the frontend image.
+Core of E2E type safety. Production does **not** run watchers; generated client is committed and baked into the Vercel frontend build.
 
 ```
 Change BE routes/schemas

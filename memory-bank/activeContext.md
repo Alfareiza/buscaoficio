@@ -1,6 +1,29 @@
 # Active Context
 
 ## Current focus
+- **Deployment pivot: EC2 → Vercel (2026-09-05), branch `28-vercel-deployment`
+  (issue [#28](https://github.com/Alfareiza/buscaoficio/issues/28)).** The EC2
+  instance and RDS were terminated. All Vercel config implemented:
+  - `buscaoficio-front` project: `nextjs-frontend/`, `vercel.json`, pnpm/Corepack
+    install, `output: "standalone"` removed from `next.config.mjs`
+  - `buscaoficio-back` project: `fastapi_backend/`, ASGI entry `api/index.py`,
+    `vercel.json` rewrites, `requirements.txt` (generated from `pyproject.toml`
+    via `make backend-requirements`), `.python-version` = 3.12
+  - `migrate.yml` now runs `uv run alembic upgrade head` directly with only
+    `DATABASE_URL` secret (Alembic env.py inlines `ASYNC_CONNECT_ARGS`)
+  - `CORS_ORIGIN_REGEX` setting added for Vercel preview deployments
+  - EC2 `deploy.yml` removed from this branch; live copy on `ec2`
+  **Done 2026-09-07 (as GitHub user Alfareiza):** pushed `ec2` +
+  `28-vercel-deployment`; created Vercel projects `buscaoficio-front` /
+  `buscaoficio-back` linked to this repo; loaded env vars (not
+  `DATABASE_URL`); attached `app.buscaoficio.co` and `api.buscaoficio.co`;
+  opened PR #29; Alembic on Supabase is already at `c8f3a91d4e20` (head).
+  **Still pending (2026-09-07):** optional Preview `DATABASE_URL`;
+  optional `SENTRY_AUTH_TOKEN`; `gh auth` default is still `alfonsorevin`
+  (use Alfareiza for this repo); merge PR #29 so Vercel production branch
+  can stay `main`. Google redirect URI is unchanged
+  (`https://api.buscaoficio.co/api/v1/auth/google/callback`) — hostname
+  did not change.
 - **Stale Server Action after frontend deploy, 2026-08-30.** A tab left
   open across `Deploy to production` posts an old action id → `404` +
   `x-nextjs-action-not-found`. Logout is now a stable
@@ -502,11 +525,14 @@
   for email verification (backend email + template + frontend `/verify` page).
 
 ## Active decisions
-- **Prod Postgres is temporarily Supabase** (transaction-mode pooler
-  `:6543`), decided 2026-08-29. After the app launches, switch
-  `DATABASE_URL` to RDS `buscaoficio-1`. No engine-code change planned
-  — `ASYNC_CONNECT_ARGS` already works on both (caches off +
-  `prepared_statement_name_func=str`). Keep the dict through the switch.
+- **Production deploy target is Vercel (2026-09-05).** Both frontend and
+  backend. EC2/RDS terminated. Restore from branch `ec2`
+  (`docs/ec2-recovery.md`). Postgres stays Supabase.
+- **Prod Postgres stays on Supabase** (transaction-mode pooler `:6543`).
+  The "switch to RDS after launch" plan is deferred — RDS no longer
+  exists. Supabase remains until a clear cost/scale reason to move.
+  `ASYNC_CONNECT_ARGS` already works on Supabase and will work on any
+  PgBouncer-fronted Postgres. No engine-code change needed.
 - JWT strategy: **refresh token rotation with DB-backed revocation +
   double-submit fingerprint cookie** (Option B), decided 2026-08-15 after a
   `grill-me` design session. Access token 15 min, refresh token 30 days.
@@ -548,8 +574,6 @@
   since it's part of the public API contract regardless of what the current
   frontend does; needed an explicit answer, not an inference from the code.
 - Stay on template patterns (Makefile + watchers for OpenAPI sync).
-- **Production deploy is EC2 + ECR + Compose**, not Vercel. Vercel
-  serverless leftovers stay in the repo until someone deletes them.
 - MailHog remains for local email; Mailpit is a known alternative if we replace later.
 - Prefer Docker for Postgres even when running API/FE on host.
 - Auth routes are kept explicit (not using fastapi-users built-in router) to allow clear docstrings in OpenAPI docs.

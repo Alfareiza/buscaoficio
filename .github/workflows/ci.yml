@@ -6,8 +6,9 @@ name: CI
 # (js/jsx/ts/tsx, package.json, pnpm-lock.yaml, tsconfig.json,
 # next.config.mjs, openapi.json), plus this workflow.
 # Out of scope (do not add to `paths` below): .md, other .yml/.yaml, .css,
-# public/docs images, .woff/.woff2, .json (except the files listed), .txt,
-# .sh, eslint .mjs, Dockerfiles, Makefile, Caddyfile.
+# public/docs images, .woff/.woff2, .json (except the files listed),
+# .sh, eslint .mjs, Dockerfiles, Makefile.
+# requirements.txt IS in scope — the CI check validates it stays in sync.
 on:
   push:
     paths:
@@ -15,6 +16,7 @@ on:
       - "**/*.py"
       - "**/pyproject.toml"
       - "fastapi_backend/uv.lock"
+      - "fastapi_backend/requirements.txt"
       - "fastapi_backend/pytest.ini"
       - "fastapi_backend/alembic.ini"
       - "fastapi_backend/app/email_templates/**"
@@ -35,6 +37,7 @@ on:
       - "**/*.py"
       - "**/pyproject.toml"
       - "fastapi_backend/uv.lock"
+      - "fastapi_backend/requirements.txt"
       - "fastapi_backend/pytest.ini"
       - "fastapi_backend/alembic.ini"
       - "fastapi_backend/app/email_templates/**"
@@ -90,6 +93,17 @@ jobs:
       - name: Install the project
         working-directory: ./fastapi_backend
         run: uv sync --all-extras --dev
+
+      - name: Check requirements.txt is up to date
+        working-directory: ./fastapi_backend
+        run: |
+          uv export --no-dev --format requirements-txt -o requirements.txt.check
+          if ! diff -q requirements.txt requirements.txt.check > /dev/null 2>&1; then
+            echo "requirements.txt is out of date. Run 'make backend-requirements' locally and commit the result."
+            diff requirements.txt requirements.txt.check || true
+            exit 1
+          fi
+          rm requirements.txt.check
 
       - name: Run tests
         working-directory: ./fastapi_backend

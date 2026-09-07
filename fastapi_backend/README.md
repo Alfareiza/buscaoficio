@@ -24,7 +24,7 @@ For the UI, see `[nextjs-frontend/README.md](../nextjs-frontend/README.md)`.
 | Observability         | sentry-sdk (errors, traces, logs)               |
 | Quality               | Ruff, mypy, pytest, pytest-asyncio              |
 | Local SMTP catcher    | MailHog (via Compose)                           |
-| Deploy                | AWS EC2 (Docker, `fastapi run app/main.py` — see [`docs/deployment.md`](../docs/deployment.md)) |
+| Deploy                | Vercel (`buscaoficio-back`, ASGI `api/index.py` — see [`docs/deployment.md`](../docs/deployment.md)) |
 
 
 ---
@@ -334,24 +334,21 @@ sentry-sdk 2.68: `enable_logs` is a no-op. Stdlib → Logs needs `LoggingIntegra
 
 ## Deploy - backend perspective
 
-Production is AWS (EC2 + Docker + Caddy), not Vercel. The container runs `fastapi run app/main.py --workers 2`. Postgres is **temporarily Supabase** (pooler `:6543`); switch `DATABASE_URL` to RDS after launch. Engine connect args are `ASYNC_CONNECT_ARGS` in `app/database.py` (and Alembic) — no `?ssl=` / `?pgbouncer=` URL flags.
+Production is **Vercel** (`buscaoficio-back`, ASGI entry `api/index.py`). Postgres is **Supabase** (pooler `:6543`). Engine connect args are `ASYNC_CONNECT_ARGS` in `app/database.py` (and Alembic) — no `?ssl=` / `?pgbouncer=` URL flags. EC2/RDS restore: branch `ec2`.
 
 ### Required production env
 
-- `DATABASE_URL` (today: Supabase transaction pooler; after launch: RDS endpoint)
+- `DATABASE_URL` (Supabase transaction pooler)
 - `ACCESS_SECRET_KEY`, `RESET_PASSWORD_SECRET_KEY`, `VERIFICATION_SECRET_KEY` (strong secrets)
-- `CORS_ORIGINS` - start broad only temporarily; then set to the real frontend origin(s)
-- `FRONTEND_URL` - production frontend URL (for email links)
+- `CORS_ORIGINS` plus optional `CORS_ORIGIN_REGEX` for Vercel preview URLs
+- `FRONTEND_URL` / `BACKEND_URL` — production hostnames (`app.` / `api.buscaoficio.co`)
 - Mail provider settings for real delivery
-
-
 
 ### Checklist
 
-1. Set `DATABASE_URL` (Supabase pooler now; RDS after launch — see `docs/deployment.md`) + all `*_SECRET_KEY`s.
-2. CI builds the image and the box pulls it via `docker-compose.prod.yml` — nothing to do by hand.
-3. Run migrations manually against whatever `DATABASE_URL` the container has: `docker compose -f docker-compose.prod.yml exec -T backend alembic upgrade head` (reviewed before applying, by project convention).
-4. After frontend URL is known, tighten `CORS_ORIGINS` to the real origin(s).
+1. Set Vercel env vars (including `DATABASE_URL`) then **redeploy** — env is snapshotted at deploy time.
+2. Run migrations from GitHub Actions: `.github/workflows/migrate.yml` (`uv run alembic upgrade head` with the `DATABASE_URL` secret).
+3. Point `CORS_ORIGINS` at `https://app.buscaoficio.co` (and keep `CORS_ORIGIN_REGEX` for previews).
 
 ---
 

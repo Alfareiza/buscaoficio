@@ -12,13 +12,16 @@ help:
 	@awk '/^[a-zA-Z_-]+:/{split($$1, target, ":"); print "  " target[1] "\t" substr($$0, index($$0,$$2))}' $(MAKEFILE_LIST)
 
 # Backend commands
-.PHONY: start-backend test-backend
+.PHONY: start-backend test-backend backend-requirements
 
 start-backend: ## Start the backend server with FastAPI and hot reload
 	cd $(BACKEND_DIR) && ./start.sh
 
 test-backend: ## Run backend tests using pytest
 	cd $(BACKEND_DIR) && uv run pytest
+
+backend-requirements: ## Regenerate fastapi_backend/requirements.txt from pyproject.toml (run after changing deps)
+	cd $(BACKEND_DIR) && uv export --no-dev --format requirements-txt -o requirements.txt
 
 
 # Frontend commands

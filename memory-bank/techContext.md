@@ -45,9 +45,9 @@
 - Migrations: Alembic (async)
 - Models: `User` (UUID, fastapi-users) ↔ `Item` (name, description, quantity, FK user, cascade delete); `RefreshToken` (hash, fingerprint hash, expiry, revoked_at, FK user — merged to `main`, see `systemPatterns.md` § JWT refresh token rotation); `EmailOtp` (`email_otps` table, migration `a067ad066d81` — `email`, `code_hash`, `attempts`, `expires_at`, `consumed_at`, `created_ip`; keyed by email, not `user_id`, since the account may not exist yet — see `systemPatterns.md` § Passwordless OTP auth pattern)
 - Separate test DB: `db_test`
-- **Prod Postgres is temporarily Supabase** (transaction-mode pooler
-  `*.pooler.supabase.com:6543`). After launch, switch `DATABASE_URL` to
-  RDS `buscaoficio-1` (direct 5432). Local stays Docker Postgres.
+- **Prod Postgres is Supabase** (transaction-mode pooler
+  `*.pooler.supabase.com:6543`). RDS `buscaoficio-1` was terminated
+  2026-09-05. Local stays Docker Postgres.
 - Engine uses **NullPool** plus `ASYNC_CONNECT_ARGS` from
   `app/database.py`: `ssl="prefer"`, both statement caches off,
   `prepared_statement_name_func=str` (unnamed prepares).
@@ -55,8 +55,7 @@
   SQLAlchemy still `prepare()`s and asyncpg auto-names
   `__asyncpg_stmt_N__` (BUSCAOFICIO-BACKEND-W). The URL is built inline
   in `create_async_engine` (no `async_db_connection_url` variable).
-  Alembic imports the same dict. Harmless on local Docker and on RDS
-  after the switch.
+  Alembic imports the same dict. Harmless on local Docker Postgres.
 
 ### Local host ports (customized for this machine)
 | Service | Host port | Container port |
@@ -73,56 +72,36 @@ Changed from defaults (Postgres 5432/5433, API 8000) to avoid conflict with anot
 ### DevOps / Infrastructure
 - Docker Compose: `backend`, `frontend`, `db`, `db_test`, `mailhog` (local)
 - Shared volume `local-shared-data` for OpenAPI schema between BE and FE containers
-- Makefile for start, migrate, test, shells
-- GitHub Actions: CI (FastAPI + Next.js), pre-commit, release, **deploy**
-  (`.github/workflows/deploy.yml`), **migrate** (`.github/workflows/migrate.yml`
-  — SSH + `alembic upgrade head` in the prod backend container, not Vercel)
-- **Production deploy target: EC2 + ECR + Docker Compose**, not Vercel.
-  Region `us-east-1`, account `502993831706`. Images
-  `buscaoficio-backend` / `buscaoficio-frontend` tagged with `github.sha`.
-  The box (`i-0b3ac8e7768cb4b5d`, Elastic IP `44.207.170.68`) only pulls
-  and runs `docker-compose.prod.yml` — it never builds (913MB RAM).
-- GitHub Actions authenticates to AWS via **OIDC** (secret
-  `AWS_DEPLOY_ROLE_ARN`). Trust-policy `sub` must use GitHub's numeric-ID
-  form `repo:Alfareiza@63620799/buscaoficio@1329243606:*`, not
-  `repo:Alfareiza/buscaoficio:*`. The `*` is repo-wide; branch filtering
-  lives in the workflow YAML.
-- Template Vercel workflows/docs may still exist; they are not the prod
-  path. Prod migrate is EC2 SSH, not Vercel env pull.
+- Makefile for start, migrate, test, shells. `make backend-requirements`
+  regenerates `fastapi_backend/requirements.txt` after dep changes.
+- GitHub Actions: CI (FastAPI + Next.js — includes `requirements.txt` staleness
+  check), pre-commit, release, **migrate** (direct `uv run alembic
+  upgrade head` with `DATABASE_URL` secret). EC2 **deploy.yml** is not on
+  this branch; restore from `ec2`.
+- **Production deploy: Vercel** for both frontend and backend.
+  - `buscaoficio-front` Vercel project — root: `nextjs-frontend/`
+  - `buscaoficio-back` Vercel project — root: `fastapi_backend/`, ASGI
+    entry `api/index.py`, all traffic rewritten via `vercel.json`,
+    Python 3.12 (`.python-version`), deps from `requirements.txt`
+  - EC2 instance (`i-0b3ac8e7768cb4b5d`) and RDS (`buscaoficio-1`) terminated
+    2026-09-05. Branch `ec2` preserves that full configuration.
+- `next.config.mjs` no longer sets `output: "standalone"` (Docker-only;
+  the `ec2` branch retains it for Docker builds).
+- CORS: `CORS_ORIGINS` (env var, explicit set) + `CORS_ORIGIN_REGEX` (optional
+  env var for Vercel preview URLs, e.g. `https://buscaoficio-front.*\\.vercel\\.app`).
+- AWS OIDC config (`AWS_DEPLOY_ROLE_ARN`, numeric-ID trust policy) stays in
+  branch `ec2` for future EC2 restoration.
+- Prod Postgres: **Supabase** (transaction-mode pooler `:6543`) — RDS gone;
+  Supabase stays indefinitely. `ASYNC_CONNECT_ARGS` unchanged.
 - Quality: pre-commit, Ruff, mypy, ESLint/Prettier
 - Docs: MkDocs Material
 
-### Production SSH access
-- Two SSH keys authorize into EC2 `i-0b3ac8e7768cb4b5d` (`ec2-user`,
-  Elastic IP `44.207.170.68`), each scoped to a different purpose:
-  - **Operator key** — `~/.ssh/aag.pem` (key pair name `aag`), full admin
-    access, used for manual ops (this file, deploys, debugging). Not
-    rotated as part of this procedure.
-  - **Deploy-only key** — used by `deploy.yml` (rewrite image tags +
-    compose pull/up) and `migrate.yml` (`compose exec` Alembic). It needs
-    no other permissions on the box. Stored solely as the `EC2_SSH_KEY`
-    GitHub Actions secret — never committed to the repo, never printed to
-    a terminal/transcript other than the user's own when first generated.
-- **Rotation procedure** (same steps used 2026-08-22, see below):
-  1. Generate a new ed25519 keypair locally, e.g.
-     `ssh-keygen -t ed25519 -f /tmp/buscaoficio_deploy_key_new -N "" -C "github-actions-deploy@buscaoficio"`.
-  2. SSH in with the personal `aag` key and swap the line in
-     `~/.ssh/authorized_keys`: remove the old line tagged
-     `github-actions-deploy@buscaoficio`, append the new public key.
-     Leave the `aag` line untouched.
-  3. Update the `EC2_SSH_KEY` GitHub Actions secret with the new private
-     key contents.
-  4. Verify: SSH in with the new private key and confirm it authenticates
-     (e.g. `ssh -i <new-key> ec2-user@44.207.170.68 whoami`); trigger or
-     wait for the next `deploy.yml` run to confirm CI/CD still works.
-  5. Securely delete the old local private key file and, once the GitHub
-     secret is confirmed updated, the new key's local copies too — the
-     key should live only in the GitHub secret and on the box's
-     `authorized_keys`, not on any operator's disk long-term.
-- 2026-08-22: the deploy-only key was rotated because the previous one had
-  been accidentally exposed in an agent transcript during an earlier
-  session (see memory `project_aws_deployment.md` for the incident, not
-  duplicated here).
+### Production SSH access (dormant — EC2 terminated 2026-09-05)
+
+Restore steps live on branch `ec2` in `docs/ec2-recovery.md`. Historical
+facts only: instance `i-0b3ac8e7768cb4b5d`, EIP `44.207.170.68`,
+operator key `~/.ssh/aag.pem` (key pair `aag`), deploy-only key in
+GitHub secret `EC2_SSH_KEY`. Do not treat these IDs as live.
 
 ## E2E type safety
 Not “E2W”. End-to-end type safety means:
@@ -136,13 +115,11 @@ Not “E2W”. End-to-end type safety means:
 
 ## Local vs production (important)
 - **Local:** Docker Compose (`make docker-start-*`) or host processes + Docker Postgres.
-- **Production:** GitHub Actions builds images → ECR → EC2 `docker compose pull/up`.
-  Frontend uses `nextjs-frontend/Dockerfile.prod`. Backend uses
-  `fastapi_backend/Dockerfile`. Prod Postgres is temporarily Supabase
-  (pooler `:6543`); switch `DATABASE_URL` to RDS after launch.
-- Template Vercel path (serverless Next + `api/index.py`) still exists in
-  the repo but is **not** what production uses. `$PORT` is still not
-  mapped for that unused path. Local `start.sh` hardcodes `--port 8001`.
+- **Production:** Vercel (`buscaoficio-front` + `buscaoficio-back`) + Supabase.
+  Watchers do not run. Generated OpenAPI client is committed.
+- EC2 + ECR + `docker-compose.prod.yml` + `Caddyfile`: **dormant**, see
+  branch `ec2`. `Caddyfile` and `infra-manual-reminder.yml` are not on
+  this branch — keep them when merging `main` into `ec2`.
 
 ## Observability
 - Org: `aag-k0`. Projects: `buscaoficio-backend` (python-fastapi),

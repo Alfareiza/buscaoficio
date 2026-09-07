@@ -6,12 +6,12 @@
   </p>
 <p align="center">
   <a href="#">
-    <img src="https://github.com/Alfareiza/buscaoficio/actions/workflows/deploy.yml/badge.svg" alt="Deployed"></img>
+    <img src="https://github.com/Alfareiza/buscaoficio/actions/workflows/ci.yml/badge.svg" alt="CI"></img>
   </a>
 </p>
 
 
-The repo is based on [Vinta Software’s Next.js FastAPI Template](https://github.com/vintasoftware/nextjs-fastapi-template). Domain-specific product features are not built yet; this is the production-shaped foundation (auth, CRUD, typed FE/BE contract, local Docker, AWS deployment on EC2). Production Postgres is **temporarily Supabase**; switch to RDS after launch.
+The repo is based on [Vinta Software’s Next.js FastAPI Template](https://github.com/vintasoftware/nextjs-fastapi-template). Domain-specific product features are not built yet; this is the production-shaped foundation (auth, CRUD, typed FE/BE contract, local Docker, **Vercel** production). Production Postgres is **Supabase**. EC2/ECR restore path: branch `ec2`.
 
 | App | Details |
 | --- | ------- |

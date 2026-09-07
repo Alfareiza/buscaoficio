@@ -4,10 +4,9 @@ import process from "node:process";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Traces only the files node server.js needs. Dockerfile.prod copies
-  // .next/standalone into a slim alpine runner — without this, the image
-  // ships Debian + full node_modules + webpack cache (~GB, too big for the EC2).
-  output: "standalone",
+  // Note: `output: "standalone"` (Docker self-hosting) was removed when the
+  // frontend moved to Vercel — Vercel bundles differently and doesn't use the
+  // standalone server. Restore it in the `ec2` branch for Docker/EC2 deploys.
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.plugins.push(
