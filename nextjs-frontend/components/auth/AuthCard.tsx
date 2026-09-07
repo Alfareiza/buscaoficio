@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -39,6 +39,11 @@ import { cn } from "@/lib/utils";
 type Step = "email" | "otp" | "onboarding-name" | "onboarding-role";
 type Role = "cliente" | "profesional";
 
+const ROLE_OPTIONS: { value: Role; label: string }[] = [
+  { value: "cliente", label: "Busco un profesional para un trabajo" },
+  { value: "profesional", label: "Ofrezco mis servicios como profesional" },
+];
+
 const DOCUMENTO_TIPOS: { value: TipoDocumento; label: string }[] = [
   { value: "CC", label: "Cédula de Ciudadanía" },
   { value: "CE", label: "Cédula de Extranjería" },
@@ -75,6 +80,9 @@ interface AuthCardProps {
    * with "Continuar como {name}" instead of a blank form — on every visit,
    * including after a deliberate logout. */
   googleIdentity?: GoogleIdentity | null;
+  /** Local-preview only: jump straight to a later step. The register page
+   * only forwards this when NODE_ENV is not production. */
+  initialStep?: Step;
 }
 
 const INTENT_COPY = {
@@ -105,12 +113,13 @@ export function AuthCard({
   initialName,
   initialError,
   googleIdentity,
+  initialStep,
 }: AuthCardProps) {
   const router = useRouter();
   const copy = INTENT_COPY[intent];
 
   const [step, setStep] = useState<Step>(
-    initialRegistrationToken ? "onboarding-name" : "email",
+    initialStep ?? (initialRegistrationToken ? "onboarding-name" : "email"),
   );
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(initialError ?? null);
@@ -207,6 +216,37 @@ export function AuthCard({
       return;
     }
     setStep("onboarding-role");
+  }
+
+  function handleRoleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (
+      event.key !== "ArrowDown" &&
+      event.key !== "ArrowUp" &&
+      event.key !== "ArrowLeft" &&
+      event.key !== "ArrowRight"
+    ) {
+      return;
+    }
+    event.preventDefault();
+    const currentIndex = role
+      ? ROLE_OPTIONS.findIndex((option) => option.value === role)
+      : -1;
+    const delta =
+      event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : -1;
+    const nextIndex =
+      currentIndex === -1
+        ? 0
+        : (currentIndex + delta + ROLE_OPTIONS.length) % ROLE_OPTIONS.length;
+    setRole(ROLE_OPTIONS[nextIndex].value);
+    const radios = event.currentTarget.querySelectorAll<HTMLElement>(
+      '[role="radio"]',
+    );
+    radios[nextIndex]?.focus();
+  }
+
+  function handleBackToName() {
+    setError(null);
+    setStep("onboarding-name");
   }
 
   async function handleCompleteOnboarding() {
@@ -530,85 +570,105 @@ export function AuthCard({
       )}
 
       {step === "onboarding-role" && (
-        <div className="flex w-full flex-col gap-5 text-center">
-          <div>
-            <h1 className="text-2xl font-bold text-azul dark:text-white">
-              ¿Qué te trae a BuscaOficio?
-            </h1>
+        <div className="flex w-full flex-col items-center gap-8 text-center">
+          <h1
+            id="role-heading"
+            className="text-[1.7rem] font-bold leading-tight tracking-tight text-azul dark:text-white"
+          >
+            ¿Qué te trae a BuscaOficio?
+          </h1>
+
+          <div
+            role="radiogroup"
+            aria-labelledby="role-heading"
+            onKeyDown={handleRoleKeyDown}
+            className="flex w-full max-w-[22rem] flex-col items-start gap-6 text-left"
+          >
+            {ROLE_OPTIONS.map((option) => {
+              const selected = role === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setRole(option.value)}
+                  className="group flex w-full items-center gap-4 rounded-md text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-naranja/50 focus-visible:ring-offset-2"
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-200",
+                      selected
+                        ? "border-azul dark:border-white"
+                        : "border-gray-300 group-hover:border-gray-400 dark:border-gray-500 dark:group-hover:border-gray-400",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "h-3 w-3 rounded-full bg-azul transition-transform duration-200 dark:bg-white",
+                        selected ? "scale-100" : "scale-0",
+                      )}
+                    />
+                  </span>
+                  <span className="text-[15px] font-medium leading-snug text-azul dark:text-white">
+                    {option.label}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
-          <div className="mx-auto flex w-[calc(100%-4rem)] flex-col gap-5">
-            <div className="flex flex-col gap-3 text-left">
-              <button
-                type="button"
-                onClick={() => setRole("cliente")}
-                className={`rounded-lg border p-4 text-left transition-colors ${
-                  role === "cliente"
-                    ? "border-naranja bg-durazno-pale"
-                    : "border-hueso-borde hover:border-naranja-claro"
-                }`}
-              >
-                <span className="font-medium font-extralight text-azul dark:text-white">
-                  Busco un profesional para un trabajo
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setRole("profesional")}
-                className={`rounded-lg border p-4 text-left transition-colors ${
-                  role === "profesional"
-                    ? "border-naranja bg-durazno-pale"
-                    : "border-hueso-borde hover:border-naranja-claro"
-                }`}
-              >
-                <span className="font-medium font-extralight text-azul dark:text-white">
-                  Ofrezco mis servicios como profesional
-                </span>
-              </button>
-            </div>
-
-            {role === "profesional" && (
-              <div className="flex flex-col gap-4 text-left">
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="documento_tipo">Tipo de documento</Label>
-                  <Select
-                    value={documentoTipo}
-                    onValueChange={(v) => setDocumentoTipo(v as TipoDocumento)}
-                  >
-                    <SelectTrigger id="documento_tipo">
-                      <SelectValue placeholder="Selecciona un tipo de documento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DOCUMENTO_TIPOS.map((tipo) => (
-                        <SelectItem key={tipo.value} value={tipo.value}>
-                          {tipo.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="documento_numero">Número de documento</Label>
-                  <Input
-                    id="documento_numero"
-                    placeholder="Número de documento"
-                    value={documentoNumero}
-                    onChange={(e) => setDocumentoNumero(e.target.value)}
-                  />
-                </div>
+          {role === "profesional" && (
+            <div className="flex w-full max-w-[22rem] flex-col gap-4 text-left">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="documento_tipo">Tipo de documento</Label>
+                <Select
+                  value={documentoTipo}
+                  onValueChange={(v) => setDocumentoTipo(v as TipoDocumento)}
+                >
+                  <SelectTrigger id="documento_tipo">
+                    <SelectValue placeholder="Selecciona un tipo de documento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DOCUMENTO_TIPOS.map((tipo) => (
+                      <SelectItem key={tipo.value} value={tipo.value}>
+                        {tipo.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-            )}
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="documento_numero">Número de documento</Label>
+                <Input
+                  id="documento_numero"
+                  placeholder="Número de documento"
+                  value={documentoNumero}
+                  onChange={(e) => setDocumentoNumero(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
 
-            {error && <p className="text-sm text-red-500">{error}</p>}
+          {error && <p className="text-sm text-red-500">{error}</p>}
 
+          <div className="flex w-full max-w-[22rem] flex-col items-center gap-3">
             <Button
               type="button"
-              className="w-full rounded-2xl bg-naranja hover:bg-naranja-hover"
+              className="h-12 w-full rounded-full bg-naranja text-base font-medium text-white hover:bg-naranja-hover active:scale-[0.98]"
               disabled={isPending || !role || profesionalDocsIncomplete}
               onClick={handleCompleteOnboarding}
             >
               {isPending ? "Creando cuenta…" : "Crear cuenta"}
             </Button>
+            <button
+              type="button"
+              className="text-sm text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-300"
+              onClick={handleBackToName}
+            >
+              Volver
+            </button>
           </div>
         </div>
       )}
