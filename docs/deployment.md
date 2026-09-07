@@ -83,6 +83,7 @@ Vercel answers it. JS origin stays `https://app.buscaoficio.co`.
 | --- | --- |
 | `ci.yml` | Tests; `requirements.txt` staleness check |
 | `migrate.yml` | Alembic via `uv` + `DATABASE_URL` secret |
-| `deploy.yml` | **Disabled** (EC2). Live copy on branch `ec2` |
+
+EC2 `deploy.yml` lives only on branch `ec2`. Do not add it here.
 
 GitHub user for this repo: **Alfareiza** (not `alfonsorevin`).

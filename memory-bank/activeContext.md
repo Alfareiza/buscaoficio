@@ -12,7 +12,7 @@
   - `migrate.yml` now runs `uv run alembic upgrade head` directly with only
     `DATABASE_URL` secret (Alembic env.py inlines `ASYNC_CONNECT_ARGS`)
   - `CORS_ORIGIN_REGEX` setting added for Vercel preview deployments
-  - `deploy.yml` push trigger removed on `main`; owned by `ec2` branch
+  - EC2 `deploy.yml` removed from this branch; live copy on `ec2`
   **Done 2026-09-07 (as GitHub user Alfareiza):** pushed `ec2` +
   `28-vercel-deployment`; created Vercel projects `buscaoficio-front` /
   `buscaoficio-back` linked to this repo; loaded env vars (not

@@ -6,7 +6,7 @@
   </p>
 <p align="center">
   <a href="#">
-    <img src="https://github.com/Alfareiza/buscaoficio/actions/workflows/deploy.yml/badge.svg" alt="Deployed"></img>
+    <img src="https://github.com/Alfareiza/buscaoficio/actions/workflows/ci.yml/badge.svg" alt="CI"></img>
   </a>
 </p>
 

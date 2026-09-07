@@ -75,9 +75,9 @@ Changed from defaults (Postgres 5432/5433, API 8000) to avoid conflict with anot
 - Makefile for start, migrate, test, shells. `make backend-requirements`
   regenerates `fastapi_backend/requirements.txt` after dep changes.
 - GitHub Actions: CI (FastAPI + Next.js — includes `requirements.txt` staleness
-  check), pre-commit, release, **deploy** (disabled push trigger on `main`;
-  EC2-specific, owned by `ec2` branch), **migrate** (direct `uv run alembic
-  upgrade head` with `DATABASE_URL` secret — no EC2 SSH)
+  check), pre-commit, release, **migrate** (direct `uv run alembic
+  upgrade head` with `DATABASE_URL` secret). EC2 **deploy.yml** is not on
+  this branch; restore from `ec2`.
 - **Production deploy: Vercel** for both frontend and backend.
   - `buscaoficio-front` Vercel project — root: `nextjs-frontend/`
   - `buscaoficio-back` Vercel project — root: `fastapi_backend/`, ASGI
