@@ -83,16 +83,19 @@
 - [ ] Production email provider (beyond MailHog)
 - [x] Finish Deploy to EC2 job (SCP/SSH); box should run the SHA that ECR has
 - [x] Rewrite `migrate.yml` for direct-DB Alembic (no SSH) — Vercel era
-- [x] **Vercel migration** — both apps on Vercel (`buscaoficio-front` /
-  `buscaoficio-back`), PR #29 / issue #28. EC2 restore: branch `ec2`
+- [x] **Vercel is the production target for both apps**
+  (`buscaoficio-front` + `buscaoficio-back`). Not Railway / Render / Fly.
+  Issue [#28](https://github.com/Alfareiza/buscaoficio/issues/28), PR #29.
+  EC2 restore: branch `ec2`.
 - [x] Apply Alembic `c8f3a91d4e20` against Supabase (already at head)
 - [x] Prod secrets: Sentry DSN + `SENTRY_ENVIRONMENT=production` on Vercel
   (`SENTRY_AUTH_TOKEN` still optional / unset — source maps skipped)
+- [x] Preview `DATABASE_URL` on `buscaoficio-back` (same pooler as Production)
+- [x] Merge PR #29 to `main` (Vercel production git branch)
 - [ ] Confirm a real error from the running app lands in Sentry (not done yet)
 - [ ] Optional: replace MailHog with Mailpit
 - [ ] `createsuperuser` management command (workaround now: sign up via the
   app's OTP flow, then promote via SQL)
-- [ ] Optional Preview `DATABASE_URL` on `buscaoficio-back` (Production only today)
 - [ ] `gh auth` default user is still `alfonsorevin`; use **Alfareiza** for this repo
 
 ## Known issues / gotchas
