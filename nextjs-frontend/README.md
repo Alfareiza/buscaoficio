@@ -18,7 +18,7 @@ For the API, auth, and DB, see [`fastapi_backend/README.md`](../fastapi_backend/
 | API client | `@hey-api/openapi-ts` → `app/openapi-client` |
 | Package manager | **pnpm** |
 | Tests | Jest + Testing Library |
-| Deploy | AWS EC2 (Docker image built in CI, see [`docs/deployment.md`](../docs/deployment.md)) |
+| Deploy | Vercel (`buscaoficio-front` — see [`docs/deployment.md`](../docs/deployment.md)) |
 
 ---
 
@@ -169,7 +169,7 @@ make docker-test-frontend
 
 ## Deploy - frontend perspective
 
-Production is AWS (EC2 + Docker + Caddy), not Vercel. CI builds `Dockerfile.prod` and pushes to ECR; the box pulls and runs it. `FRONTEND_URL` must be set in the on-box env — Route Handler redirects behind the reverse proxy resolve to the container bind address otherwise. Full picture: [`docs/deployment.md`](../docs/deployment.md).
+Production is **Vercel** (`buscaoficio-front`). `API_BASE_URL` and `FRONTEND_URL` (backend) must be the public hostnames, not `*.vercel.app`, once custom DNS is live. `output: "standalone"` is off here (Docker/EC2 only; restore from branch `ec2`). Full picture: [`docs/deployment.md`](../docs/deployment.md).
 
 The build uses the generated `app/openapi-client` already in the tree (no backend/watcher needed at build time).
 

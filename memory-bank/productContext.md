@@ -18,15 +18,12 @@ The template gives a clean, typed full-stack starting point so product work can 
 3. Users authenticate and manage items via the Next.js dashboard.
 4. Schema changes to Postgres go through Alembic (explicit, not automatic
    on model edit). Local: Makefile/`make docker-migrate-db`. Production
-   Postgres (Supabase now, RDS after launch):
-   `.github/workflows/migrate.yml` (SSH + Alembic in the backend
-   container), kept separate from image deploy.
+   (Supabase): `.github/workflows/migrate.yml` runs Alembic on GitHub
+   Actions with secret `DATABASE_URL`, kept separate from Vercel deploys.
 5. Unhandled errors, traces, and app logs go to Sentry when a DSN is set; local without DSN stays silent.
 
 ## UX goals
 - Immediate usable auth + dashboard after setup.
 - Developer experience: hot reload + automatic client sync when API surfaces change.
-- Clear separation: Docker Compose for local infra; production is the
-  same Compose shape on EC2 (`docker-compose.prod.yml`), with images
-  built in GitHub Actions and stored in ECR — not Docker-on-Vercel.
-  Template Vercel files still exist but are not the prod path.
+- Clear separation: Docker Compose for local infra; production is
+  Vercel (two projects) + Supabase. EC2/Compose restore: branch `ec2`.

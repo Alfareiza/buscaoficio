@@ -18,10 +18,12 @@
   `buscaoficio-back` linked to this repo; loaded env vars (not
   `DATABASE_URL`); attached `app.buscaoficio.co` and `api.buscaoficio.co`;
   opened PR #29; Alembic on Supabase is already at `c8f3a91d4e20` (head).
-  **Still pending:** Supabase pooler `DATABASE_URL` on Vercel + GitHub
-  Actions secret; Hostinger DNS (A/CNAME still point at deleted EC2
-  `44.207.170.68`); Google OAuth redirect URIs for the new backend URL;
-  `gh auth switch` so the default CLI user is Alfareiza.
+  **Still pending (2026-09-07):** confirm Google Console still has
+  `https://api.buscaoficio.co/api/v1/auth/google/callback` (same URI as
+  EC2 — no new URI if Hostinger already points `api`/`app` at Vercel);
+  optional Preview `DATABASE_URL`; optional `SENTRY_AUTH_TOKEN`;
+  `gh auth` default is still `alfonsorevin` (use Alfareiza for this repo);
+  merge PR #29 so Vercel production branch can stay `main`.
 - **Stale Server Action after frontend deploy, 2026-08-30.** A tab left
   open across `Deploy to production` posts an old action id → `404` +
   `x-nextjs-action-not-found`. Logout is now a stable
@@ -523,10 +525,9 @@
   for email verification (backend email + template + frontend `/verify` page).
 
 ## Active decisions
-- **Production deploy target changed to Vercel (2026-09-05).** EC2 instance
-  and RDS terminated to avoid charges. Branch `ec2` snapshots the full
-  AWS deploy configuration for future restoration. Vercel handles the
-  Next.js frontend; backend host TBD (Railway / Render / Fly.io).
+- **Production deploy target is Vercel (2026-09-05).** Both frontend and
+  backend. EC2/RDS terminated. Restore from branch `ec2`
+  (`docs/ec2-recovery.md`). Postgres stays Supabase.
 - **Prod Postgres stays on Supabase** (transaction-mode pooler `:6543`).
   The "switch to RDS after launch" plan is deferred — RDS no longer
   exists. Supabase remains until a clear cost/scale reason to move.
@@ -573,8 +574,6 @@
   since it's part of the public API contract regardless of what the current
   frontend does; needed an explicit answer, not an inference from the code.
 - Stay on template patterns (Makefile + watchers for OpenAPI sync).
-- **Production deploy is EC2 + ECR + Compose**, not Vercel. Vercel
-  serverless leftovers stay in the repo until someone deletes them.
 - MailHog remains for local email; Mailpit is a known alternative if we replace later.
 - Prefer Docker for Postgres even when running API/FE on host.
 - Auth routes are kept explicit (not using fastapi-users built-in router) to allow clear docstrings in OpenAPI docs.

@@ -7,9 +7,9 @@ This repo is based on Vinta Software’s **Next.js FastAPI Template** (`vintasof
 - Provide a production-shaped MVP foundation (auth + CRUD + typed FE/BE contract).
 - Keep frontend and backend in sync via OpenAPI-generated TypeScript clients.
 - Support local Docker Compose development and production deploy to **Vercel**
-  (frontend) + a managed backend host (Railway / Render / Fly.io — TBD).
-  EC2 + ECR + RDS were retired 2026-09-05; branch `ec2` preserves that
-  configuration. Prod Postgres remains on Supabase.
+  (`buscaoficio-front` + `buscaoficio-back`). EC2 + ECR + RDS were retired
+  2026-09-05; branch `ec2` preserves that configuration
+  (`docs/ec2-recovery.md` on that branch). Prod Postgres remains on Supabase.
 
 ## Scope (current template)
 - JWT authentication — passwordless email OTP for login/registration (the

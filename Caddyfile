@@ -1,8 +1,7 @@
-# DRAFT — Caddy reverse proxy config for production.
-# NOT deployed yet. Requires DOMAIN, API_DOMAIN, ACME_EMAIL to be set in the
-# EC2 box's ./.env (see .env.prod.example). Caddy issues/renews Let's Encrypt
-# certs automatically for these hostnames as long as DNS points at the box
-# and 80/443 are reachable from the internet.
+# Dormant on this branch — production is Vercel. Restore from branch `ec2`.
+# Caddy reverse proxy for EC2. Requires DOMAIN, API_DOMAIN, ACME_EMAIL in
+# the box .env (see .env.prod.example). Let's Encrypt needs DNS on the EIP
+# and 80/443 reachable.
 #
 # Layout assumes two hostnames:
 #   DOMAIN      -> the Next.js frontend (what users browse to)

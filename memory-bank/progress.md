@@ -19,10 +19,9 @@
   401 fallback — **merged to `main`** (`4d75bde`, issue #10). `proxy.ts`
   must not 307 Server Action POSTs (`next-action`); that made Logout a
   no-op in prod (2026-08-29). Actions `redirect()` themselves.
-- Prod Postgres is **temporarily Supabase** (transaction pooler `:6543`);
-  switch to RDS after launch. App + Alembic use `ASYNC_CONNECT_ARGS` in
-  `app/database.py`: both statement caches off and
-  `prepared_statement_name_func=str` (unnamed prepares).
+- Prod Postgres is **Supabase** (transaction pooler `:6543`). App +
+  Alembic use `ASYNC_CONNECT_ARGS` in `app/database.py`: both statement
+  caches off and `prepared_statement_name_func=str` (unnamed prepares).
   `statement_cache_size=0` alone left named `__asyncpg_stmt_*`
   collisions (BUSCAOFICIO-BACKEND-W).
 - `AuthCard` component (`components/auth/AuthCard.tsx`) drives the OTP
@@ -39,13 +38,11 @@
 - Docker Compose stack (backend, frontend, db, db_test, mailhog)
 - Alembic migrations (user + item revisions present)
 - CI workflows (FastAPI + Next.js), pre-commit, MkDocs
-- Production deploy workflow: **EC2 deploy retired 2026-09-05.** EC2
-  instance and RDS deleted. Branch `ec2` preserves the working deploy
-  config (OIDC → ECR → SSH Compose). Transitioning to **Vercel** for the
-  frontend; backend host TBD (Railway / Render / Fly.io). See issue #XX.
-- Production **migrate** workflow (`.github/workflows/migrate.yml`): EC2
-  SSH-based. Must be retargeted for Vercel era (run Alembic directly
-  against `DATABASE_URL` without SSH). Tracked in issue #XX.
+- Production deploy: **Vercel** (`buscaoficio-front` + `buscaoficio-back`),
+  issue [#28](https://github.com/Alfareiza/buscaoficio/issues/28), PR #29.
+  EC2/RDS retired 2026-09-05; restore from branch `ec2`.
+- Production **migrate** workflow runs `uv run alembic upgrade head` with
+  GitHub secret `DATABASE_URL` (no SSH).
 
 ## Local customizations done
 - [x] Postgres host ports remapped to **5434** (db) and **5435** (db_test)
@@ -85,18 +82,18 @@
 - [ ] Domain product features for "busca oficio" (not started)
 - [ ] Production email provider (beyond MailHog)
 - [x] Finish Deploy to EC2 job (SCP/SSH); box should run the SHA that ECR has
-- [x] ~~Rewrite `migrate.yml` for EC2~~ — EC2 retired; must be retargeted
-  for direct-DB Alembic (no SSH), tracked in Vercel migration issue
-- [ ] **Vercel migration** — frontend to Vercel, backend to managed host
-  (Railway/Render/Fly.io TBD), `migrate.yml` retargeted, CORS updated
-- [ ] Apply pending Alembic revision `c8f3a91d4e20` against Supabase
-  (blocked until new migrate workflow in place)
-- [ ] Prod secrets: Sentry DSN + `SENTRY_ENVIRONMENT=production` in new
-  hosting env (`SENTRY_AUTH_TOKEN` already a GitHub Actions secret)
+- [x] Rewrite `migrate.yml` for direct-DB Alembic (no SSH) — Vercel era
+- [x] **Vercel migration** — both apps on Vercel (`buscaoficio-front` /
+  `buscaoficio-back`), PR #29 / issue #28. EC2 restore: branch `ec2`
+- [x] Apply Alembic `c8f3a91d4e20` against Supabase (already at head)
+- [x] Prod secrets: Sentry DSN + `SENTRY_ENVIRONMENT=production` on Vercel
+  (`SENTRY_AUTH_TOKEN` still optional / unset — source maps skipped)
 - [ ] Confirm a real error from the running app lands in Sentry (not done yet)
 - [ ] Optional: replace MailHog with Mailpit
 - [ ] `createsuperuser` management command (workaround now: sign up via the
   app's OTP flow, then promote via SQL)
+- [ ] Optional Preview `DATABASE_URL` on `buscaoficio-back` (Production only today)
+- [ ] `gh auth` default user is still `alfonsorevin`; use **Alfareiza** for this repo
 
 ## Known issues / gotchas
 - `proxy.ts` must **never 307 a Server Action** (`next-action` header).
@@ -116,13 +113,12 @@
   migration `c8f3a91d4e20` on prod or admin delete will 500 on a missing
   column (and the old FK error returns if you somehow hard-delete).
 - Bare `pnpm run dev` / `uv run fastapi` skips watchers - use Makefile/`start.sh`.
-- Production is EC2 + ECR, not Vercel. GitHub OIDC `sub` is
-  `repo:Owner@id/repo@id:…` — a slug-form IAM trust policy fails AssumeRole.
-- Prod schema changes: `migrate.yml` execs Alembic in the **current**
-  backend container. If the same commit also deploys a new image, wait
-  for deploy (or dispatch migrate after) so revision files exist in the
-  container.
-- Leftover Vercel serverless path has no `$PORT` wiring; ignore it for prod.
+- Production is **Vercel** (this branch). GitHub OIDC `sub` for a future
+  EC2 restore is `repo:Alfareiza@63620799/buscaoficio@1329243606:…` — a
+  slug-form IAM trust policy fails AssumeRole. Full restore:
+  `docs/ec2-recovery.md` on branch `ec2`.
+- Prod schema changes: `migrate.yml` runs Alembic on GitHub Actions with
+  `DATABASE_URL`. No container, no SSH.
 - Mixing local and Docker runs is discouraged by upstream docs.
 - sentry-sdk 2.68: `enable_logs` does not collect stdlib logs. Use
   `LoggingIntegration(capture_sentry_logs=True)` and keep the
