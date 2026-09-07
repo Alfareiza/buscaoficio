@@ -41,7 +41,9 @@ inlining, CORS regex, etc.).
 - [ ] Conflicts you must resolve **toward EC2**, not Vercel:
   - `nextjs-frontend/next.config.mjs` — keep `output: "standalone"` (required
     by `Dockerfile.prod`).
-  - `.github/workflows/deploy.yml` — keep the **push** trigger. Retarget
+  - **`.github/workflows/deploy.yml` — keep ours.** `main` **deleted** this
+    file (Vercel deploys from git, not ECR/SSH). Without it there is no
+    image build or box update. Keep the **push** trigger. Retarget
     `on.push.branches` to the branch you will actually push (`ec2` or `main`
     after cutover). The frozen file still says `main`.
   - `.github/workflows/migrate.yml` — EC2 era SSHes into the box and runs
@@ -61,14 +63,25 @@ inlining, CORS regex, etc.).
 - [ ] Confirm `nextjs-frontend/Dockerfile.prod` still uses the standalone
       output (`HOSTNAME=0.0.0.0`, `PORT=3000`).
 
-### 1a. Why `Caddyfile` and `infra-manual-reminder.yml` stay on this branch
+### 1a. Why `deploy.yml`, `Caddyfile`, and `infra-manual-reminder.yml` stay on this branch
 
-Vercel does TLS and hostname routing (`app.buscaoficio.co` /
-`api.buscaoficio.co`). Those two files do nothing there, so they were
-removed from `28-vercel-deployment` / `main` on 2026-09-07. They are
-**load-bearing on EC2**. If a merge from `main` deletes them, stop and
-restore from this branch (`git checkout HEAD -- Caddyfile
-.github/workflows/infra-manual-reminder.yml`).
+Vercel deploys from git and terminates TLS. Those files do nothing there,
+so they were removed from `28-vercel-deployment` / `main` on 2026-09-07.
+They are **load-bearing on EC2**. If a merge from `main` deletes them, stop
+and restore from this branch:
+
+```
+git checkout HEAD -- .github/workflows/deploy.yml Caddyfile \
+  .github/workflows/infra-manual-reminder.yml
+```
+
+**`.github/workflows/deploy.yml`**
+
+- Only pipeline that builds FE/BE images, pushes SHA tags to ECR, and
+  SSHes to the box (`compose pull && up -d`). Vercel does not use it.
+- Do not add a `deploy-ec2` confirm gate on the Vercel line — delete the
+  workflow there instead. If you want a confirm input, add it **on this
+  branch** and actually check `github.event.inputs.confirm == 'deploy-ec2'`.
 
 **`Caddyfile` (repo root, copied to `/opt/buscaoficio/Caddyfile`)**
 
@@ -276,6 +289,7 @@ Google Sign-In: `redirect_uri` is
 
 | File | Role |
 | --- | --- |
+| `.github/workflows/deploy.yml` | **Required on EC2.** ECR build + SSH compose. Deleted on `main`. |
 | `Caddyfile` | **Required on EC2.** TLS + `app`/`api` reverse proxy. Deleted on `main`. |
 | `.github/workflows/infra-manual-reminder.yml` | **Required on EC2.** Fails CI until compose/Caddy are copied to the box. Deleted on `main`. |
 | `docs/deployment.md` | Compact EC2 deploy summary (pre-Vercel wording). |
