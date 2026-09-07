@@ -7,7 +7,7 @@ name: pre-commit
 # Out of scope (do not add to `paths` below): .md, .yml/.yaml, .html,
 # .css, .svg, .png/.jpg/.jpeg/.webp/.gif/.ico, .woff/.woff2, .json
 # (except openapi.json), .lock, .ini, .txt, .sh, .mjs, Dockerfiles,
-# Makefile, Caddyfile.
+# Makefile.
 on:
   push:
     paths:

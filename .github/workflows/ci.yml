@@ -7,7 +7,7 @@ name: CI
 # next.config.mjs, openapi.json), plus this workflow.
 # Out of scope (do not add to `paths` below): .md, other .yml/.yaml, .css,
 # public/docs images, .woff/.woff2, .json (except the files listed),
-# .sh, eslint .mjs, Dockerfiles, Makefile, Caddyfile.
+# .sh, eslint .mjs, Dockerfiles, Makefile.
 # requirements.txt IS in scope — the CI check validates it stays in sync.
 on:
   push:

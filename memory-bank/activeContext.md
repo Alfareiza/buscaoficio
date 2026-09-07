@@ -18,12 +18,12 @@
   `buscaoficio-back` linked to this repo; loaded env vars (not
   `DATABASE_URL`); attached `app.buscaoficio.co` and `api.buscaoficio.co`;
   opened PR #29; Alembic on Supabase is already at `c8f3a91d4e20` (head).
-  **Still pending (2026-09-07):** confirm Google Console still has
-  `https://api.buscaoficio.co/api/v1/auth/google/callback` (same URI as
-  EC2 — no new URI if Hostinger already points `api`/`app` at Vercel);
-  optional Preview `DATABASE_URL`; optional `SENTRY_AUTH_TOKEN`;
-  `gh auth` default is still `alfonsorevin` (use Alfareiza for this repo);
-  merge PR #29 so Vercel production branch can stay `main`.
+  **Still pending (2026-09-07):** optional Preview `DATABASE_URL`;
+  optional `SENTRY_AUTH_TOKEN`; `gh auth` default is still `alfonsorevin`
+  (use Alfareiza for this repo); merge PR #29 so Vercel production branch
+  can stay `main`. Google redirect URI is unchanged
+  (`https://api.buscaoficio.co/api/v1/auth/google/callback`) — hostname
+  did not change.
 - **Stale Server Action after frontend deploy, 2026-08-30.** A tab left
   open across `Deploy to production` posts an old action id → `404` +
   `x-nextjs-action-not-found`. Logout is now a stable

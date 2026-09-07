@@ -1,4 +1,6 @@
 # Dormant on this branch — production is Vercel. Restore from branch `ec2`.
+# The Caddyfile this file bind-mounts lives ONLY on branch `ec2` (removed
+# here 2026-09-07). Do not run this compose file from main / Vercel.
 # Production Docker Compose for the EC2 box (`/opt/buscaoficio`).
 #
 # Differences from the dev docker-compose.yml at repo root:

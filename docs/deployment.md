@@ -1,10 +1,11 @@
 # Deployment
 
 **Active production is Vercel** (Hobby team `alfareizas-projects`). Postgres is
-**Supabase** (transaction-mode pooler `:6543`). The EC2 + ECR + Caddy stack was
-retired 2026-09-05; restore it from branch `ec2` using
+**Supabase** (transaction-mode pooler `:6543`). TLS and hostname routing are
+Vercel’s. The EC2 + ECR + Caddy stack was retired 2026-09-05; restore it from
+branch `ec2` using
 [`docs/ec2-recovery.md`](https://github.com/Alfareiza/buscaoficio/blob/ec2/docs/ec2-recovery.md)
-on that branch.
+on that branch. `Caddyfile` and `infra-manual-reminder.yml` live **only** there.
 
 ```
 GitHub (Alfareiza/buscaoficio)
@@ -71,10 +72,10 @@ CNAME to `cname.vercel-dns.com` is also valid. TLS is Vercel-managed.
 
 ## Google Sign-In
 
-`redirect_uri` is `{BACKEND_URL}/api/v1/auth/google/callback`. With
-`BACKEND_URL=https://api.buscaoficio.co` that is the same URI used on EC2.
-If Google Cloud Console still has that Authorized redirect URI (and JS origin
-`https://app.buscaoficio.co`), no Console change is required.
+`redirect_uri` is `{BACKEND_URL}/api/v1/auth/google/callback`. Do **not**
+change the Google Cloud Console URI while `BACKEND_URL` stays
+`https://api.buscaoficio.co` — the hostname is the same whether Caddy or
+Vercel answers it. JS origin stays `https://app.buscaoficio.co`.
 
 ## GitHub Actions
 
@@ -83,6 +84,5 @@ If Google Cloud Console still has that Authorized redirect URI (and JS origin
 | `ci.yml` | Tests; `requirements.txt` staleness check |
 | `migrate.yml` | Alembic via `uv` + `DATABASE_URL` secret |
 | `deploy.yml` | **Disabled** (EC2). Live copy on branch `ec2` |
-| `infra-manual-reminder.yml` | **Disabled** (EC2 box copy reminder) |
 
 GitHub user for this repo: **Alfareiza** (not `alfonsorevin`).

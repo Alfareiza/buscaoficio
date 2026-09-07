@@ -25,8 +25,9 @@ stack lives on branch `ec2` (`docs/ec2-recovery.md` there).
   dashboard does nothing until a new deployment.
 - Preview URLs: `CORS_ORIGIN_REGEX` (e.g.
   `https://buscaoficio-front.*\.vercel\.app`).
-- `.github/workflows/deploy.yml` and `infra-manual-reminder.yml` are
-  **disabled** on this branch (EC2). Restore from `ec2`.
+- `.github/workflows/deploy.yml` is **disabled** on this branch (EC2).
+  `Caddyfile` and `infra-manual-reminder.yml` were removed here; they
+  exist only on branch `ec2`. Restore from `docs/ec2-recovery.md` there.
 
 ## Production migrate pattern
 - Workflow: `.github/workflows/migrate.yml` — **not** part of deploy.

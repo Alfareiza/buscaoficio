@@ -117,7 +117,9 @@ Not “E2W”. End-to-end type safety means:
 - **Local:** Docker Compose (`make docker-start-*`) or host processes + Docker Postgres.
 - **Production:** Vercel (`buscaoficio-front` + `buscaoficio-back`) + Supabase.
   Watchers do not run. Generated OpenAPI client is committed.
-- EC2 + ECR + `docker-compose.prod.yml` + Caddy: **dormant**, see branch `ec2`.
+- EC2 + ECR + `docker-compose.prod.yml` + `Caddyfile`: **dormant**, see
+  branch `ec2`. `Caddyfile` and `infra-manual-reminder.yml` are not on
+  this branch — keep them when merging `main` into `ec2`.
 
 ## Observability
 - Org: `aag-k0`. Projects: `buscaoficio-backend` (python-fastapi),
