@@ -13,9 +13,15 @@
     `DATABASE_URL` secret (Alembic env.py inlines `ASYNC_CONNECT_ARGS`)
   - `CORS_ORIGIN_REGEX` setting added for Vercel preview deployments
   - `deploy.yml` push trigger removed on `main`; owned by `ec2` branch
-  **Pending:** push branch, create both Vercel projects, set env vars (see
-  issue #28 checklist), point `app.buscaoficio.co` DNS to Vercel, add
-  `DATABASE_URL` GitHub secret for migrate.yml.
+  **Done 2026-09-07 (as GitHub user Alfareiza):** pushed `ec2` +
+  `28-vercel-deployment`; created Vercel projects `buscaoficio-front` /
+  `buscaoficio-back` linked to this repo; loaded env vars (not
+  `DATABASE_URL`); attached `app.buscaoficio.co` and `api.buscaoficio.co`;
+  opened PR #29; Alembic on Supabase is already at `c8f3a91d4e20` (head).
+  **Still pending:** Supabase pooler `DATABASE_URL` on Vercel + GitHub
+  Actions secret; Hostinger DNS (A/CNAME still point at deleted EC2
+  `44.207.170.68`); Google OAuth redirect URIs for the new backend URL;
+  `gh auth switch` so the default CLI user is Alfareiza.
 - **Stale Server Action after frontend deploy, 2026-08-30.** A tab left
   open across `Deploy to production` posts an old action id → `404` +
   `x-nextjs-action-not-found`. Logout is now a stable
