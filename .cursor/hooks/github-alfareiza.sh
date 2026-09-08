@@ -17,4 +17,5 @@ if [ -z "${token}" ]; then
   exit 0
 fi
 
+git config --local credential.helper '!gh auth git-credential'
 TOKEN="$token" python3 -c 'import json, os; print(json.dumps({"env": {"GH_TOKEN": os.environ["TOKEN"]}}))'
