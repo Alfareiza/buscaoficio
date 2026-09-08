@@ -24,6 +24,8 @@ The template gives a clean, typed full-stack starting point so product work can 
 
 ## UX goals
 - Immediate usable auth + dashboard after setup.
+- Signup role choice (cliente vs profesional) reads as one question,
+  not two competing cards.
 - Developer experience: hot reload + automatic client sync when API surfaces change.
 - Clear separation: Docker Compose for local infra; production is
   Vercel (two projects) + Supabase. EC2/Compose restore: branch `ec2`.

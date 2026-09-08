@@ -1,6 +1,17 @@
 # Active Context
 
 ## Current focus
+- **AuthCard role step (issue [#30](https://github.com/Alfareiza/buscaoficio/issues/30),
+  PR #31, rebase-merged to `main` 2026-09-07).** Onboarding
+  `onboarding-role` is a radio list (filled inner disc), pill **Crear
+  cuenta**, and **Volver**. Same OTP register actions. A local
+  `?preview_step=` shortcut was added for review and then removed
+  before merge (debug only).
+- **GitHub identity for this repo is pinned to Alfareiza (2026-09-07).**
+  `gh auth login` once as a second account; this clone uses local
+  `github.account` / HTTPS username Alfareiza plus
+  `.cursor/hooks/github-alfareiza.sh` (`sessionStart` → `GH_TOKEN`).
+  `alfonsorevin` can stay on the machine for other repos.
 - **Deployment pivot: EC2 → Vercel (2026-09-05), branch `28-vercel-deployment`
   (issue [#28](https://github.com/Alfareiza/buscaoficio/issues/28)).** The EC2
   instance and RDS were terminated. All Vercel config implemented:
@@ -18,10 +29,10 @@
   `buscaoficio-back` linked to this repo; loaded env vars (not
   `DATABASE_URL`); attached `app.buscaoficio.co` and `api.buscaoficio.co`;
   opened PR #29; Alembic on Supabase is already at `c8f3a91d4e20` (head).
-  **Still pending (2026-09-07):** optional Preview `DATABASE_URL`;
-  optional `SENTRY_AUTH_TOKEN`; `gh auth` default is still `alfonsorevin`
-  (use Alfareiza for this repo); merge PR #29 so Vercel production branch
-  can stay `main`. Google redirect URI is unchanged
+  **Done later 2026-09-07:** PR #29 merged; Preview `DATABASE_URL` on
+  the backend; Alfareiza is a logged-in `gh` account and this repo is
+  pinned (see above). **Still optional:** `SENTRY_AUTH_TOKEN` (source
+  maps). Google redirect URI is unchanged
   (`https://api.buscaoficio.co/api/v1/auth/google/callback`) — hostname
   did not change.
 - **Stale Server Action after frontend deploy, 2026-08-30.** A tab left
@@ -131,6 +142,11 @@
   steps.
 
 ## Recent changes
+- **AuthCard role radio list + Alfareiza pin, 2026-09-07.** Issue #30 /
+  PR #31 rebase-merged to `main`. Role step is no longer two bordered
+  cards. Debug `preview_step` / `initialStep` was removed before merge.
+  Workspace pin: local git `github.account=Alfareiza` and the
+  sessionStart hook. Do not re-login before every GitHub action.
 - **Stale Server Action after deploy + Logout Route Handler, 2026-08-30.**
   Reproduced: logged-in tab → deploy frontend → Logout →
   `Server action not found` (no Sentry — handled Next 404). Logout is

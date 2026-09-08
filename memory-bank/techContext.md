@@ -21,7 +21,8 @@
   `systemPatterns.md` § Frontend auth pattern (#10, merged to `main`).
   `proxy.ts` must not 307 Server Action POSTs (`next-action` header).
 - OTP auth: `components/actions/otp-auth-action.ts` (Server Actions),
-  `components/auth/AuthCard.tsx` (the multi-step client component), split
+  `components/auth/AuthCard.tsx` (the multi-step client component; role
+  step is a radio list, PR #31), split
   logo components in `components/ui/BuscaOficioLogo.tsx`
   (`BuscaOficioMark` svg-only, `BuscaOficioWordmark` text-only,
   `BuscaOficioLogo` composite) — see `systemPatterns.md` § Passwordless OTP

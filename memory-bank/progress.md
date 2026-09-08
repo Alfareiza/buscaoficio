@@ -28,8 +28,10 @@
   flow on both `/login` and `/register`, which now share a route-group
   layout (`app/(auth)/layout.tsx`) so toggling between them feels instant
   (soft RSC nav, not a page reload) — **merged to `main` via PR #14**,
-  2026-08-18. A follow-up UX polish batch (multi-box code input, cooldown
-  bug fix, inline PNG email logo, required WhatsApp) is on branch
+  2026-08-18. Role step is a radio list (filled selected state, **Volver**)
+  — **merged to `main` via PR #31** (issue #30, 2026-09-07). A follow-up
+  UX polish batch (multi-box code input, cooldown bug fix, inline PNG
+  email logo, required WhatsApp) is on branch
   `otp-ux-polish-required-whatsapp` (issue #15, pushed 2026-08-20, not yet
   PR'd) — see Session log below.
 - Items CRUD + pagination
@@ -96,7 +98,9 @@
 - [ ] Optional: replace MailHog with Mailpit
 - [ ] `createsuperuser` management command (workaround now: sign up via the
   app's OTP flow, then promote via SQL)
-- [ ] `gh auth` default user is still `alfonsorevin`; use **Alfareiza** for this repo
+- [x] Pin this clone to GitHub user **Alfareiza** (`gh auth token --user
+  Alfareiza` + `.cursor/hooks/github-alfareiza.sh`). `alfonsorevin` may
+  still exist as a second account for other repos.
 
 ## Known issues / gotchas
 - `proxy.ts` must **never 307 a Server Action** (`next-action` header).
@@ -170,6 +174,15 @@
   public API surface until you've confirmed no other client calls it.
   Worth an explicit question to the user rather than inferring from grep
   results alone before deleting a route (see the 2026-08-18 removal below).
+
+## Session log (2026-09-07)
+- AuthCard onboarding role step: radio list + filled selected disc +
+  **Volver**. Issue #30, PR #31 rebase-merged to `main`.
+- Local `preview_step` / `initialStep` debug shortcut removed before
+  merge (never meant for prod).
+- This clone pinned to GitHub user Alfareiza (`github.account`, HTTPS
+  username, sessionStart hook). `gh auth login` once as a second
+  account; do not re-login before every push/PR.
 
 ## Session log (2026-08-30)
 - Stale Server Action after deploy: Logout → Route Handler
