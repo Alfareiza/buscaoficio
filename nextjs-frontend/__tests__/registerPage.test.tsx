@@ -9,16 +9,14 @@ jest.mock("../components/auth/AuthCard", () => ({
     intent,
     initialRegistrationToken,
     initialName,
-    initialStep,
   }: {
     mode: string;
     intent?: string;
     initialRegistrationToken?: string;
     initialName?: string;
-    initialStep?: string;
   }) => (
     <div data-testid="auth-card">
-      {mode}/{intent}/{initialRegistrationToken}/{initialName}/{initialStep}
+      {mode}/{intent}/{initialRegistrationToken}/{initialName}
     </div>
   ),
 }));
@@ -33,17 +31,6 @@ describe("Register Page", () => {
     render(jsx);
 
     expect(screen.getByTestId("auth-card")).toHaveTextContent("page/register");
-  });
-
-  it("forwards preview_step in development so a later AuthCard step can be opened directly", async () => {
-    const jsx = await Page({
-      searchParams: Promise.resolve({ preview_step: "onboarding-role" }),
-    });
-    render(jsx);
-
-    expect(screen.getByTestId("auth-card")).toHaveTextContent(
-      "onboarding-role",
-    );
   });
 
   it("passes registration_token/name from a Google callback redirect through to AuthCard", async () => {

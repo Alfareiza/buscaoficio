@@ -80,9 +80,6 @@ interface AuthCardProps {
    * with "Continuar como {name}" instead of a blank form — on every visit,
    * including after a deliberate logout. */
   googleIdentity?: GoogleIdentity | null;
-  /** Local-preview only: jump straight to a later step. The register page
-   * only forwards this when NODE_ENV is not production. */
-  initialStep?: Step;
 }
 
 const INTENT_COPY = {
@@ -113,13 +110,12 @@ export function AuthCard({
   initialName,
   initialError,
   googleIdentity,
-  initialStep,
 }: AuthCardProps) {
   const router = useRouter();
   const copy = INTENT_COPY[intent];
 
   const [step, setStep] = useState<Step>(
-    initialStep ?? (initialRegistrationToken ? "onboarding-name" : "email"),
+    initialRegistrationToken ? "onboarding-name" : "email",
   );
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(initialError ?? null);
