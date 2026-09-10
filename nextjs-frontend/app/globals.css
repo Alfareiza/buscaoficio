@@ -101,28 +101,10 @@
   opacity: 0;
 }
 
-/* Service cards inside <AuthBrandPanel>. Every slot stacks all seven services
-   and plays this one cycle, each card offset by a full step, so a card holds
-   the frame for 1/7 of the cycle and hands over exactly as the next fades in.
-   The percentages are fixed by the service count (1/7 = 14.286%) — change
-   SERVICIOS.length and these need to move with it. */
-@keyframes brand-card {
-  0% {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  2%,
-  12.3% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  14.286%,
-  100% {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-}
-
+/* Service cards inside <AuthBrandPanel>. Hold-time keyframes (`brand-card-*`)
+   are generated next to SERVICIOS so a longer card (e.g. Programación) and a
+   catalog-size change stay in sync. This class only hides stacked copies
+   until their animation window starts. */
 .brand-card {
   opacity: 0;
 }

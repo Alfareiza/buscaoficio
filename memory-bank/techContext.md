@@ -14,7 +14,9 @@
   group + `components/auth/AuthCard.tsx` — passwordless email OTP, not a
   password form; `intent` prop differs the copy between the two),
   password recovery (vestigial — see `activeContext.md`), dashboard
-  (list/add/delete items)
+  (list/add/delete items). Auth layout decorative catalog:
+  `components/auth/AuthBrandPanel.tsx` (CSS rotation, per-card
+  `durationSeconds`)
 - Tests: Jest + Testing Library
 - Auth helpers: `lib/auth-cookies.ts` (cookie forwarding/silent-refresh
   support), `lib/api-errors.ts` (`isUnauthorizedError`) — see
