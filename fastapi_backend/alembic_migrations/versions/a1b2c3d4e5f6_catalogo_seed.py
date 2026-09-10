@@ -83,11 +83,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    nombres = ", ".join(f"'{nombre}'" for _, nombre, _, _ in CATEGORIAS)
-    op.execute(sa.text(f"DELETE FROM categorias_servicio WHERE nombre IN ({nombres})"))
+    ids = ", ".join(f"'{cat_id}'" for cat_id, _, _, _ in CATEGORIAS)
+    op.execute(sa.text(f"DELETE FROM categorias_servicio WHERE id IN ({ids})"))
     op.execute(
         sa.text(
-            "DELETE FROM zonas_cobertura "
-            "WHERE ciudad = 'Barranquilla' AND localidad IS NULL"
+            f"DELETE FROM zonas_cobertura WHERE id = '{ZONA_BARRANQUILLA_ID}'"
         )
     )
