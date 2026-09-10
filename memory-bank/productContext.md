@@ -21,6 +21,10 @@ The template gives a clean, typed full-stack starting point so product work can 
    (Supabase): `.github/workflows/migrate.yml` runs Alembic on GitHub
    Actions with secret `DATABASE_URL`, kept separate from Vercel deploys.
 5. Unhandled errors, traces, and app logs go to Sentry when a DSN is set; local without DSN stays silent.
+6. Domain tables land **one domain at a time** from the ER dictionary
+   (not one-shot). First slice: **Catálogo** — service categories, zones,
+   and profesional N:M links; public read API for evaluation. Registration
+   does not yet write `zona_id` or N:M rows (follow-up onboarding).
 
 ## UX goals
 - Immediate usable auth + dashboard after setup.

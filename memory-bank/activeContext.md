@@ -1,6 +1,15 @@
 # Active Context
 
 ## Current focus
+- **Catálogo domain (issue [#34](https://github.com/Alfareiza/buscaoficio/issues/34),
+  PR [#35](https://github.com/Alfareiza/buscaoficio/pull/35), merged to
+  `main` 2026-09-09).** First ER-dictionary slice: five tables +
+  `clientes.zona_id`, seed (11 AuthBrandPanel categorías
+  `activa_v1=false`, Barranquilla `activa_v1=true`), FastAdmin for
+  master tables, public `GET /api/v1/catalogo/{categorias,zonas}`.
+  N:M FKs use `profesionales.usuario_id`. Registration does **not**
+  write `zona_id` / N:M yet. Prod Alembic head should advance via
+  `migrate.yml` to `a1b2c3d4e5f6` (was `c8f3a91d4e20`).
 - **Auth brand panel catalog (issue [#32](https://github.com/Alfareiza/buscaoficio/issues/32), 2026-09-09).** `/login` and `/register` share
   `AuthBrandPanel`: CSS-only rotation of sample oficios. Catalog now
   includes Programación, Obra blanca, Aires acondicionados, and Jardinería
@@ -35,8 +44,8 @@
   `28-vercel-deployment`; created Vercel projects `buscaoficio-front` /
   `buscaoficio-back` linked to this repo; loaded env vars (not
   `DATABASE_URL`); attached `app.buscaoficio.co` and `api.buscaoficio.co`;
-  opened PR #29; Alembic on Supabase is already at `c8f3a91d4e20` (head).
-  **Done later 2026-09-07:** PR #29 merged; Preview `DATABASE_URL` on
+  opened PR #29; Alembic on Supabase was at `c8f3a91d4e20` before
+  Catálogo. **Done later 2026-09-07:** PR #29 merged; Preview `DATABASE_URL` on
   the backend; Alfareiza is a logged-in `gh` account and this repo is
   pinned (see above). **Still optional:** `SENTRY_AUTH_TOKEN` (source
   maps). Google redirect URI is unchanged
@@ -149,6 +158,13 @@
   steps.
 
 ## Recent changes
+- **Catálogo domain schema + seed + API, 2026-09-09 (issue #34, PR #35
+  merged to `main`).** Models in `app/models.py`; enum
+  `ComplejidadCategoria`; migrations `c6dae321c0f0` (schema) +
+  `a1b2c3d4e5f6` (seed); FastAdmin for categorías/subcategorías/zonas;
+  public catalog routes; OpenAPI client regenerated. Deliberately
+  **not** wiring registration to `zona_id` / N:M. Gap #7
+  (`activa_v1` launch set) still open — activate from admin when decided.
 - **AuthBrandPanel extra oficios + per-card duration, 2026-09-09.**
   Added Programación, Obra blanca, Aires acondicionados, and Jardinería
   to the auth-shell catalog. Hold time is `durationSeconds` on each
@@ -618,18 +634,21 @@
   `tunnelRoute` unless we explicitly decide to.
 
 ## Next steps (suggested)
-1. Apply prod migrations (including `c8f3a91d4e20`) via `migrate.yml`
-   against the current Supabase `DATABASE_URL` once the backend image
-   that contains those revisions is running — or `workflow_dispatch`
-   after deploy. After launch: cut `DATABASE_URL` over to RDS.
-2. Open a PR for branch `otp-ux-polish-required-whatsapp` (issue #15,
+1. Confirm prod Alembic reached `a1b2c3d4e5f6` (Catálogo) via `migrate.yml`
+   on the push that merged PR #35 — or `workflow_dispatch` if needed.
+2. Decide Gap #7: which categorías get `activa_v1=true` for launch
+   (activate in FastAdmin or a follow-up data migration).
+3. Wire registration/onboarding to `clientes.zona_id` and
+   `profesional_categoria` / `profesional_zona` when collecting zona /
+   oficios (OTP create paths today leave them empty).
+4. Open a PR for branch `otp-ux-polish-required-whatsapp` (issue #15,
    pushed 2026-08-20) once ready for review.
-3. **Resolve the frontend architecture question** (server-mediated vs. SPA
+5. **Resolve the frontend architecture question** (server-mediated vs. SPA
    vs. hybrid — see Current focus / Active decisions). Now somewhat
    independent of #10 (already merged) but still relevant to how future
    features (live status, messaging) get built.
-4. Close out issue #8 (parent) once the architecture question above is settled.
-5. **Re-evaluate GitHub issue #1 (email verification)** — its premise may
+6. Close out issue #8 (parent) once the architecture question above is settled.
+7. **Re-evaluate GitHub issue #1 (email verification)** — its premise may
    have changed: OTP-created accounts are already `is_verified=true` at
    creation (receiving the code already proves mailbox ownership), and the
    password-based registration flow that could produce an unverified

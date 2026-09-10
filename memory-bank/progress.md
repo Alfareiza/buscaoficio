@@ -48,6 +48,12 @@
   EC2/RDS retired 2026-09-05; restore from branch `ec2`.
 - Production **migrate** workflow runs `uv run alembic upgrade head` with
   GitHub secret `DATABASE_URL` (no SSH).
+- **Catálogo domain** (issue [#34](https://github.com/Alfareiza/buscaoficio/issues/34),
+  PR [#35](https://github.com/Alfareiza/buscaoficio/pull/35), merged
+  2026-09-09): tables + seed + FastAdmin + public
+  `GET /api/v1/catalogo/{categorias,zonas}`. Alembic head
+  `a1b2c3d4e5f6`. Registration does not yet set `zona_id` / N:M. See
+  `systemPatterns.md` § Catálogo domain pattern.
 
 ## Local customizations done
 - [x] Postgres host ports remapped to **5434** (db) and **5435** (db_test)
@@ -84,7 +90,10 @@
 - [ ] Cleanup job for expired/revoked `refresh_tokens` **and `email_otps`**
   rows (not started, not urgent at current scale)
 - [ ] Confirm DBs restarted and migrations applied after port change
-- [ ] Domain product features for "busca oficio" (not started)
+- [x] Domain product features for "busca oficio" — **started**: Catálogo
+  (PR #35). Remaining ER domains (solicitudes, pagos, etc.) not started
+- [ ] Wire OTP registration to `zona_id` / `profesional_categoria` /
+  `profesional_zona`; decide Gap #7 (`activa_v1` launch set)
 - [ ] Production email provider (beyond MailHog)
 - [x] Finish Deploy to EC2 job (SCP/SSH); box should run the SHA that ECR has
 - [x] Rewrite `migrate.yml` for direct-DB Alembic (no SSH) — Vercel era
@@ -92,7 +101,8 @@
   (`buscaoficio-front` + `buscaoficio-back`). Not Railway / Render / Fly.
   Issue [#28](https://github.com/Alfareiza/buscaoficio/issues/28), PR #29.
   EC2 restore: branch `ec2`.
-- [x] Apply Alembic `c8f3a91d4e20` against Supabase (already at head)
+- [x] Apply Alembic `c8f3a91d4e20` against Supabase (already at that head
+  before Catálogo); confirm `a1b2c3d4e5f6` after PR #35 migrate run
 - [x] Prod secrets: Sentry DSN + `SENTRY_ENVIRONMENT=production` on Vercel
   (`SENTRY_AUTH_TOKEN` still optional / unset — source maps skipped)
 - [x] Preview `DATABASE_URL` on `buscaoficio-back` (same pooler as Production)
@@ -179,6 +189,9 @@
   results alone before deleting a route (see the 2026-08-18 removal below).
 
 ## Session log (2026-09-09)
+- **Catálogo** (issue #34, PR #35 merged): schema + seed migrations,
+  FastAdmin, public catalog API, OpenAPI client sync. Memory bank
+  updated on `main` after merge.
 - Auth brand panel: four new catalog cards (programación, obra blanca,
   aires, jardinería) with brandbook 3D PNGs. Hold time is now a per-service
   field; Programación stays on screen a bit longer (12s vs 9s default).

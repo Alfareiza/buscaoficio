@@ -211,6 +211,44 @@ Do **not** add a wrapper in `lib/utils.ts`.
 - Session via `Depends(get_async_session)`
 - Paginated list with fastapi-pagination
 
+## Catálogo domain pattern (PR #35 / issue #34)
+First product-domain slice from the ER dictionary. Installed separately
+from auth so each domain can be reviewed before the next.
+
+### Tables
+| Table | Role |
+|-------|------|
+| `categorias_servicio` | Officios taxonomy (`nombre`, `complejidad`, `activa_v1`, `orden_display`) |
+| `subcategorias_servicio` | Subtipo under a categoría |
+| `zonas_cobertura` | Ciudad / optional localidad (`activa_v1`) |
+| `profesional_categoria` | N:M — PK `(usuario_id, categoria_id)` |
+| `profesional_zona` | N:M — PK `(usuario_id, zona_id)` |
+| `clientes.zona_id` | Optional FK → `zonas_cobertura` (nullable) |
+
+N:M FKs target **`profesionales.usuario_id`** (current Profesional PK),
+not a separate `profesionales.id`. Column is named `usuario_id` in the
+junction tables for that reason.
+
+### Migrations
+- Schema: `c6dae321c0f0_catalogo_schema` (tables + `clientes.zona_id`)
+- Seed: `a1b2c3d4e5f6_catalogo_seed` — 11 AuthBrandPanel titles, all
+  `activa_v1=false`; Barranquilla `activa_v1=true`. Fixed UUIDs.
+  `downgrade()` deletes those seed rows only (Alembic undo; not run on
+  deploy). Prefer schema and seed as **two revisions** so data can roll
+  back without dropping tables.
+
+### API / admin
+- Public (no JWT): `GET /api/v1/catalogo/categorias`,
+  `GET /api/v1/catalogo/zonas` — `app/routes/catalogo.py`
+- FastAdmin: `CategoriaServicio`, `SubcategoriaServicio`, `ZonaCobertura`
+  only (not the N:M tables)
+- Enum: `ComplejidadCategoria` in `app/enums.py`
+
+### Not wired yet
+OTP `register_cliente_otp` / `register_profesional_otp` still create
+User + Cliente/Profesional **without** `zona_id` or N:M rows. Wire that
+when onboarding collects zona / categorías.
+
 ## Database patterns
 - **Prod Postgres is temporarily Supabase** (transaction pooler `:6543`).
   After launch, point `DATABASE_URL` at RDS — no engine-code change.

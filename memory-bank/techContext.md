@@ -37,7 +37,8 @@
   email-OTP flow (`app/otp_manager.py`) — password-based register/login
   routes were removed 2026-08-18; verify/reset routes remain but are
   vestigial. See `systemPatterns.md` § Passwordless OTP auth pattern.
-- Domain API: Items CRUD + fastapi-pagination
+- Domain API: Items CRUD + fastapi-pagination; **Catálogo** public read
+  (`app/routes/catalogo.py` — categories + zones)
 - Email: fastapi-mail + templates (`otp_code.html`, `password_reset.html`); local SMTP via MailHog
 - Python 3.12, deps via **uv**
 - Tests: pytest / pytest-asyncio, coverage → Coveralls
@@ -46,7 +47,7 @@
 - PostgreSQL 17 (Docker)
 - SQLAlchemy 2 + asyncpg
 - Migrations: Alembic (async)
-- Models: `User` (UUID, fastapi-users) ↔ `Item` (name, description, quantity, FK user, cascade delete); `RefreshToken` (hash, fingerprint hash, expiry, revoked_at, FK user — merged to `main`, see `systemPatterns.md` § JWT refresh token rotation); `EmailOtp` (`email_otps` table, migration `a067ad066d81` — `email`, `code_hash`, `attempts`, `expires_at`, `consumed_at`, `created_ip`; keyed by email, not `user_id`, since the account may not exist yet — see `systemPatterns.md` § Passwordless OTP auth pattern)
+- Models: `User` (UUID, fastapi-users) ↔ `Item` (name, description, quantity, FK user, cascade delete); `RefreshToken`; `EmailOtp` (keyed by email, not `user_id`); **Catálogo** — `CategoriaServicio`, `SubcategoriaServicio`, `ZonaCobertura`, `ProfesionalCategoria`, `ProfesionalZona`; `Cliente.zona_id` FK optional. Alembic head after PR #35: `a1b2c3d4e5f6` (seed). See `systemPatterns.md` § Catálogo domain pattern.
 - Separate test DB: `db_test`
 - **Prod Postgres is Supabase** (transaction-mode pooler
   `*.pooler.supabase.com:6543`). RDS `buscaoficio-1` was terminated
