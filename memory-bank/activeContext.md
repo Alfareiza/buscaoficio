@@ -1,6 +1,13 @@
 # Active Context
 
 ## Current focus
+- **Auth brand panel catalog (issue [#32](https://github.com/Alfareiza/buscaoficio/issues/32), 2026-09-09).** `/login` and `/register` share
+  `AuthBrandPanel`: CSS-only rotation of sample oficios. Catalog now
+  includes Programación, Obra blanca, Aires acondicionados, and Jardinería
+  (brandbook 3D icons under `public/images/auth/icons/`). Each service can
+  set `durationSeconds`; default is 9s, Programación is 12s. Keyframes are
+  generated next to `SERVICIOS` so a longer hold or a new card does not
+  require hand-editing `globals.css` percentages.
 - **AuthCard role step (issue [#30](https://github.com/Alfareiza/buscaoficio/issues/30),
   PR #31, rebase-merged to `main` 2026-09-07).** Onboarding
   `onboarding-role` is a radio list (filled inner disc), pill **Crear
@@ -142,6 +149,13 @@
   steps.
 
 ## Recent changes
+- **AuthBrandPanel extra oficios + per-card duration, 2026-09-09.**
+  Added Programación, Obra blanca, Aires acondicionados, and Jardinería
+  to the auth-shell catalog. Hold time is `durationSeconds` on each
+  service (fallback `DEFAULT_STEP_SECONDS` = 9). Programación holds 12s.
+  Equal-step `brand-card` keyframes in `globals.css` were removed; the
+  panel emits one `@keyframes` set per distinct hold so 11 cards (and
+  uneven durations) stay in sync. Still a Server Component.
 - **AuthCard role radio list + Alfareiza pin, 2026-09-07.** Issue #30 /
   PR #31 rebase-merged to `main`. Role step is no longer two bordered
   cards. Debug `preview_step` / `initialStep` was removed before merge.

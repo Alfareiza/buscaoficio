@@ -1,10 +1,10 @@
 import Image from "next/image";
 
 // Decorative half of the auth shell: brand copy and a rotating sample of the
-// catalog over a slowly drifting gradient. All the motion is pure CSS (see
-// `brand-rotate` / `brand-cycle` / `brand-card` in globals.css), which keeps
-// this a Server Component — no interval, no hydration, no state to drift out
-// of sync, nothing shipped to the client but markup.
+// catalog over a slowly drifting gradient. Motion stays in CSS — see
+// `brand-rotate` / `brand-cycle` in globals.css, and the per-duration
+// `brand-card-*` keyframes emitted below — so this remains a Server
+// Component: no interval, no hydration, no client state.
 
 /** Palette pairs the backdrop cycles through. Every pair keeps a warm anchor
  * so the panel still reads as buscaoficio at any point in the cycle. */
@@ -14,7 +14,22 @@ const GRADIENTS = [
   { from: "#059669", to: "#FBCBA4" }, // verde → durazno
 ];
 
-const SERVICIOS = [
+type Servicio = {
+  icon: string;
+  titulo: string;
+  descripcion: string;
+  /** Seconds this card holds a slot, fade included. Falls back to
+   * `DEFAULT_STEP_SECONDS` when omitted. */
+  durationSeconds?: number;
+};
+
+/** Seconds a service holds a frame when it does not set `durationSeconds`. */
+const DEFAULT_STEP_SECONDS = 9;
+
+/** Fade in/out on each handoff. Kept shorter than the shortest hold. */
+const FADE_SECONDS = 0.8;
+
+const SERVICIOS: Servicio[] = [
   {
     icon: "/images/auth/icons/rodillo.png",
     titulo: "Pintura",
@@ -56,34 +71,114 @@ const SERVICIOS = [
     descripcion:
       "Arreglos del hogar por horas, con diagnóstico previo sin costo.",
   },
+  {
+    icon: "/images/auth/icons/programacion.png",
+    titulo: "Programación",
+    descripcion:
+      "Páginas web, apps y automatizaciones, con alcance claro antes de escribir código.",
+    durationSeconds: 12,
+  },
+  {
+    icon: "/images/auth/icons/obra-blanca.png",
+    titulo: "Obra blanca",
+    descripcion:
+      "Estuco, drywall y acabados, con visita técnica y precio cerrado.",
+  },
+  {
+    icon: "/images/auth/icons/aire.png",
+    titulo: "Aires acondicionados",
+    descripcion:
+      "Instalación, mantenimiento y arreglo, con técnicos que dejan el equipo listo.",
+  },
+  {
+    icon: "/images/auth/icons/jardineria.png",
+    titulo: "Jardinería",
+    descripcion:
+      "Poda de árboles, césped y jardines, con retiro de residuos incluido.",
+  },
 ];
+
+function durationOf(servicio: Servicio) {
+  return servicio.durationSeconds ?? DEFAULT_STEP_SECONDS;
+}
 
 /** Cards on screen at once. Each one is a fixed frame the services rotate
  * through, so the panel's height never changes as they swap. */
 const VISIBLE_SLOTS = 3;
 
-/** Seconds a service holds a frame, fades included. */
-const STEP_SECONDS = 9;
-
 /** One full pass through every service, from a single slot's point of view. */
-const CYCLE_SECONDS = SERVICIOS.length * STEP_SECONDS;
+const CYCLE_SECONDS = SERVICIOS.reduce(
+  (total, servicio) => total + durationOf(servicio),
+  0,
+);
 
-/** Slots turn over a third of a step apart, so the three never swap at once. */
-const SLOT_STAGGER_SECONDS = STEP_SECONDS / VISIBLE_SLOTS;
+/** Slots turn over a third of a default step apart, so the three never swap
+ * at once even when several services share the same hold. */
+const SLOT_STAGGER_SECONDS = DEFAULT_STEP_SECONDS / VISIBLE_SLOTS;
 
 /** Order in which a slot walks the list: it starts at its own index and moves
  * in strides of VISIBLE_SLOTS. The stride and the service count are coprime,
- * so every slot eventually shows all seven, and since the three cursors stay a
- * fixed distance apart no service is ever on screen twice. */
+ * so every slot eventually shows all services, and since the three cursors
+ * stay a fixed distance apart no service is ever on screen twice. */
 function serviceOrderFor(slot: number) {
   return SERVICIOS.map(
     (_, step) => (slot + step * VISIBLE_SLOTS) % SERVICIOS.length,
   );
 }
 
+function cardKeyframeName(holdSeconds: number) {
+  return `brand-card-${String(holdSeconds).replace(".", "-")}`;
+}
+
+/** One keyframe set per distinct hold. The card is visible for
+ * `holdSeconds / CYCLE_SECONDS` of the loop; `animation-delay` shifts that
+ * window to the service's place in the slot's timeline. */
+function cardKeyframesCss() {
+  const holds = new Set(SERVICIOS.map(durationOf));
+  return [...holds]
+    .map((holdSeconds) => {
+      const fade = Math.min(FADE_SECONDS, holdSeconds / 4);
+      const fadeIn = ((fade / CYCLE_SECONDS) * 100).toFixed(3);
+      const holdVisible = (
+        ((holdSeconds - fade) / CYCLE_SECONDS) *
+        100
+      ).toFixed(3);
+      const holdEnd = ((holdSeconds / CYCLE_SECONDS) * 100).toFixed(3);
+      const name = cardKeyframeName(holdSeconds);
+      return `@keyframes ${name} {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  ${fadeIn}%,
+  ${holdVisible}% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  ${holdEnd}%,
+  100% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}`;
+    })
+    .join("\n");
+}
+
+function slotTimeline(slot: number) {
+  let elapsed = 0;
+  return serviceOrderFor(slot).map((servicioIndex) => {
+    const hold = durationOf(SERVICIOS[servicioIndex]);
+    const start = elapsed;
+    elapsed += hold;
+    return { servicioIndex, start, hold };
+  });
+}
+
 export function AuthBrandPanel() {
   return (
     <div className="relative flex h-full w-full items-center justify-center overflow-hidden bg-hueso p-8">
+      <style>{cardKeyframesCss()}</style>
       {/* Oversized so the rotation never sweeps a corner into view. Each layer
           runs the same spin but enters the fade cycle 8s after the last. */}
       {GRADIENTS.map((gradient, index) => (
@@ -123,19 +218,19 @@ export function AuthBrandPanel() {
               key={slot}
               className="relative h-24 rounded-xl border border-white/60 bg-white/40 backdrop-blur-sm"
             >
-              {serviceOrderFor(slot).map((servicioIndex, step) => {
+              {slotTimeline(slot).map(({ servicioIndex, start, hold }) => {
                 const servicio = SERVICIOS[servicioIndex];
                 return (
                   <div
                     key={servicio.titulo}
                     className="brand-card absolute inset-0 flex items-center gap-3.5 p-3.5"
                     style={{
-                      animation: `brand-card ${CYCLE_SECONDS}s ease-in-out infinite both`,
-                      animationDelay: `${step * STEP_SECONDS - slot * SLOT_STAGGER_SECONDS}s`,
+                      animation: `${cardKeyframeName(hold)} ${CYCLE_SECONDS}s ease-in-out infinite both`,
+                      animationDelay: `${start - slot * SLOT_STAGGER_SECONDS}s`,
                     }}
                     // Every service is stacked in all three slots, so expose
                     // each one from the slot that owns it — otherwise a screen
-                    // reader walks the same seven cards three times.
+                    // reader walks the same catalog three times.
                     aria-hidden={servicioIndex % VISIBLE_SLOTS !== slot}
                   >
                     <div className="relative h-14 w-14 shrink-0">

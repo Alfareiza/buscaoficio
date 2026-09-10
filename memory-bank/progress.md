@@ -29,7 +29,10 @@
   layout (`app/(auth)/layout.tsx`) so toggling between them feels instant
   (soft RSC nav, not a page reload) — **merged to `main` via PR #14**,
   2026-08-18. Role step is a radio list (filled selected state, **Volver**)
-  — **merged to `main` via PR #31** (issue #30, 2026-09-07). A follow-up
+  — **merged to `main` via PR #31** (issue #30, 2026-09-07). The decorative
+  half is `AuthBrandPanel` (CSS rotation of sample oficios, including
+  Programación / Obra blanca / Aires / Jardinería; per-card
+  `durationSeconds`, default 9s). A follow-up
   UX polish batch (multi-box code input, cooldown bug fix, inline PNG
   email logo, required WhatsApp) is on branch
   `otp-ux-polish-required-whatsapp` (issue #15, pushed 2026-08-20, not yet
@@ -174,6 +177,13 @@
   public API surface until you've confirmed no other client calls it.
   Worth an explicit question to the user rather than inferring from grep
   results alone before deleting a route (see the 2026-08-18 removal below).
+
+## Session log (2026-09-09)
+- Auth brand panel: four new catalog cards (programación, obra blanca,
+  aires, jardinería) with brandbook 3D PNGs. Hold time is now a per-service
+  field; Programación stays on screen a bit longer (12s vs 9s default).
+  Keyframes generated in the component so `SERVICIOS.length` and uneven
+  durations do not need a `globals.css` percentage rewrite. Issue #32.
 
 ## Session log (2026-09-07)
 - AuthCard onboarding role step: radio list + filled selected disc +
