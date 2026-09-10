@@ -45,6 +45,32 @@ export type BodyAuthVerifyVerify = {
 };
 
 /**
+ * CategoriaServicioRead
+ */
+export type CategoriaServicioRead = {
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Nombre
+   */
+  nombre: string;
+  /**
+   * Complejidad
+   */
+  complejidad: string;
+  /**
+   * Activa V1
+   */
+  activa_v1: boolean;
+  /**
+   * Orden Display
+   */
+  orden_display?: number | null;
+};
+
+/**
  * ClienteAdminUpdate
  */
 export type ClienteAdminUpdate = {
@@ -462,6 +488,28 @@ export type ValidationError = {
    * Error Type
    */
   type: string;
+};
+
+/**
+ * ZonaCoberturaRead
+ */
+export type ZonaCoberturaRead = {
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Ciudad
+   */
+  ciudad: string;
+  /**
+   * Localidad
+   */
+  localidad?: string | null;
+  /**
+   * Activa V1
+   */
+  activa_v1: boolean;
 };
 
 /**
@@ -1310,6 +1358,41 @@ export type DeleteItemResponses = {
   200: unknown;
 };
 
+export type ListCategoriasData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/catalogo/categorias";
+};
+
+export type ListCategoriasResponses = {
+  /**
+   * Response Catalogo-List Categorias
+   * Successful Response
+   */
+  200: Array<CategoriaServicioRead>;
+};
+
+export type ListCategoriasResponse =
+  ListCategoriasResponses[keyof ListCategoriasResponses];
+
+export type ListZonasData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/catalogo/zonas";
+};
+
+export type ListZonasResponses = {
+  /**
+   * Response Catalogo-List Zonas
+   * Successful Response
+   */
+  200: Array<ZonaCoberturaRead>;
+};
+
+export type ListZonasResponse = ListZonasResponses[keyof ListZonasResponses];
+
 export type ClientOptions = {
-  baseURL: `${string}://openapi.json` | (string & {});
+  baseURL: `${string}://${string}` | (string & {});
 };

@@ -93,6 +93,10 @@ import type {
   DeleteItemData,
   DeleteItemResponses,
   DeleteItemErrors,
+  ListCategoriasData,
+  ListCategoriasResponses,
+  ListZonasData,
+  ListZonasResponses,
 } from "./types.gen";
 import { client } from "./client.gen";
 
@@ -528,8 +532,9 @@ export const usersPatchCurrentUser = <ThrowOnError extends boolean = false>(
  * Delete user by id (superuser)
  * Delete user by id.
  *
- * Superuser only after POST /auth/jwt/login. This also removes that
- * user's items.
+ * Superuser only after POST /auth/jwt/login. Soft-deletes the account
+ * (sets deleted_at, deactivates, revokes sessions). Cliente/profesional
+ * profiles and items stay attached to the tombstone.
  */
 export const usersDeleteUser = <ThrowOnError extends boolean = false>(
   options: Options<UsersDeleteUserData, ThrowOnError>,
@@ -1017,6 +1022,42 @@ export const deleteItem = <ThrowOnError extends boolean = false>(
       },
     ],
     url: "/api/v1/items/{item_id}",
+    ...options,
+  });
+};
+
+/**
+ * List service categories (public)
+ * Return all service categories ordered by display order.
+ */
+export const listCategorias = <ThrowOnError extends boolean = false>(
+  options?: Options<ListCategoriasData, ThrowOnError>,
+) => {
+  return (options?.client ?? client).get<
+    ListCategoriasResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: "json",
+    url: "/api/v1/catalogo/categorias",
+    ...options,
+  });
+};
+
+/**
+ * List coverage zones (public)
+ * Return all coverage zones ordered by city.
+ */
+export const listZonas = <ThrowOnError extends boolean = false>(
+  options?: Options<ListZonasData, ThrowOnError>,
+) => {
+  return (options?.client ?? client).get<
+    ListZonasResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: "json",
+    url: "/api/v1/catalogo/zonas",
     ...options,
   });
 };
