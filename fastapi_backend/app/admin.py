@@ -16,8 +16,15 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 from .database import async_session_maker
-from .enums import EstadoVerificacionProfesional, TipoDocumento
-from .models import Cliente, Profesional, User
+from .enums import ComplejidadCategoria, EstadoVerificacionProfesional, TipoDocumento
+from .models import (
+    CategoriaServicio,
+    Cliente,
+    Profesional,
+    SubcategoriaServicio,
+    User,
+    ZonaCobertura,
+)
 from .schemas import UserCreate
 from .users import UserManager
 
@@ -36,6 +43,19 @@ PROFESIONAL_ENUM_FORMFIELD_OVERRIDES = {
             "options": [
                 {"label": e.name, "value": e.value}
                 for e in EstadoVerificacionProfesional
+            ],
+        },
+    ),
+}
+
+CATEGORIA_ENUM_FORMFIELD_OVERRIDES = {
+    "complejidad": (
+        WidgetType.Select,
+        {
+            "required": True,
+            "options": [
+                {"label": e.value.capitalize(), "value": e.value}
+                for e in ComplejidadCategoria
             ],
         },
     ),
@@ -668,3 +688,33 @@ class ProfesionalAdmin(UsuarioProvisioningAdminMixin, SqlAlchemyModelAdmin):
     @display
     async def whatsapp_verificado_badge(self, obj: Profesional) -> str:
         return "✅" if obj.whatsapp_verificado else "❌"
+
+
+@register(CategoriaServicio, sqlalchemy_sessionmaker=async_session_maker)
+class CategoriaServicioAdmin(SqlAlchemyModelAdmin):
+    verbose_name = "Categoría de servicio"
+    verbose_name_plural = "Categorías de servicio"
+    list_display = ("nombre", "complejidad", "activa_v1", "orden_display")  # noqa: RUF012
+    list_display_links = ("nombre",)  # noqa: RUF012
+    list_filter = ("complejidad", "activa_v1")  # noqa: RUF012
+    search_fields = ("nombre",)  # noqa: RUF012
+    formfield_overrides = CATEGORIA_ENUM_FORMFIELD_OVERRIDES
+
+
+@register(SubcategoriaServicio, sqlalchemy_sessionmaker=async_session_maker)
+class SubcategoriaServicioAdmin(SqlAlchemyModelAdmin):
+    verbose_name = "Subcategoría de servicio"
+    verbose_name_plural = "Subcategorías de servicio"
+    list_display = ("nombre", "categoria_id")  # noqa: RUF012
+    list_display_links = ("nombre",)  # noqa: RUF012
+    search_fields = ("nombre",)  # noqa: RUF012
+
+
+@register(ZonaCobertura, sqlalchemy_sessionmaker=async_session_maker)
+class ZonaCoberturaAdmin(SqlAlchemyModelAdmin):
+    verbose_name = "Zona de cobertura"
+    verbose_name_plural = "Zonas de cobertura"
+    list_display = ("ciudad", "localidad", "activa_v1")  # noqa: RUF012
+    list_display_links = ("ciudad",)  # noqa: RUF012
+    list_filter = ("activa_v1",)  # noqa: RUF012
+    search_fields = ("ciudad", "localidad")  # noqa: RUF012

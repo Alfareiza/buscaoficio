@@ -1,13 +1,21 @@
 from uuid import uuid4
 
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    SmallInteger,
+    String,
+)
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.sql import func
 
-from .enums import EstadoVerificacionProfesional
+from .enums import ComplejidadCategoria, EstadoVerificacionProfesional
 
 
 class Base(DeclarativeBase):
@@ -100,12 +108,14 @@ class Cliente(TimestampMixin, UsuarioProvisioningDisplayMixin, Base):
 
     usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), primary_key=True)
     direccion_default = Column(String, nullable=True)
+    zona_id = Column(UUID(as_uuid=True), ForeignKey("zonas_cobertura.id"), nullable=True)
     repeat_customer = Column(Boolean, default=False, nullable=False)
     referido_por_id = Column(
         UUID(as_uuid=True), ForeignKey("clientes.usuario_id"), nullable=True
     )
 
     usuario = relationship("User", back_populates="cliente")
+    zona = relationship("ZonaCobertura")
 
     def __str__(self) -> str:
         usuario = self._loaded_usuario()
@@ -206,3 +216,83 @@ class UsedGoogleSessionToken(TimestampMixin, Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     jti = Column(String, unique=True, nullable=False, index=True)
+
+
+class CategoriaServicio(Base):
+    __tablename__ = "categorias_servicio"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    nombre = Column(String(100), unique=True, nullable=False)
+    complejidad = Column(
+        String(10), nullable=False, default=ComplejidadCategoria.MEDIA.value
+    )
+    activa_v1 = Column(Boolean, nullable=False, default=False)
+    orden_display = Column(SmallInteger, nullable=True)
+
+    subcategorias = relationship(
+        "SubcategoriaServicio",
+        back_populates="categoria",
+        cascade="all, delete-orphan",
+    )
+
+    def __str__(self) -> str:
+        return self.nombre
+
+
+class SubcategoriaServicio(Base):
+    __tablename__ = "subcategorias_servicio"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    categoria_id = Column(
+        UUID(as_uuid=True), ForeignKey("categorias_servicio.id"), nullable=False
+    )
+    nombre = Column(String(100), nullable=False)
+
+    categoria = relationship("CategoriaServicio", back_populates="subcategorias")
+
+    def __str__(self) -> str:
+        return self.nombre
+
+
+class ZonaCobertura(Base):
+    __tablename__ = "zonas_cobertura"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    ciudad = Column(String(100), nullable=False)
+    localidad = Column(String(100), nullable=True)
+    activa_v1 = Column(Boolean, nullable=False, default=False)
+
+    def __str__(self) -> str:
+        if self.localidad:
+            return f"{self.ciudad} — {self.localidad}"
+        return self.ciudad
+
+
+class ProfesionalCategoria(Base):
+    __tablename__ = "profesional_categoria"
+
+    usuario_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("profesionales.usuario_id"),
+        primary_key=True,
+    )
+    categoria_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("categorias_servicio.id"),
+        primary_key=True,
+    )
+
+
+class ProfesionalZona(Base):
+    __tablename__ = "profesional_zona"
+
+    usuario_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("profesionales.usuario_id"),
+        primary_key=True,
+    )
+    zona_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("zonas_cobertura.id"),
+        primary_key=True,
+    )

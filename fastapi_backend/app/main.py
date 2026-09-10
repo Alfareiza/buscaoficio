@@ -7,6 +7,7 @@ from fastapi_pagination import add_pagination
 from fastadmin import fastapi_app as admin_app
 
 from app.routes.auth import router as auth_router
+from app.routes.catalogo import router as catalogo_router
 from app.routes.items import router as items_router
 from app.routes.users import router as users_router
 
@@ -62,5 +63,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 app.include_router(auth_router, prefix=f"{API_V1_PREFIX}/{AUTH_URL_PATH}")
 app.include_router(users_router, prefix=f"{API_V1_PREFIX}/users")
 app.include_router(items_router, prefix=f"{API_V1_PREFIX}/items")
+app.include_router(catalogo_router, prefix=f"{API_V1_PREFIX}/catalogo")
 
 add_pagination(app)

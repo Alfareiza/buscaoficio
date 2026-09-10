@@ -30,3 +30,9 @@ class EstadoVerificacionProfesional(str, Enum):
     VERIFICADO = "verificado"
     REVISAR_MANUAL = "revisar_manual"
     RECHAZADO = "rechazado"
+
+
+class ComplejidadCategoria(str, Enum):
+    BAJA = "baja"
+    MEDIA = "media"
+    ALTA = "alta"

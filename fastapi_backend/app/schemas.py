@@ -122,3 +122,22 @@ class ProfesionalRegisterOtpCreate(ProfesionalBase):
     registration_token: str
     nombre_completo: str
     whatsapp: str | None = None
+
+
+class CategoriaServicioRead(BaseModel):
+    id: UUID
+    nombre: str
+    complejidad: str
+    activa_v1: bool
+    orden_display: int | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class ZonaCoberturaRead(BaseModel):
+    id: UUID
+    ciudad: str
+    localidad: str | None = None
+    activa_v1: bool
+
+    model_config = {"from_attributes": True}
