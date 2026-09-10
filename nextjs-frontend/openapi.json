@@ -692,7 +692,7 @@
           "users"
         ],
         "summary": "Delete user by id (superuser)",
-        "description": "Delete user by id.\n\nSuperuser only after POST /auth/jwt/login. This also removes that\nuser's items.",
+        "description": "Delete user by id.\n\nSuperuser only after POST /auth/jwt/login. Soft-deletes the account\n(sets deleted_at, deactivates, revokes sessions). Cliente/profesional\nprofiles and items stay attached to the tombstone.",
         "operationId": "users:delete_user",
         "security": [
           {
@@ -1362,6 +1362,58 @@
           }
         }
       }
+    },
+    "/api/v1/catalogo/categorias": {
+      "get": {
+        "tags": [
+          "catalogo"
+        ],
+        "summary": "List service categories (public)",
+        "description": "Return all service categories ordered by display order.",
+        "operationId": "list_categorias",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CategoriaServicioRead"
+                  },
+                  "type": "array",
+                  "title": "Response Catalogo-List Categorias"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalogo/zonas": {
+      "get": {
+        "tags": [
+          "catalogo"
+        ],
+        "summary": "List coverage zones (public)",
+        "description": "Return all coverage zones ordered by city.",
+        "operationId": "list_zonas",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ZonaCoberturaRead"
+                  },
+                  "type": "array",
+                  "title": "Response Catalogo-List Zonas"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1424,6 +1476,46 @@
           "token"
         ],
         "title": "Body_auth-verify:verify"
+      },
+      "CategoriaServicioRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "complejidad": {
+            "type": "string",
+            "title": "Complejidad"
+          },
+          "activa_v1": {
+            "type": "boolean",
+            "title": "Activa V1"
+          },
+          "orden_display": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orden Display"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "complejidad",
+          "activa_v1"
+        ],
+        "title": "CategoriaServicioRead"
       },
       "ClienteAdminUpdate": {
         "properties": {
@@ -2230,6 +2322,41 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "ZonaCoberturaRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "ciudad": {
+            "type": "string",
+            "title": "Ciudad"
+          },
+          "localidad": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Localidad"
+          },
+          "activa_v1": {
+            "type": "boolean",
+            "title": "Activa V1"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "ciudad",
+          "activa_v1"
+        ],
+        "title": "ZonaCoberturaRead"
       },
       "session": {
         "properties": {
