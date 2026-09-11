@@ -1,7 +1,9 @@
 import { z } from "zod";
 
-import type { TipoDocumento } from "@/app/clientService";
-import { isValidColombianDocumento } from "@/lib/colombian-documento";
+import {
+  isValidColombianDocumento,
+  TIPO_DOCUMENTO_VALUES,
+} from "@/lib/colombian-documento";
 import {
   isValidColombianMobile,
   sanitizeColombianMobileInput,
@@ -63,9 +65,9 @@ export const onboardingProfesionalSchema = z.object({
   registration_token: z.string().min(1),
   nombre_completo: z.string().min(1),
   whatsapp: whatsappSchema,
-  documento_tipo: z
-    .string()
-    .min(1, { message: "El tipo de documento es requerido" }),
+  documento_tipo: z.enum(TIPO_DOCUMENTO_VALUES, {
+    errorMap: () => ({ message: "El tipo de documento es requerido" }),
+  }),
   documento_numero: z
     .string()
     .min(1, { message: "El documento es requerido" }),
@@ -73,10 +75,7 @@ export const onboardingProfesionalSchema = z.object({
   categoria_ids: z.array(z.string().uuid()).min(1),
 }).refine(
   (data) =>
-    isValidColombianDocumento(
-      data.documento_tipo as TipoDocumento,
-      data.documento_numero,
-    ),
+    isValidColombianDocumento(data.documento_tipo, data.documento_numero),
   { message: "El documento no coincide con el tipo", path: ["documento_numero"] },
 );
 

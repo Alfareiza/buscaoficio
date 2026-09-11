@@ -2,6 +2,7 @@ import {
   isValidColombianDocumento,
   sanitizeDocumentoNumero,
 } from "@/lib/colombian-documento";
+import { onboardingProfesionalSchema } from "@/lib/definitions";
 
 describe("isValidColombianDocumento", () => {
   it("accepts a typical cédula", () => {
@@ -25,6 +26,44 @@ describe("isValidColombianDocumento", () => {
   it("is false until a tipo is chosen", () => {
     expect(isValidColombianDocumento("", "123456789")).toBe(false);
   });
+
+  it("is false for a tipo that has no pattern", () => {
+    expect(isValidColombianDocumento("TI", "123456789")).toBe(false);
+  });
+});
+
+describe("onboardingProfesionalSchema documento_tipo", () => {
+  const base = {
+    registration_token: "tok",
+    nombre_completo: "Ana Pérez",
+    documento_numero: "123456789",
+    zona_ids: ["22222222-2222-4222-8222-222222222001"],
+    categoria_ids: ["11111111-1111-4111-8111-111111110001"],
+  };
+
+  it("accepts a known tipo", () => {
+    expect(
+      onboardingProfesionalSchema.safeParse({
+        ...base,
+        documento_tipo: "CC",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects an unknown tipo without throwing", () => {
+    expect(() =>
+      onboardingProfesionalSchema.safeParse({
+        ...base,
+        documento_tipo: "TI",
+      }),
+    ).not.toThrow();
+    expect(
+      onboardingProfesionalSchema.safeParse({
+        ...base,
+        documento_tipo: "TI",
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe("sanitizeDocumentoNumero", () => {
@@ -34,5 +73,34 @@ describe("sanitizeDocumentoNumero", () => {
 
   it("uppercases passport characters and drops symbols", () => {
     expect(sanitizeDocumentoNumero("PA", "ab-12 34")).toBe("AB1234");
+  });
+});
+
+describe("onboardingProfesionalSchema documento_tipo", () => {
+  const base = {
+    registration_token: "tok",
+    nombre_completo: "Ana Pérez",
+    documento_numero: "123456789",
+    zona_ids: ["22222222-2222-4222-8222-222222222001"],
+    categoria_ids: ["11111111-1111-4111-8111-111111110001"],
+  };
+
+  it("accepts a known tipo", () => {
+    expect(
+      onboardingProfesionalSchema.safeParse({
+        ...base,
+        documento_tipo: "CC",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects an unknown tipo without throwing", () => {
+    const parse = () =>
+      onboardingProfesionalSchema.safeParse({
+        ...base,
+        documento_tipo: "TI",
+      });
+    expect(parse).not.toThrow();
+    expect(parse().success).toBe(false);
   });
 });
