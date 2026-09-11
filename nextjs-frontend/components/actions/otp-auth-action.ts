@@ -8,7 +8,6 @@ import {
   authOtpVerify,
   registerRegisterClienteOtp,
   registerRegisterProfesionalOtp,
-  type TipoDocumento,
 } from "@/app/clientService";
 import { forwardAuthCookies, setAccessTokenCookie } from "@/lib/auth-cookies";
 import { setGoogleIdentityCookie } from "@/lib/google-identity-cookie";
@@ -205,7 +204,7 @@ export async function registerProfesionalOtpAction(payload: {
   registration_token: string;
   nombre_completo: string;
   whatsapp?: string;
-  documento_tipo: TipoDocumento;
+  documento_tipo: string;
   documento_numero: string;
   zona_ids: string[];
   categoria_ids: string[];
@@ -217,7 +216,7 @@ export async function registerProfesionalOtpAction(payload: {
 
   try {
     const result = await registerRegisterProfesionalOtp({
-      body: { ...validated.data, documento_tipo: payload.documento_tipo },
+      body: validated.data,
     });
     const { data, error } = result;
     if (error) {

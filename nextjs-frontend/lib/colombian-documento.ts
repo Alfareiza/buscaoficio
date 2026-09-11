@@ -1,6 +1,14 @@
 import type { TipoDocumento } from "@/app/clientService";
 
 /** Format checks for the tipos we collect on profesional signup. */
+export const TIPO_DOCUMENTO_VALUES = [
+  "CC",
+  "CE",
+  "PA",
+  "PE",
+  "PT",
+] as const satisfies readonly TipoDocumento[];
+
 export const DOCUMENTO_NUMERO_REGEX: Record<TipoDocumento, RegExp> = {
   CC: /^\d{5,10}$/,
   CE: /^\d{6,8}$/,
@@ -17,7 +25,7 @@ export const DOCUMENTO_NUMERO_HINT: Record<TipoDocumento, string> = {
   PT: "Ingresa 6 a 10 dígitos",
 };
 
-const DIGITS_ONLY: ReadonlySet<TipoDocumento> = new Set(["CC", "CE", "PT"]);
+const DIGITS_ONLY: ReadonlySet<string> = new Set(["CC", "CE", "PT"]);
 
 export function sanitizeDocumentoNumero(
   tipo: TipoDocumento | "",
@@ -33,9 +41,10 @@ export function sanitizeDocumentoNumero(
 }
 
 export function isValidColombianDocumento(
-  tipo: TipoDocumento | "",
+  tipo: string,
   numero: string,
 ): boolean {
   if (!tipo) return false;
-  return DOCUMENTO_NUMERO_REGEX[tipo].test(numero);
+  const pattern = DOCUMENTO_NUMERO_REGEX[tipo as TipoDocumento];
+  return pattern ? pattern.test(numero) : false;
 }
