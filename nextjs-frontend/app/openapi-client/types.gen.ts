@@ -380,6 +380,14 @@ export type ProfesionalRegisterOtpCreate = {
    * Whatsapp
    */
   whatsapp?: string | null;
+  /**
+   * Zona Ids
+   */
+  zona_ids: Array<string>;
+  /**
+   * Categoria Ids
+   */
+  categoria_ids: Array<string>;
 };
 
 /**
@@ -1394,5 +1402,5 @@ export type ListZonasResponses = {
 export type ListZonasResponse = ListZonasResponses[keyof ListZonasResponses];
 
 export type ClientOptions = {
-  baseURL: `${string}://${string}` | (string & {});
+  baseURL: `${string}://openapi.json` | (string & {});
 };

@@ -1,4 +1,5 @@
 import { AuthCard } from "@/components/auth/AuthCard";
+import { loadCatalogo } from "@/lib/load-catalogo";
 
 export default async function Page({
   searchParams,
@@ -11,6 +12,7 @@ export default async function Page({
       ? params.registration_token
       : undefined;
   const name = typeof params.name === "string" ? params.name : undefined;
+  const catalogResult = await loadCatalogo();
 
   return (
     <AuthCard
@@ -19,6 +21,7 @@ export default async function Page({
       googleAuthorizeUrl={`${process.env.API_BASE_URL}/api/v1/auth/google/authorize`}
       initialRegistrationToken={registrationToken}
       initialName={name}
+      catalog={catalogResult.ok ? catalogResult.data : null}
     />
   );
 }

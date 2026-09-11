@@ -52,7 +52,8 @@
   PR [#35](https://github.com/Alfareiza/buscaoficio/pull/35), merged
   2026-09-09): tables + seed + FastAdmin + public
   `GET /api/v1/catalogo/{categorias,zonas}`. Alembic head
-  `a1b2c3d4e5f6`. Registration does not yet set `zona_id` / N:M. See
+  `a1b2c3d4e5f6`. Profesional OTP writes N:M catalog rows. Cliente
+  `zona_id` is still unset. See
   `systemPatterns.md` § Catálogo domain pattern.
 
 ## Local customizations done
@@ -92,8 +93,9 @@
 - [ ] Confirm DBs restarted and migrations applied after port change
 - [x] Domain product features for "busca oficio" — **started**: Catálogo
   (PR #35). Remaining ER domains (solicitudes, pagos, etc.) not started
-- [ ] Wire OTP registration to `zona_id` / `profesional_categoria` /
-  `profesional_zona`; decide Gap #7 (`activa_v1` launch set)
+- [x] Wire OTP profesional registration to `profesional_categoria` /
+  `profesional_zona` (cliente `zona_id` still open)
+- [ ] Decide Gap #7 (`activa_v1` launch set)
 - [ ] Production email provider (beyond MailHog)
 - [x] Finish Deploy to EC2 job (SCP/SSH); box should run the SHA that ECR has
 - [x] Rewrite `migrate.yml` for direct-DB Alembic (no SSH) — Vercel era
@@ -114,6 +116,9 @@
 - [x] Pin this clone to GitHub user **Alfareiza** (`gh auth token --user
   Alfareiza` + `.cursor/hooks/github-alfareiza.sh`). `alfonsorevin` may
   still exist as a second account for other repos.
+- [x] Project slash command `/ship` (`.cursor/commands/ship.md`): update
+  memory bank if needed, then GitHub issue, branch from latest `main`,
+  commit, push, and PR — all `gh`/`git push` as Alfareiza.
 
 ## Known issues / gotchas
 - `proxy.ts` must **never 307 a Server Action** (`next-action` header).
@@ -187,6 +192,19 @@
   public API surface until you've confirmed no other client calls it.
   Worth an explicit question to the user rather than inferring from grep
   results alone before deleting a route (see the 2026-08-18 removal below).
+
+## Session log (2026-09-10)
+- Profesional OTP onboarding collects zona (Barranquilla pre-selected)
+  and categorías (searchable multi-select, not a chip grid) on the same
+  role step as documento. Backend requires `zona_ids` / `categoria_ids`
+  and writes the N:M tables. Shipping as issue #36.
+- `AuthCard.finish()` uses `useTransition` so **Crear cuenta** stays
+  disabled until `/dashboard` commits (Server Action pending used to
+  drop before App Router navigation finished). **Volver** is not
+  disabled during that wait.
+- Investigated `registration_token inválido o expirado`; did **not**
+  keep sessionStorage / JWT leeway / longer TTL. Decode is still
+  `OtpManager.verify_registration_token` (~15 min).
 
 ## Session log (2026-09-09)
 - **Catálogo** (issue #34, PR #35 merged): schema + seed migrations,

@@ -5,6 +5,7 @@ import {
   decodeGoogleIdentity,
   GOOGLE_IDENTITY_COOKIE,
 } from "@/lib/google-identity-cookie";
+import { loadCatalogo } from "@/lib/load-catalogo";
 
 const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
   google_auth_failed: "No pudimos iniciar sesión con Google. Intenta de nuevo.",
@@ -24,6 +25,7 @@ export default async function Page({
   const googleIdentity = decodeGoogleIdentity(
     cookieStore.get(GOOGLE_IDENTITY_COOKIE)?.value,
   );
+  const catalogResult = await loadCatalogo();
 
   return (
     <AuthCard
@@ -32,6 +34,7 @@ export default async function Page({
       googleAuthorizeUrl={`${process.env.API_BASE_URL}/api/v1/auth/google/authorize`}
       initialError={errorCode ? GOOGLE_ERROR_MESSAGES[errorCode] : undefined}
       googleIdentity={googleIdentity}
+      catalog={catalogResult.ok ? catalogResult.data : null}
     />
   );
 }

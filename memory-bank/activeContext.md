@@ -7,9 +7,16 @@
   `clientes.zona_id`, seed (11 AuthBrandPanel categorías
   `activa_v1=false`, Barranquilla `activa_v1=true`), FastAdmin for
   master tables, public `GET /api/v1/catalogo/{categorias,zonas}`.
-  N:M FKs use `profesionales.usuario_id`. Registration does **not**
-  write `zona_id` / N:M yet. Prod Alembic head should advance via
-  `migrate.yml` to `a1b2c3d4e5f6` (was `c8f3a91d4e20`).
+  N:M FKs use `profesionales.usuario_id`. Profesional OTP register now
+  writes `profesional_categoria` / `profesional_zona` (`zona_ids` +
+  `categoria_ids`, min 1). Cliente `zona_id` is still not collected.
+  Catalog pickers ignore `activa_v1`. Profesional role step: searchable
+  multi-select (categorías then zona), documento tipo+número on one row,
+  regex by tipo. `AuthCard.finish()` wraps `router.push("/dashboard")` in
+  `useTransition` so **Crear cuenta** stays disabled (`isPending` =
+  action + navigation) until the dashboard RSC commits. Prod Alembic
+  head should advance via `migrate.yml` to `a1b2c3d4e5f6` (was
+  `c8f3a91d4e20`).
 - **Auth brand panel catalog (issue [#32](https://github.com/Alfareiza/buscaoficio/issues/32), 2026-09-09).** `/login` and `/register` share
   `AuthBrandPanel`: CSS-only rotation of sample oficios. Catalog now
   includes Programación, Obra blanca, Aires acondicionados, and Jardinería
@@ -27,7 +34,10 @@
   `gh auth login` once as a second account; this clone uses local
   `github.account` / HTTPS username Alfareiza plus
   `.cursor/hooks/github-alfareiza.sh` (`sessionStart` → `GH_TOKEN`).
-  `alfonsorevin` can stay on the machine for other repos.
+  `alfonsorevin` can stay on the machine for other repos. Slash command
+  `/ship` (`.cursor/commands/ship.md`) ships local work as Alfareiza:
+  memory bank if stale → issue → branch from `origin/main` → commit →
+  push → PR.
 - **Deployment pivot: EC2 → Vercel (2026-09-05), branch `28-vercel-deployment`
   (issue [#28](https://github.com/Alfareiza/buscaoficio/issues/28)).** The EC2
   instance and RDS were terminated. All Vercel config implemented:
@@ -158,13 +168,35 @@
   steps.
 
 ## Recent changes
+- **AuthCard pending through dashboard navigation, 2026-09-10.** After
+  OTP register or existing-user verify, `finish()` used to
+  `setIsPending(false)` then `router.push("/dashboard")`. The App Router
+  keeps the auth screen until the dashboard RSC is ready, so **Crear
+  cuenta** flashed idle. `isPending` is now `actionPending ||
+  isNavigating`; `startNavigation(() => { router.push; router.refresh })`.
+  **Volver** is still clickable during that wait.
+- **`registration_token inválido o expirado` (investigated, not a new
+  persistence layer, 2026-09-10).** That string is FastAPI
+  `_resolve_registration_payload` when `OtpManager.verify_registration_token`
+  returns None. Speculative extras (sessionStorage, JWT leeway, 30 min
+  TTL, split error copy, Google `urlencode`) were added then removed as
+  overengineering. Token still lives in React state (~15 min JWT). If it
+  happens again: same host for verify and register (`API_BASE_URL`), and
+  the request body actually has the token.
+- **Profesional catalog pickers on the role step, 2026-09-10 (issue
+  [#36](https://github.com/Alfareiza/buscaoficio/issues/36)).** Categorías
+  then zona, 21st-style searchable
+  `MultiSelect`, Barranquilla pre-selected, AuthBrandPanel icons by
+  `nombre`. Backend `zona_ids` / `categoria_ids` on
+  `ProfesionalRegisterOtpCreate`. Cliente `zona_id` still not collected.
 - **Catálogo domain schema + seed + API, 2026-09-09 (issue #34, PR #35
   merged to `main`).** Models in `app/models.py`; enum
   `ComplejidadCategoria`; migrations `c6dae321c0f0` (schema) +
   `a1b2c3d4e5f6` (seed); FastAdmin for categorías/subcategorías/zonas;
   public catalog routes; OpenAPI client regenerated. Deliberately
-  **not** wiring registration to `zona_id` / N:M. Gap #7
-  (`activa_v1` launch set) still open — activate from admin when decided.
+  profesional OTP now writes N:M rows; cliente `zona_id` still open.
+  Gap #7 (`activa_v1` launch set) still open — pickers show all seeded
+  rows regardless.
 - **AuthBrandPanel extra oficios + per-card duration, 2026-09-09.**
   Added Programación, Obra blanca, Aires acondicionados, and Jardinería
   to the auth-shell catalog. Hold time is `durationSeconds` on each
@@ -638,9 +670,8 @@
    on the push that merged PR #35 — or `workflow_dispatch` if needed.
 2. Decide Gap #7: which categorías get `activa_v1=true` for launch
    (activate in FastAdmin or a follow-up data migration).
-3. Wire registration/onboarding to `clientes.zona_id` and
-   `profesional_categoria` / `profesional_zona` when collecting zona /
-   oficios (OTP create paths today leave them empty).
+3. Wire cliente onboarding to `clientes.zona_id` (profesional N:M is
+   already collected on the role step).
 4. Open a PR for branch `otp-ux-polish-required-whatsapp` (issue #15,
    pushed 2026-08-20) once ready for review.
 5. **Resolve the frontend architecture question** (server-mediated vs. SPA

@@ -55,12 +55,12 @@ POST /api/v1/auth/otp/verify               → {email, code} → branches:
 
 # only reached for a "new_user" response above:
 POST /api/v1/auth/register/cliente/otp     → {registration_token, nombre_completo, ...} → creates account + logs in
-POST /api/v1/auth/register/profesional/otp → {registration_token, nombre_completo, documento_tipo, documento_numero, ...} → creates account + logs in
+POST /api/v1/auth/register/profesional/otp → {registration_token, nombre_completo, documento_tipo, documento_numero, zona_ids, categoria_ids, ...} → creates account + N:M catalog rows + logs in
 ```
 
 Design notes:
 - **No account is created by `/otp/request` or `/otp/verify`.** A brand-new email only gets a short-lived signed `registration_token` (proves OTP ownership, ~15 min, see `OtpManager.issue_registration_token`) — the `usuarios` row is created later, atomically with its `clientes`/`profesionales` row, in the `/register/*/otp` call. This means an abandoned signup (user closes the tab after seeing the code) never leaves a ghost account.
-- **Role selection is mandatory**, unlike a generic passwordless flow — `Cliente` needs no extra fields, but `Profesional` requires `documento_tipo`/`documento_numero` (real ID document data), so the frontend's role-choice step collects those two fields inline before calling `/register/profesional/otp`.
+- **Role selection is mandatory**, unlike a generic passwordless flow — `Cliente` needs no extra fields, but `Profesional` requires `documento_tipo`/`documento_numero` plus at least one `zona_ids` and one `categoria_ids` (existing catalog rows). The frontend role step collects those inline before calling `/register/profesional/otp`.
 - OTP-created accounts get a **random, never-disclosed password** (`secrets.token_urlsafe(32)`, hashed the normal way) purely to satisfy the underlying fastapi-users schema (`hashed_password` is `NOT NULL`) — it can never actually be used, since nobody (including the user) knows it. `is_verified` is set `true` immediately, since receiving and entering the code already proves mailbox ownership — the separate `request-verify-token`/`verify` flow below is redundant for these accounts.
 - Session issuance (access token + refresh/fingerprint cookies) is shared code — `build_session_response()` in `app/refresh_token_manager.py` — used by OTP verify (existing user) and both OTP-backed registration routes, so the cookie-setting logic exists in exactly one place.
 - Codes: 6 digits, 10-minute expiry (`OTP_CODE_EXPIRE_SECONDS`), max 5 verify attempts, 60s resend cooldown. Storage/validation lives in `OtpManager` (`app/otp_manager.py`), modeled on `RefreshTokenManager` — codes are hashed (SHA-256), never stored raw, in the `email_otps` table.

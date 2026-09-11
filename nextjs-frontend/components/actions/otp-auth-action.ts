@@ -207,6 +207,8 @@ export async function registerProfesionalOtpAction(payload: {
   whatsapp?: string;
   documento_tipo: TipoDocumento;
   documento_numero: string;
+  zona_ids: string[];
+  categoria_ids: string[];
 }): Promise<ActionResult<SessionData>> {
   const validated = onboardingProfesionalSchema.safeParse(payload);
   if (!validated.success) {

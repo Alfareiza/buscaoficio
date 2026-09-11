@@ -1,13 +1,66 @@
 """Integration tests for the passwordless (email OTP) auth flow."""
 
 from collections.abc import Awaitable, Callable
+from uuid import UUID
 
 import pytest
 from fastapi import status
 from sqlalchemy import select
 
-from app.models import Cliente, Profesional, User
+from app.enums import ComplejidadCategoria
+from app.models import (
+    CategoriaServicio,
+    Cliente,
+    Profesional,
+    ProfesionalCategoria,
+    ProfesionalZona,
+    User,
+    ZonaCobertura,
+)
 from app.otp_manager import OtpManager
+
+CAT_PINTURA_ID = UUID("11111111-1111-4111-8111-111111110001")
+CAT_CERRAJERIA_ID = UUID("11111111-1111-4111-8111-111111110005")
+ZONA_BARRANQUILLA_ID = UUID("22222222-2222-4222-8222-222222222001")
+
+
+async def _seed_catalog(db_session) -> None:
+    db_session.add_all(
+        [
+            CategoriaServicio(
+                id=CAT_PINTURA_ID,
+                nombre="Pintura",
+                complejidad=ComplejidadCategoria.BAJA.value,
+                activa_v1=False,
+                orden_display=1,
+            ),
+            CategoriaServicio(
+                id=CAT_CERRAJERIA_ID,
+                nombre="Cerrajería",
+                complejidad=ComplejidadCategoria.MEDIA.value,
+                activa_v1=False,
+                orden_display=5,
+            ),
+            ZonaCobertura(
+                id=ZONA_BARRANQUILLA_ID,
+                ciudad="Barranquilla",
+                localidad=None,
+                activa_v1=True,
+            ),
+        ]
+    )
+    await db_session.commit()
+
+
+def _profesional_payload(registration_token: str, documento_numero: str) -> dict:
+    return {
+        "registration_token": registration_token,
+        "nombre_completo": "Nuevo Profesional",
+        "documento_tipo": "CC",
+        "documento_numero": documento_numero,
+        "zona_ids": [str(ZONA_BARRANQUILLA_ID)],
+        "categoria_ids": [str(CAT_PINTURA_ID), str(CAT_CERRAJERIA_ID)],
+    }
 
 NEW_EMAIL = "new-user@example.com"
 
@@ -286,6 +339,7 @@ class TestRegisterProfesionalOtp:
     async def test_creates_usuario_and_profesional_then_logs_in(
         self, test_client, mock_send_otp_email, db_session
     ) -> None:
+        await _seed_catalog(db_session)
         code = await _request_and_capture_code(
             test_client, mock_send_otp_email, NEW_EMAIL
         )
@@ -296,12 +350,7 @@ class TestRegisterProfesionalOtp:
 
         response = await test_client.post(
             "/api/v1/auth/register/profesional/otp",
-            json={
-                "registration_token": registration_token,
-                "nombre_completo": "Nuevo Profesional",
-                "documento_tipo": "CC",
-                "documento_numero": "123456789",
-            },
+            json=_profesional_payload(registration_token, "123456789"),
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -319,6 +368,23 @@ class TestRegisterProfesionalOtp:
         assert row.documento_numero == "123456789"
         assert row.estado_verificacion == "pendiente"
 
+        zonas = await db_session.execute(
+            select(ProfesionalZona.zona_id).where(
+                ProfesionalZona.usuario_id == user.id
+            )
+        )
+        assert set(zonas.scalars().all()) == {ZONA_BARRANQUILLA_ID}
+
+        categorias = await db_session.execute(
+            select(ProfesionalCategoria.categoria_id).where(
+                ProfesionalCategoria.usuario_id == user.id
+            )
+        )
+        assert set(categorias.scalars().all()) == {
+            CAT_PINTURA_ID,
+            CAT_CERRAJERIA_ID,
+        }
+
     @pytest.mark.asyncio(loop_scope="function")
     async def test_duplicate_documento_numero_returns_409(
         self,
@@ -327,6 +393,7 @@ class TestRegisterProfesionalOtp:
         db_session,
         create_user: Callable[..., Awaitable[User]],
     ) -> None:
+        await _seed_catalog(db_session)
         existing_user = await create_user(email="taken-doc@example.com")
         db_session.add(
             Profesional(
@@ -347,12 +414,72 @@ class TestRegisterProfesionalOtp:
 
         response = await test_client.post(
             "/api/v1/auth/register/profesional/otp",
+            json=_profesional_payload(registration_token, "999999999"),
+        )
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_missing_catalog_ids_returns_422(
+        self, test_client, mock_send_otp_email
+    ) -> None:
+        code = await _request_and_capture_code(
+            test_client, mock_send_otp_email, NEW_EMAIL
+        )
+        verify = await test_client.post(
+            "/api/v1/auth/otp/verify", json={"email": NEW_EMAIL, "code": code}
+        )
+        registration_token = verify.json()["registration_token"]
+
+        response = await test_client.post(
+            "/api/v1/auth/register/profesional/otp",
             json={
                 "registration_token": registration_token,
                 "nombre_completo": "Nuevo Profesional",
                 "documento_tipo": "CC",
-                "documento_numero": "999999999",
+                "documento_numero": "123456789",
             },
         )
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
-        assert response.status_code == status.HTTP_409_CONFLICT
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_documento_numero_must_match_tipo(
+        self, test_client, mock_send_otp_email, db_session
+    ) -> None:
+        await _seed_catalog(db_session)
+        code = await _request_and_capture_code(
+            test_client, mock_send_otp_email, NEW_EMAIL
+        )
+        verify = await test_client.post(
+            "/api/v1/auth/otp/verify", json={"email": NEW_EMAIL, "code": code}
+        )
+        registration_token = verify.json()["registration_token"]
+
+        response = await test_client.post(
+            "/api/v1/auth/register/profesional/otp",
+            json=_profesional_payload(registration_token, "12"),
+        )
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_unknown_catalog_ids_returns_400(
+        self, test_client, mock_send_otp_email, db_session
+    ) -> None:
+        await _seed_catalog(db_session)
+        code = await _request_and_capture_code(
+            test_client, mock_send_otp_email, NEW_EMAIL
+        )
+        verify = await test_client.post(
+            "/api/v1/auth/otp/verify", json={"email": NEW_EMAIL, "code": code}
+        )
+        registration_token = verify.json()["registration_token"]
+
+        payload = _profesional_payload(registration_token, "123456789")
+        payload["categoria_ids"] = ["00000000-0000-4000-8000-000000000099"]
+
+        response = await test_client.post(
+            "/api/v1/auth/register/profesional/otp",
+            json=payload,
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["detail"] == "unknown categoria_ids"

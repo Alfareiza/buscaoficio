@@ -3,6 +3,13 @@ import "@testing-library/jest-dom";
 
 import Page from "@/app/(auth)/register/page";
 
+jest.mock("../lib/load-catalogo", () => ({
+  loadCatalogo: jest.fn().mockResolvedValue({
+    ok: true,
+    data: { categorias: [], zonas: [] },
+  }),
+}));
+
 jest.mock("../components/auth/AuthCard", () => ({
   AuthCard: ({
     mode,

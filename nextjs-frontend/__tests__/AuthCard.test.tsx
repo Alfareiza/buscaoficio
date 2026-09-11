@@ -1,13 +1,17 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
+import type { ComponentProps } from "react";
 import { useRouter } from "next/navigation";
 
 import { AuthCard } from "@/components/auth/AuthCard";
+import { loadCatalogoAction } from "@/components/actions/catalogo-action";
 import {
   requestOtpAction,
   verifyOtpAction,
   registerClienteOtpAction,
+  registerProfesionalOtpAction,
 } from "@/components/actions/otp-auth-action";
+import type { CatalogoData } from "@/lib/load-catalogo";
 
 jest.mock("next/navigation", () => ({
   useRouter: jest.fn(),
@@ -19,6 +23,34 @@ jest.mock("../components/actions/otp-auth-action", () => ({
   registerClienteOtpAction: jest.fn(),
   registerProfesionalOtpAction: jest.fn(),
 }));
+
+jest.mock("../components/actions/catalogo-action", () => ({
+  loadCatalogoAction: jest.fn(),
+}));
+
+const TEST_CATALOG: CatalogoData = {
+  zonas: [
+    {
+      id: "22222222-2222-4222-8222-222222222001",
+      ciudad: "Barranquilla",
+      localidad: null,
+    },
+  ],
+  categorias: [
+    {
+      id: "11111111-1111-4111-8111-111111110001",
+      nombre: "Pintura",
+    },
+    {
+      id: "11111111-1111-4111-8111-111111110005",
+      nombre: "Cerrajería",
+    },
+    {
+      id: "11111111-1111-4111-8111-111111110008",
+      nombre: "Programación",
+    },
+  ],
+};
 
 const GOOGLE_AUTHORIZE_URL = "http://localhost:8001/api/v1/auth/google/authorize";
 
@@ -41,9 +73,22 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
+function renderAuthCard(
+  props: Partial<ComponentProps<typeof AuthCard>> = {},
+) {
+  return render(
+    <AuthCard
+      mode="page"
+      googleAuthorizeUrl={GOOGLE_AUTHORIZE_URL}
+      catalog={TEST_CATALOG}
+      {...props}
+    />,
+  );
+}
+
 async function goToOtpStep(email = "test@example.com") {
   (requestOtpAction as jest.Mock).mockResolvedValue({ ok: true, data: null });
-  render(<AuthCard mode="page" googleAuthorizeUrl={GOOGLE_AUTHORIZE_URL} />);
+  renderAuthCard();
 
   fireEvent.change(screen.getByPlaceholderText("correo@ejemplo.com"), {
     target: { value: email },
@@ -318,6 +363,145 @@ describe("AuthCard", () => {
     expect(
       screen.getByRole("button", { name: /crear cuenta/i }),
     ).toBeDisabled();
+    expect(screen.getByText("Barranquilla")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Quitar Barranquilla" }),
+    ).toBeInTheDocument();
+  });
+
+  it("creates a profesional account with zona and categorías", async () => {
+    await goToOnboardingName();
+    fireEvent.change(screen.getByLabelText(/nombre completo/i), {
+      target: { value: "Ana Pérez" },
+    });
+    fireEvent.change(screen.getByLabelText(/whatsapp/i), {
+      target: { value: "3001234567" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await waitFor(() =>
+      screen.getByRole("radio", {
+        name: /ofrezco mis servicios como profesional/i,
+      }),
+    );
+
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: /ofrezco mis servicios como profesional/i,
+      }),
+    );
+
+    fireEvent.click(screen.getByLabelText(/^tipo$/i));
+    fireEvent.click(screen.getByRole("option", { name: "CC" }));
+    fireEvent.change(screen.getByLabelText(/^documento$/i), {
+      target: { value: "123456789" },
+    });
+    fireEvent.click(screen.getByLabelText("Buscar oficio"));
+    fireEvent.click(screen.getByRole("option", { name: "Programación" }));
+    fireEvent.click(screen.getByRole("option", { name: "Cerrajería" }));
+
+    (registerProfesionalOtpAction as jest.Mock).mockResolvedValue({
+      ok: true,
+      data: { status: "existing_user", hasRole: true },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /crear cuenta/i }));
+
+    await waitFor(() => {
+      expect(registerProfesionalOtpAction).toHaveBeenCalledWith({
+        registration_token: "reg-token-123",
+        nombre_completo: "Ana Pérez",
+        whatsapp: "+573001234567",
+        documento_tipo: "CC",
+        documento_numero: "123456789",
+        zona_ids: ["22222222-2222-4222-8222-222222222001"],
+        categoria_ids: [
+          "11111111-1111-4111-8111-111111110008",
+          "11111111-1111-4111-8111-111111110005",
+        ],
+      });
+    });
+    expect(push).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("keeps crear cuenta disabled when the documento does not match the tipo", async () => {
+    await goToOnboardingName();
+    fireEvent.change(screen.getByLabelText(/nombre completo/i), {
+      target: { value: "Ana Pérez" },
+    });
+    fireEvent.change(screen.getByLabelText(/whatsapp/i), {
+      target: { value: "3001234567" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await waitFor(() =>
+      screen.getByRole("radio", {
+        name: /ofrezco mis servicios como profesional/i,
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: /ofrezco mis servicios como profesional/i,
+      }),
+    );
+    fireEvent.click(screen.getByLabelText(/^tipo$/i));
+    fireEvent.click(screen.getByRole("option", { name: "CC" }));
+    fireEvent.change(screen.getByLabelText(/^documento$/i), {
+      target: { value: "12" },
+    });
+    fireEvent.click(screen.getByLabelText("Buscar oficio"));
+    fireEvent.click(screen.getByRole("option", { name: "Programación" }));
+
+    expect(screen.getByText("Ingresa 5 a 10 dígitos")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /crear cuenta/i })).toBeDisabled();
+  });
+
+  it("blocks profesional signup when the catalog failed to load and retries", async () => {
+    (requestOtpAction as jest.Mock).mockResolvedValue({ ok: true, data: null });
+    renderAuthCard({ catalog: null });
+    fireEvent.change(screen.getByPlaceholderText("correo@ejemplo.com"), {
+      target: { value: "test@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await waitFor(() => {
+      expect(
+        screen.getByRole("group", { name: /código de verificación/i }),
+      ).toBeInTheDocument();
+    });
+    (verifyOtpAction as jest.Mock).mockResolvedValue({
+      ok: true,
+      data: { status: "new_user", registrationToken: "reg-token-123" },
+    });
+    fillOtp("654321");
+    await waitFor(() => screen.getByLabelText(/nombre completo/i));
+    fireEvent.change(screen.getByLabelText(/nombre completo/i), {
+      target: { value: "Ana Pérez" },
+    });
+    fireEvent.change(screen.getByLabelText(/whatsapp/i), {
+      target: { value: "3001234567" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await waitFor(() =>
+      screen.getByRole("radio", {
+        name: /ofrezco mis servicios como profesional/i,
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: /ofrezco mis servicios como profesional/i,
+      }),
+    );
+
+    expect(
+      screen.getByText("No pudimos cargar zonas y categorías."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /crear cuenta/i })).toBeDisabled();
+
+    (loadCatalogoAction as jest.Mock).mockResolvedValue({
+      ok: true,
+      data: TEST_CATALOG,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    await waitFor(() => {
+      expect(screen.getByText("Barranquilla")).toBeInTheDocument();
+    });
   });
 
   it("presents the role choice as a radio list and Volver returns to the name step", async () => {
