@@ -9,6 +9,13 @@ jest.mock("next/headers", () => ({
   cookies: jest.fn(),
 }));
 
+jest.mock("../lib/load-catalogo", () => ({
+  loadCatalogo: jest.fn().mockResolvedValue({
+    ok: true,
+    data: { categorias: [], zonas: [] },
+  }),
+}));
+
 jest.mock("../components/auth/AuthCard", () => ({
   AuthCard: ({
     mode,

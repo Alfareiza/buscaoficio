@@ -1,11 +1,20 @@
+import re
 import uuid
 from datetime import datetime
 
 from fastapi_users import schemas
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, ValidationInfo, field_validator
 from uuid import UUID
 
 from .enums import EstadoVerificacionProfesional, TipoDocumento
+
+DOCUMENTO_NUMERO_REGEX = {
+    TipoDocumento.CC: re.compile(r"^\d{5,10}$"),
+    TipoDocumento.CE: re.compile(r"^\d{6,8}$"),
+    TipoDocumento.PA: re.compile(r"^[A-Z0-9]{6,12}$"),
+    TipoDocumento.PE: re.compile(r"^[A-Z0-9]{8,16}$"),
+    TipoDocumento.PT: re.compile(r"^\d{6,10}$"),
+}
 
 
 class UserRead(schemas.BaseUser[uuid.UUID]):
@@ -122,6 +131,17 @@ class ProfesionalRegisterOtpCreate(ProfesionalBase):
     registration_token: str
     nombre_completo: str
     whatsapp: str | None = None
+    zona_ids: list[UUID] = Field(min_length=1)
+    categoria_ids: list[UUID] = Field(min_length=1)
+
+    @field_validator("documento_numero")
+    @classmethod
+    def documento_matches_tipo(cls, value: str, info: ValidationInfo) -> str:
+        tipo = info.data.get("documento_tipo")
+        pattern = DOCUMENTO_NUMERO_REGEX.get(tipo)
+        if pattern is None or not pattern.fullmatch(value):
+            raise ValueError("documento_numero does not match documento_tipo")
+        return value
 
 
 class CategoriaServicioRead(BaseModel):

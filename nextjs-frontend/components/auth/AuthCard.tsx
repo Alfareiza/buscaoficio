@@ -1,12 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+  type KeyboardEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { Check } from "lucide-react";
 
+import { loadCatalogoAction } from "@/components/actions/catalogo-action";
+import {
+  defaultZonaIds,
+  OnboardingCatalogPickers,
+} from "@/components/auth/OnboardingCatalogPickers";
 import { OtpCodeInput } from "@/components/auth/OtpCodeInput";
+import type { CatalogoData } from "@/lib/load-catalogo";
 import {
   BuscaOficioMark,
   BuscaOficioWordmark,
@@ -29,6 +41,11 @@ import {
   registerProfesionalOtpAction,
 } from "@/components/actions/otp-auth-action";
 import type { TipoDocumento } from "@/app/clientService";
+import {
+  DOCUMENTO_NUMERO_HINT,
+  isValidColombianDocumento,
+  sanitizeDocumentoNumero,
+} from "@/lib/colombian-documento";
 import {
   isValidColombianMobile,
   sanitizeColombianMobileInput,
@@ -80,6 +97,9 @@ interface AuthCardProps {
    * with "Continuar como {name}" instead of a blank form — on every visit,
    * including after a deliberate logout. */
   googleIdentity?: GoogleIdentity | null;
+  /** Public catalog for profesional zona/categoría chips. Null means the
+   * server fetch failed; the role step shows retry. */
+  catalog?: CatalogoData | null;
 }
 
 const INTENT_COPY = {
@@ -110,6 +130,7 @@ export function AuthCard({
   initialName,
   initialError,
   googleIdentity,
+  catalog: initialCatalog = null,
 }: AuthCardProps) {
   const router = useRouter();
   const copy = INTENT_COPY[intent];
@@ -117,7 +138,9 @@ export function AuthCard({
   const [step, setStep] = useState<Step>(
     initialRegistrationToken ? "onboarding-name" : "email",
   );
-  const [isPending, setIsPending] = useState(false);
+  const [actionPending, setActionPending] = useState(false);
+  const [isNavigating, startNavigation] = useTransition();
+  const isPending = actionPending || isNavigating;
   const [error, setError] = useState<string | null>(initialError ?? null);
   const [shakeOtp, setShakeOtp] = useState(false);
   const [otpResetKey, setOtpResetKey] = useState(0);
@@ -135,6 +158,13 @@ export function AuthCard({
   const [role, setRole] = useState<Role | null>(null);
   const [documentoTipo, setDocumentoTipo] = useState<TipoDocumento | "">("");
   const [documentoNumero, setDocumentoNumero] = useState("");
+  const [catalog, setCatalog] = useState<CatalogoData | null>(initialCatalog);
+  const [catalogFailed, setCatalogFailed] = useState(initialCatalog === null);
+  const [zonaIds, setZonaIds] = useState<string[]>(() =>
+    initialCatalog ? defaultZonaIds(initialCatalog.zonas) : [],
+  );
+  const [categoriaIds, setCategoriaIds] = useState<string[]>([]);
+  const [catalogRetrying, setCatalogRetrying] = useState(false);
 
   const [welcomeBackDismissed, setWelcomeBackDismissed] = useState(false);
 
@@ -151,17 +181,19 @@ export function AuthCard({
       onSuccess();
       return;
     }
-    router.push("/dashboard");
-    router.refresh();
+    startNavigation(() => {
+      router.push("/dashboard");
+      router.refresh();
+    });
   }
 
   async function handleRequestOtp() {
     setError(null);
     setCode("");
     setShakeOtp(false);
-    setIsPending(true);
+    setActionPending(true);
     const result = await requestOtpAction(email);
-    setIsPending(false);
+    setActionPending(false);
     if (!result.ok) {
       setError(result.error);
       return;
@@ -175,10 +207,10 @@ export function AuthCard({
     if (nextCode.length !== 6 || verifyingRef.current) return;
     verifyingRef.current = true;
     setError(null);
-    setIsPending(true);
+    setActionPending(true);
     setIsVerifying(true);
     const result = await verifyOtpAction(email, nextCode);
-    setIsPending(false);
+    setActionPending(false);
     setIsVerifying(false);
     if (!result.ok) {
       verifyingRef.current = false;
@@ -245,6 +277,22 @@ export function AuthCard({
     setStep("onboarding-name");
   }
 
+  async function handleRetryCatalog() {
+    setCatalogRetrying(true);
+    const result = await loadCatalogoAction();
+    setCatalogRetrying(false);
+    if (!result.ok) {
+      setCatalog(null);
+      setCatalogFailed(true);
+      return;
+    }
+    setCatalog(result.data);
+    setCatalogFailed(false);
+    setZonaIds((current) =>
+      current.length > 0 ? current : defaultZonaIds(result.data.zonas),
+    );
+  }
+
   async function handleCompleteOnboarding() {
     setError(null);
     if (!role) {
@@ -252,7 +300,7 @@ export function AuthCard({
       return;
     }
 
-    setIsPending(true);
+    setActionPending(true);
     const result =
       role === "cliente"
         ? await registerClienteOtpAction({
@@ -266,8 +314,10 @@ export function AuthCard({
             whatsapp: toE164ColombianMobile(whatsapp),
             documento_tipo: documentoTipo as TipoDocumento,
             documento_numero: documentoNumero,
+            zona_ids: zonaIds,
+            categoria_ids: categoriaIds,
           });
-    setIsPending(false);
+    setActionPending(false);
 
     if (!result.ok) {
       setError(result.error);
@@ -276,8 +326,20 @@ export function AuthCard({
     finish();
   }
 
+  const isDocumentoValid = isValidColombianDocumento(
+    documentoTipo,
+    documentoNumero,
+  );
+  const documentoHint =
+    documentoTipo && documentoNumero.length > 0 && !isDocumentoValid
+      ? DOCUMENTO_NUMERO_HINT[documentoTipo]
+      : null;
   const profesionalDocsIncomplete =
-    role === "profesional" && (!documentoTipo || !documentoNumero.trim());
+    role === "profesional" &&
+    (!isDocumentoValid ||
+      catalogFailed ||
+      zonaIds.length === 0 ||
+      categoriaIds.length === 0);
   const isWhatsappValid = isValidColombianMobile(whatsapp);
   const whatsappBlocking = whatsapp.length > 0 && !isWhatsappValid;
   const whatsappCompleteInvalid = whatsapp.length === 10 && !isWhatsappValid;
@@ -617,33 +679,65 @@ export function AuthCard({
 
           {role === "profesional" && (
             <div className="flex w-full max-w-[22rem] flex-col gap-4 text-left">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="documento_tipo">Tipo de documento</Label>
-                <Select
-                  value={documentoTipo}
-                  onValueChange={(v) => setDocumentoTipo(v as TipoDocumento)}
-                >
-                  <SelectTrigger id="documento_tipo">
-                    <SelectValue placeholder="Selecciona un tipo de documento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DOCUMENTO_TIPOS.map((tipo) => (
-                      <SelectItem key={tipo.value} value={tipo.value}>
-                        {tipo.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-[minmax(6.75rem,0.42fr)_1fr] gap-2">
+                <div className="flex min-w-0 flex-col gap-2">
+                  <Label htmlFor="documento_tipo">Tipo</Label>
+                  <Select
+                    value={documentoTipo}
+                    onValueChange={(v) => {
+                      const next = v as TipoDocumento;
+                      setDocumentoTipo(next);
+                      setDocumentoNumero((current) =>
+                        sanitizeDocumentoNumero(next, current),
+                      );
+                    }}
+                  >
+                    <SelectTrigger id="documento_tipo" className="w-full">
+                      <SelectValue placeholder="Tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DOCUMENTO_TIPOS.map((tipo) => (
+                        <SelectItem key={tipo.value} value={tipo.value}>
+                          {tipo.value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex min-w-0 flex-col gap-2">
+                  <Label htmlFor="documento_numero">Documento</Label>
+                  <Input
+                    id="documento_numero"
+                    placeholder="Documento"
+                    value={documentoNumero}
+                    onChange={(e) =>
+                      setDocumentoNumero(
+                        sanitizeDocumentoNumero(documentoTipo, e.target.value),
+                      )
+                    }
+                    aria-invalid={documentoHint ? true : undefined}
+                    aria-describedby={
+                      documentoHint ? "documento-hint" : undefined
+                    }
+                    className={documentoHint ? "border-red-500" : undefined}
+                  />
+                </div>
               </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="documento_numero">Número de documento</Label>
-                <Input
-                  id="documento_numero"
-                  placeholder="Número de documento"
-                  value={documentoNumero}
-                  onChange={(e) => setDocumentoNumero(e.target.value)}
-                />
-              </div>
+              {documentoHint ? (
+                <p id="documento-hint" role="alert" className="text-sm text-red-500">
+                  {documentoHint}
+                </p>
+              ) : null}
+              <OnboardingCatalogPickers
+                catalog={catalog}
+                catalogFailed={catalogFailed}
+                zonaIds={zonaIds}
+                categoriaIds={categoriaIds}
+                onZonaIdsChange={setZonaIds}
+                onCategoriaIdsChange={setCategoriaIds}
+                onRetry={handleRetryCatalog}
+                retrying={catalogRetrying}
+              />
             </div>
           )}
 

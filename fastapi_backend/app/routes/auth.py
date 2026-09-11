@@ -26,7 +26,16 @@ from app.config import logger, settings
 from app.database import get_async_session
 from app.email import send_otp_code_email
 from app.google_oauth_manager import GoogleOAuthError, GoogleOAuthManager
-from app.models import Cliente, Profesional, RefreshToken, User
+from app.models import (
+    CategoriaServicio,
+    Cliente,
+    Profesional,
+    ProfesionalCategoria,
+    ProfesionalZona,
+    RefreshToken,
+    User,
+    ZonaCobertura,
+)
 from app.otp_manager import OtpManager
 from app.refresh_token_manager import RefreshTokenManager, build_session_response
 from app.schemas import (
@@ -70,6 +79,24 @@ async def _user_has_role(db: AsyncSession, user_id: UUID) -> bool:
         cliente_row.scalar_one_or_none() is not None
         or profesional_row.scalar_one_or_none() is not None
     )
+
+
+async def _existing_catalog_ids(
+    db: AsyncSession,
+    model: type[CategoriaServicio] | type[ZonaCobertura],
+    ids: list[UUID],
+    label: str,
+) -> list[UUID]:
+    """Dedupe `ids` and confirm every one exists. Unknown IDs → 400."""
+    unique_ids = list(dict.fromkeys(ids))
+    result = await db.execute(select(model.id).where(model.id.in_(unique_ids)))
+    found = set(result.scalars().all())
+    if len(found) != len(unique_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unknown {label}",
+        )
+    return unique_ids
 
 
 @router.post("/jwt/logout", summary="Logout", name="auth:jwt.logout")
@@ -629,6 +656,13 @@ async def register_profesional_otp(
             detail="documento_numero already registered",
         )
 
+    zona_ids = await _existing_catalog_ids(
+        db, ZonaCobertura, payload.zona_ids, "zona_ids"
+    )
+    categoria_ids = await _existing_catalog_ids(
+        db, CategoriaServicio, payload.categoria_ids, "categoria_ids"
+    )
+
     user = User(
         email=email,
         hashed_password=user_manager.password_helper.hash(secrets.token_urlsafe(32)),
@@ -649,6 +683,16 @@ async def register_profesional_otp(
                 anos_experiencia=payload.anos_experiencia,
                 foto_perfil_url=payload.foto_perfil_url,
             )
+        )
+        await db.flush()
+        db.add_all(
+            [ProfesionalZona(usuario_id=user.id, zona_id=zona_id) for zona_id in zona_ids]
+        )
+        db.add_all(
+            [
+                ProfesionalCategoria(usuario_id=user.id, categoria_id=categoria_id)
+                for categoria_id in categoria_ids
+            ]
         )
         await db.commit()
     except IntegrityError:
