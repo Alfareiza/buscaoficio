@@ -1,0 +1,23 @@
+---
+description: Invariants that apply to every buscaoficio change
+alwaysApply: true
+---
+
+# Buscaoficio — always
+
+- Read `memory-bank/` at the start of a task. Architecture lives in
+  `systemPatterns.md`, not in ad-hoc helpers.
+- This repo is **Alfareiza/buscaoficio**. `git` / `gh` / PRs as
+  **Alfareiza**, never `alfonsorevin`. Use `/ship` to ship.
+- Prefer **deleting** a wrapper over adding a module. No helper until a
+  second caller exists.
+- The access token **never enters JavaScript**. `API_BASE_URL` is
+  server-only (no `NEXT_PUBLIC_`). Do not store a JWT in `localStorage`.
+- Do not add a Server Action for a GET. Domain reads: RSC loaders.
+  Domain client calls: `backendFetch` → `/api/backend/*`.
+- Local ports: Postgres **5434** / test **5435**, API **8001**. Use
+  `make start-backend` / `make start-frontend` (or Docker equivalents).
+- Schema: Alembic (`make docker-db-schema` then `make docker-migrate-db`).
+  Model edits alone do not migrate or regen the TS client.
+- Python logs: f-strings; `from app.config import logger`. Never log
+  tokens or passwords. Do not commit `.env` / `.env.local`.

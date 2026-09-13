@@ -164,6 +164,10 @@
   steps.
 
 ## Recent changes
+- **Cursor project rules (2026-09-13).** Agent guidance for the hybrid
+  BFF lives in `.cursor/rules/` (`core.mdc` always-on, `hybrid-bff.mdc`
+  + `frontend-session.mdc` by glob). `.cursorrules` is a local stub
+  (gitignored) — do not treat it as the source of truth.
 - **Hybrid BFF (2026-09-13).** `proxy.ts` no longer calls `GET /users/me`.
   Same-origin `/api/backend/*` attaches Bearer from the HttpOnly cookie
   (auth paths blocked; no `Set-Cookie` forwarded). RSC loaders:

@@ -130,7 +130,8 @@ Decided 2026-08-15 after a `grill-me` design session comparing against the Hasur
 ## Frontend data access (hybrid BFF, 2026-09-13)
 
 Auth stays server-mediated. Domain data does not get a new Server Action per
-resource. The access token **never enters JavaScript**.
+resource. The access token **never enters JavaScript**. Cursor enforces this
+via `.cursor/rules/hybrid-bff.mdc` and `.cursor/rules/frontend-session.mdc`.
 
 | Kind | Path |
 |------|------|

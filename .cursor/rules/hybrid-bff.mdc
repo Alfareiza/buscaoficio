@@ -1,0 +1,36 @@
+---
+description: Hybrid BFF — how the Next.js app talks to FastAPI
+globs: nextjs-frontend/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Hybrid BFF
+
+Auth stays server-mediated. Domain data does **not** get a Server Action
+per resource. The browser never sees FastAPI's origin or the token.
+
+| Kind | Path |
+|------|------|
+| Session (OTP, Google, refresh, logout) | Server Actions or `app/api/auth/*`. Blocklisted on `/api/backend`. |
+| RSC reads | `lib/load-*.ts` → OpenAPI → FastAPI. One hop. Not `"use server"`. |
+| Client mutations / live UI | `backendFetch(path)` → `/api/backend/...`. Cookie stays HttpOnly. |
+
+```ts
+// ❌ BAD — wrapper action for a GET, or exposing the API host
+"use server";
+export async function fetchItems() { /* ... */ }
+fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/items`);
+
+// ✅ GOOD
+await loadItems();                    // RSC
+await backendFetch("/api/v1/items/"); // client; credentials same-origin
+router.refresh();                     // catalog retry — not a BFF GET
+```
+
+- Forms that need Zod + `redirect` (e.g. `addItem`) may stay Server Actions.
+- Do not add react-query/SWR until a feature needs client cache. Point it
+  at `backendFetch`, never at `API_BASE_URL`.
+- Do not invent `lib/backend-proxy.ts` or an internal token header. The
+  Route Handler reads `accessToken` from the cookie and sets `Authorization`.
+- Future live features (solicitudes, chat) follow this table. Delete
+  unused wrappers instead of keeping them "for later".

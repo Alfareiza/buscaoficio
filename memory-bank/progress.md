@@ -75,6 +75,8 @@
 - [x] **Frontend architecture: hybrid BFF** (2026-09-13) — auth stays
   server-mediated; `/api/backend/*` for client domain data; RSC loaders
   for first paint; `proxy.ts` dropped `/users/me`
+- [x] Cursor project rules in `.cursor/rules/` (`core`, `hybrid-bff`,
+  `frontend-session`). `.cursorrules` is local-only.
 - [ ] Live features (solicitudes, chat) should use `backendFetch` +
   client cache, not a new Server Action per endpoint
 - [ ] Open a PR for branch `otp-ux-polish-required-whatsapp` (issue #15,
