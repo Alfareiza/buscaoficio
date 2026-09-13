@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { usersCurrentUser } from "@/app/clientService";
 import {
   clearAuthCookies,
   decodeJwtExpiryMs,
@@ -8,24 +7,11 @@ import {
   setAccessTokenCookie,
 } from "@/lib/auth-cookies";
 
-// Refresh proactively before the access token actually expires, so a
-// request never has to eat a 401 mid-flight.
 const REFRESH_BUFFER_MS = 2 * 60 * 1000;
 
-type RefreshResult = { accessToken: string; setCookieHeaders: string[] };
-
-/**
- * Calls FastAPI's refresh endpoint server-to-server, forwarding the
- * refresh/fingerprint cookies manually as a Cookie header — server-to-server
- * fetches don't auto-attach the browser's cookies the way a same-origin
- * browser request would.
- */
-async function refreshAccessToken(
-  request: NextRequest,
-): Promise<RefreshResult | null> {
+async function refreshAccessToken(request: NextRequest) {
   const refreshToken = request.cookies.get("refreshToken")?.value;
   const fingerprintToken = request.cookies.get("fingerprintToken")?.value;
-
   if (!refreshToken || !fingerprintToken) {
     return null;
   }
@@ -39,7 +25,6 @@ async function refreshAccessToken(
       },
     },
   );
-
   if (!response.ok) {
     return null;
   }
@@ -55,74 +40,59 @@ async function refreshAccessToken(
   };
 }
 
-function redirectToLoginClearingCookies(request: NextRequest) {
-  const response = NextResponse.redirect(new URL("/login", request.url));
-  clearAuthCookies(response.cookies);
-  return response;
-}
-
-/**
- * Document GETs with a dead session 307 to /login. Server Action POSTs
- * must not: Next posts the action to the current page (POST /dashboard
- * + `next-action`), and a middleware 307 is followed as another Flight
- * POST (method and body preserved). The client never treats that as a
- * navigation, so Logout appears to do nothing. Let the action run; it
- * issues `redirect()` itself.
- */
 function denyDashboardAccess(request: NextRequest, clearCookies: boolean) {
+  // Never 307 a Server Action: Next POSTs it to the current page; a 307 is
+  // replayed as Flight, not a navigation (prod Logout no-op).
   if (request.headers.has("next-action")) {
     return NextResponse.next();
   }
+  const response = NextResponse.redirect(new URL("/login", request.url));
   if (clearCookies) {
-    return redirectToLoginClearingCookies(request);
+    clearAuthCookies(response.cookies);
   }
-  return NextResponse.redirect(new URL("/login", request.url));
+  return response;
+}
+
+function applyRefreshedCookies(
+  response: NextResponse,
+  refreshed: { accessToken: string; setCookieHeaders: string[] },
+) {
+  setAccessTokenCookie(response.cookies, refreshed.accessToken);
+  forwardAuthCookies(refreshed.setCookieHeaders, response.cookies);
+  return response;
 }
 
 export async function proxy(request: NextRequest) {
-  let accessToken = request.cookies.get("accessToken")?.value;
+  const isBackendProxy = request.nextUrl.pathname.startsWith("/api/backend");
+  const accessToken = request.cookies.get("accessToken")?.value;
 
   if (!accessToken) {
-    return denyDashboardAccess(request, false);
+    return isBackendProxy
+      ? NextResponse.next()
+      : denyDashboardAccess(request, false);
   }
 
   const expiryMs = decodeJwtExpiryMs(accessToken);
   const needsRefresh =
     expiryMs === null || expiryMs - Date.now() < REFRESH_BUFFER_MS;
 
-  let refreshedSetCookieHeaders: string[] | null = null;
-
-  if (needsRefresh) {
-    const refreshed = await refreshAccessToken(request);
-    if (!refreshed) {
-      return denyDashboardAccess(request, true);
-    }
-    accessToken = refreshed.accessToken;
-    refreshedSetCookieHeaders = refreshed.setCookieHeaders;
+  if (!needsRefresh) {
+    return NextResponse.next();
   }
 
-  const options = {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  };
-
-  const { error } = await usersCurrentUser(options);
-
-  if (error) {
+  const refreshed = await refreshAccessToken(request);
+  if (!refreshed) {
+    if (isBackendProxy) {
+      const response = NextResponse.next();
+      clearAuthCookies(response.cookies);
+      return response;
+    }
     return denyDashboardAccess(request, true);
   }
 
-  const response = NextResponse.next();
-
-  if (refreshedSetCookieHeaders) {
-    setAccessTokenCookie(response.cookies, accessToken);
-    forwardAuthCookies(refreshedSetCookieHeaders, response.cookies);
-  }
-
-  return response;
+  return applyRefreshedCookies(NextResponse.next(), refreshed);
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*"],
+  matcher: ["/dashboard/:path*", "/api/backend/:path*"],
 };

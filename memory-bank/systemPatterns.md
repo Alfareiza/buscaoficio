@@ -2,10 +2,11 @@
 
 ## High-level architecture
 ```
-Next.js (FE) ──typed client──▶ FastAPI (BE) ──asyncpg──▶ PostgreSQL
-                  ▲                    │
-                  │                    ▼
-            openapi.json         fastapi-mail ──▶ MailHog (local)
+Browser ──auth actions / cookies──▶ Next.js ──OpenAPI──▶ FastAPI ──▶ Postgres
+   │                                  │
+   └── /api/backend/* (same origin) ──┘   (Bearer from HttpOnly cookie; token never in JS)
+                  ▲
+            openapi.json
 ```
 
 Production (not shown above): two Vercel projects from this monorepo.
@@ -76,7 +77,7 @@ app/openapi-client (typed SDK)
 Prefer `make start-*` / `make docker-start-*` over bare `pnpm run dev` or `uv run fastapi …`. Bare commands start the app **without** watchers → OpenAPI/client won’t auto-sync.
 
 ## Frontend proxy (middleware) config
-⚠️ **Critical:** `nextjs-frontend/proxy.ts` config.matcher **must be a literal array**, not a variable. If it references a const (e.g., `matcher: loginRequiredPaths`), Next.js can't parse it statically → proxy applies globally instead of the intended routes → causes redirect loops on non-protected paths. Always inline: `matcher: ["/dashboard/:path*"]`.
+⚠️ **Critical:** `nextjs-frontend/proxy.ts` config.matcher **must be a literal array**, not a variable. If it references a const (e.g., `matcher: loginRequiredPaths`), Next.js can't parse it statically → proxy applies globally instead of the intended routes → causes redirect loops on non-protected paths. Always inline: `matcher: ["/dashboard/:path*", "/api/backend/:path*"]`.
 
 ⚠️ **Critical:** never 307 a request that has a `next-action` header. Server Actions POST to the current page; a middleware 307 is followed as another Flight POST and is not a navigation (Logout no-op in prod). Pass through (`NextResponse.next()`) and let the action `redirect()`.
 
@@ -126,16 +127,35 @@ Decided 2026-08-15 after a `grill-me` design session comparing against the Hasur
 - **`expires_in` bug: fixed** (on branch `feature/jwt-frontend-refresh`, folded into #10 rather than shipped standalone). Both `/jwt/login` and `/jwt/refresh` now return `settings.ACCESS_TOKEN_EXPIRE_SECONDS`; previously returned the refresh token's 30-day lifetime. 2 regression tests added. (`/jwt/login` itself was removed 2026-08-18 — see "Passwordless OTP auth pattern" above — but the fix lives on in `build_session_response()`, which every surviving login path calls.)
 - **No cleanup job yet** for expired/revoked `refresh_tokens` rows (nor for `email_otps`, the OTP equivalent — same gap, two tables).
 
+## Frontend data access (hybrid BFF, 2026-09-13)
+
+Auth stays server-mediated. Domain data does not get a new Server Action per
+resource. The access token **never enters JavaScript**.
+
+| Kind | Path |
+|------|------|
+| Session (OTP, Google, refresh, logout) | Server Actions / dedicated Route Handlers. `API_BASE_URL` has no `NEXT_PUBLIC_`. Cookies are HttpOnly; `lib/auth-cookies.ts` forwards `Set-Cookie`. |
+| RSC reads (dashboard items, login catalog) | Server-only lib (`lib/load-items.ts`, `lib/load-catalogo.ts`) → OpenAPI client → FastAPI. One hop. Not `"use server"`. |
+| Client mutations (delete item, future live UI) | `backendFetch()` → `/api/backend/...` → Route Handler attaches `Authorization` from the cookie → FastAPI. Catalog retry is `router.refresh()`, not a BFF GET. |
+
+- **Do not** proxy OTP / refresh / Google / logout through `/api/backend` (blocklist in the Route Handler). Those handlers set cookies.
+- **Do not** add `NEXT_PUBLIC_` to `API_BASE_URL` or put the JWT in `localStorage`.
+- `proxy.ts` matcher is `["/dashboard/:path*", "/api/backend/:path*"]` (literal array). `/api/backend` is never 307'd (public catalog). Dashboard GETs still 307 to `/login` on a dead session. Never 307 a `next-action` POST.
+- `proxy.ts` does **not** call `GET /users/me`. Cookie + `exp` (+ refresh) is enough to gate the page; FastAPI authorizes the real request.
+- After a refresh, `proxy.ts` sets the new cookies on the response. The Route Handler reads `accessToken` from the request cookie (still valid inside the 2-minute buffer).
+
 ## Frontend auth pattern (#10 — merged to `main` via PR #12)
 
-The current frontend is **Server Actions + Edge middleware based** — every backend call is server-to-server (from the Next.js server, not the browser), which changes how refresh tokens have to be handled compared to a typical SPA. `API_BASE_URL` deliberately has no `NEXT_PUBLIC_` prefix, confirming the browser never calls FastAPI directly today. **This is a factual description of the current code, not a locked-in decision** — see `activeContext.md` for an open, unresolved discussion about whether to keep this, move to a full SPA, or a hybrid (server-mediated auth + client-side CRUD/live features).
+Auth is **Server Actions + Edge middleware**. Domain data uses the hybrid BFF
+above. `API_BASE_URL` has no `NEXT_PUBLIC_` prefix — the browser never calls
+FastAPI's origin directly and never reads the access token.
 
 - **The cookie-forwarding problem:** a server-to-server fetch's `Set-Cookie` response headers land on the Next.js server, not the browser — they must be explicitly re-applied on the Next.js server's own response. `lib/auth-cookies.ts` centralizes this: `forwardAuthCookies`, `setAccessTokenCookie`, `clearAuthCookies`, `decodeJwtExpiryMs`. Uses a structural `CookieWriter` interface (`set`/`delete`) rather than importing a concrete type, since it's called from two runtimes with different-but-compatible cookie APIs: `next/headers`'s `cookies()` (Server Actions) and `NextResponse.cookies` (middleware).
-- **Silent refresh via `proxy.ts`:** no persistent client-side refresh timer. `proxy.ts` runs on every `/dashboard/:path*` request (matches Server Action POSTs to those routes too), decodes the access token's `exp`, and if expired or within a 2-minute buffer, refreshes server-to-server against FastAPI — manually forwarding `refreshToken`/`fingerprintToken` as a `Cookie` header (server-to-server calls don't auto-attach the browser's cookies). On success, forwards the new cookies onto the outgoing response. On failure (including theft-detection revocation), document GETs clear cookies and 307 to `/login`. **Server Action POSTs (`next-action` header) are never 307'd** — Next posts the action to the current page, and a middleware 307 is followed as another Flight POST. Remaining actions issue `redirect()` themselves. Logout is `POST /api/auth/logout` (native form + route handler), not a hashed Server Action, so a tab opened before a frontend deploy can still sign out.
+- **Silent refresh via `proxy.ts`:** no persistent client-side refresh timer. `proxy.ts` runs on `/dashboard/:path*` and `/api/backend/:path*`, decodes the access token's `exp` (no `GET /users/me`), and if expired or within a 2-minute buffer, refreshes server-to-server against FastAPI. On success, forwards the new cookies. On failure, dashboard document GETs 307 to `/login`; `/api/backend` clears cookies and continues. **Server Action POSTs (`next-action` header) are never 307'd**. Logout is `POST /api/auth/logout`.
 - **Stale Server Action after frontend deploy:** action ids are build hashes. A tab with old JS hits `404` + `x-nextjs-action-not-found`; the Flight client throws `"An unexpected response was received from the server."`. `app/global-error.tsx` reloads on that message and skips Sentry. That is the scalable fix for all Server Actions; only Logout uses a stable Route Handler URL. Nested `error.tsx` files (none today) would need the same check.
 - **Reactive fallback in Server Actions:** `items-action.ts` checks each result with `isUnauthorizedError()` (`lib/api-errors.ts`, handles both a top-level `status` and Axios's nested `response.status` shape) — catches a token revoked between the middleware's check and the actual call.
 - **Cross-tab logout needs no active sync code:** unlike `localStorage`/in-memory SPA token storage, cookies are already shared by the browser across tabs for the same origin — there's no separate client-side state to desync. The only gap (a tab with stale "logged in" UI) is caught on its next navigation/action by `proxy.ts` or the reactive fallback above. Deliberately did not add `BroadcastChannel`/`storage`-event sync — it would solve a problem this architecture doesn't have.
-- **Page protection = `proxy.ts`'s `matcher`, nothing else.** There is no per-page or per-layout auth check anywhere in the app — `app/dashboard/layout.tsx` is UI chrome only. `proxy.ts` runs (and gates access) only on routes matching `config.matcher`, currently `["/dashboard/:path*"]`. A route outside that pattern is fully public, silently, with no error or warning. **To protect a new page:** put it under `/dashboard/...` (automatic) or add its path to `matcher` if it can't live there. This is a common trap for a future agent adding a page — it's easy to assume auth is checked globally or per-layout when it's actually one middleware config array.
+- **Page protection = `proxy.ts`'s `matcher`, nothing else.** There is no per-page or per-layout auth check anywhere in the app — `app/dashboard/layout.tsx` is UI chrome only. `proxy.ts` runs on `["/dashboard/:path*", "/api/backend/:path*"]`. Only `/dashboard` is redirected to `/login` when the session is dead. **To protect a new page:** put it under `/dashboard/...` or add its path to `matcher`. `/api/backend` is a data BFF, not a page gate.
 - Full write-up: `docs/auth.md` § "How page protection actually works — and how to add a new protected page".
 
 ## Logging & Sentry pattern

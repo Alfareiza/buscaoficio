@@ -1,70 +1,12 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { readItem, deleteItem, createItem } from "@/app/clientService";
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+
+import { createItem } from "@/app/clientService";
 import { isUnauthorizedError } from "@/lib/api-errors";
 import { clearAuthCookies } from "@/lib/auth-cookies";
 import { itemSchema } from "@/lib/definitions";
-
-export async function fetchItems(page: number = 1, size: number = 10) {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("accessToken")?.value;
-
-  if (!token) {
-    return { message: "No access token found" };
-  }
-
-  const result = await readItem({
-    query: {
-      page: page,
-      size: size,
-    },
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-  const { data, error } = result;
-
-  if (error) {
-    if (isUnauthorizedError(result)) {
-      clearAuthCookies(cookieStore);
-      return redirect("/login");
-    }
-    return { message: error };
-  }
-
-  return data;
-}
-
-export async function removeItem(id: string) {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("accessToken")?.value;
-
-  if (!token) {
-    return { message: "No access token found" };
-  }
-
-  const result = await deleteItem({
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    path: {
-      item_id: id,
-    },
-  });
-  const { error } = result;
-
-  if (error) {
-    if (isUnauthorizedError(result)) {
-      clearAuthCookies(cookieStore);
-      return redirect("/login");
-    }
-    return { message: error };
-  }
-  revalidatePath("/dashboard");
-}
 
 export async function addItem(prevState: {}, formData: FormData) {
   const cookieStore = await cookies();

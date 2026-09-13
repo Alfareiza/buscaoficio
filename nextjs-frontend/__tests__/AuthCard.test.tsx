@@ -4,7 +4,6 @@ import type { ComponentProps } from "react";
 import { useRouter } from "next/navigation";
 
 import { AuthCard } from "@/components/auth/AuthCard";
-import { loadCatalogoAction } from "@/components/actions/catalogo-action";
 import {
   requestOtpAction,
   verifyOtpAction,
@@ -22,10 +21,6 @@ jest.mock("../components/actions/otp-auth-action", () => ({
   verifyOtpAction: jest.fn(),
   registerClienteOtpAction: jest.fn(),
   registerProfesionalOtpAction: jest.fn(),
-}));
-
-jest.mock("../components/actions/catalogo-action", () => ({
-  loadCatalogoAction: jest.fn(),
 }));
 
 const TEST_CATALOG: CatalogoData = {
@@ -455,7 +450,7 @@ describe("AuthCard", () => {
 
   it("blocks profesional signup when the catalog failed to load and retries", async () => {
     (requestOtpAction as jest.Mock).mockResolvedValue({ ok: true, data: null });
-    renderAuthCard({ catalog: null });
+    const view = renderAuthCard({ catalog: null });
     fireEvent.change(screen.getByPlaceholderText("correo@ejemplo.com"), {
       target: { value: "test@example.com" },
     });
@@ -494,14 +489,16 @@ describe("AuthCard", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /crear cuenta/i })).toBeDisabled();
 
-    (loadCatalogoAction as jest.Mock).mockResolvedValue({
-      ok: true,
-      data: TEST_CATALOG,
-    });
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
-    await waitFor(() => {
-      expect(screen.getByText("Barranquilla")).toBeInTheDocument();
-    });
+    expect(refresh).toHaveBeenCalled();
+    view.rerender(
+      <AuthCard
+        mode="page"
+        googleAuthorizeUrl={GOOGLE_AUTHORIZE_URL}
+        catalog={TEST_CATALOG}
+      />,
+    );
+    expect(screen.getByText("Barranquilla")).toBeInTheDocument();
   });
 
   it("presents the role choice as a radio list and Volver returns to the name step", async () => {

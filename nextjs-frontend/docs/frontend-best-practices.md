@@ -5,17 +5,22 @@ This file is project-specific conventions only — patterns this codebase has al
 ## Rendering: Server Components by default
 - Default every new file to a Server Component. Add `"use client"` only when the component genuinely needs interactivity, React hooks (`useState`, `useActionState`, `useFormStatus`), or browser APIs.
 - Compare `app/dashboard/page.tsx` (Server Component, fetches data directly, no `"use client"`) with `app/dashboard/add-item/page.tsx` (`"use client"` because it needs `useActionState`).
-- Fetch data in Server Components or Server Actions, not client-side `useEffect`. There is no react-query/SWR/client fetch layer in this app by design — every backend call is server-to-server (see `.CLAUDE.md` § Auth architecture). Don't introduce one for a single feature; if a real client-only need shows up (live updates, optimistic UI beyond what Server Actions give you), raise it rather than quietly adding a fetch library.
+- First paint: fetch in Server Components via `lib/load-*.ts` (OpenAPI → FastAPI, one hop). Do **not** mark those loaders `"use server"` unless a client must call them.
+- Client retries, deletes, and future live UI: `backendFetch()` → `/api/backend/...`. The Route Handler attaches the HttpOnly cookie as Bearer. The browser never sees FastAPI's origin or the token.
+- Do not add react-query/SWR until a feature needs client cache or optimistic UI. When you do, point it at `backendFetch`, not at `API_BASE_URL`.
 - `params`/`searchParams` are `Promise`s (Next 15+ API) — always `await` them, as in `app/dashboard/page.tsx`'s `DashboardPageProps`.
 
-## Data mutations: Server Actions, never a client-side fetch to FastAPI
-- New backend-touching operations belong in `components/actions/*.ts` (`"use server"` at the top of the file), calling the generated SDK functions from `app/clientService.ts` / `app/openapi-client` — never `fetch()` FastAPI directly from a client component. Do **not** add a Route Handler per feature: Server Actions stay the seam. Exception: `POST /api/auth/logout` is a Route Handler + native form so sign-out survives a frontend deploy with a stale tab (hashed action ids do not). Stale-tab failures for other actions are handled by `app/global-error.tsx` (reload), not by more route files.
-- Established action shape (see `components/actions/items-action.ts`):
-  1. Read `accessToken` from `await cookies()`; if missing, return an error object (don't throw).
+## Data mutations: auth stays on Server Actions; domain data uses the BFF
+- **Auth that sets or rotates cookies** (OTP, Google, refresh, logout) belongs in `components/actions/*.ts` or a dedicated Route Handler (`app/api/auth/...`). Those paths are blocklisted on `/api/backend`.
+- **Domain mutations from the client** (delete item, future solicitudes) use `backendFetch` against `/api/backend/...`. Do **not** `fetch(API_BASE_URL)` from a client component — `API_BASE_URL` is server-only and the token must not enter JS.
+- **Forms that need Zod + `redirect`** (e.g. `addItem`) may stay as Server Actions. Do not add a new action file just to wrap a GET.
+- `POST /api/auth/logout` is a Route Handler + native form so sign-out survives a frontend deploy with a stale tab. Stale-tab failures for other actions: `app/global-error.tsx` reloads.
+- Established auth/form action shape (see `otp-auth-action.ts` / `addItem`):
+  1. Read `accessToken` from `await cookies()` when the call is authenticated; if missing, return an error object (don't throw).
   2. Call the typed SDK function, destructure `{ data, error }`.
-  3. On error: if `isUnauthorizedError(result)` (`lib/api-errors.ts`) → `clearAuthCookies(cookieStore)` (`lib/auth-cookies.ts`) then `return redirect("/login")`. Otherwise return `{ message: ... }` for the caller to render.
+  3. On error: if `isUnauthorizedError(result)` → `clearAuthCookies` then `return redirect("/login")`. Otherwise return `{ message: ... }`.
   4. On success: `revalidatePath(...)` and/or `redirect(...)` as needed.
-- Always `return redirect(...)` / `return notFound()` — a bare `redirect(...)` call without `return` lets execution fall through in tests (Jest's mock doesn't throw like the real implementation does) and can run downstream code with an undefined token.
+- Always `return redirect(...)` / `return notFound()` — a bare `redirect(...)` without `return` falls through under Jest.
 
 ## Forms: native `<form>` + `useActionState`, not react-hook-form
 `react-hook-form` and `@hookform/resolvers` are installed and shadcn's `components/ui/form.tsx` wraps them, but **no page in this app currently uses that primitive** — it came in with the shadcn template and is unused. The actual pattern every existing form follows:
