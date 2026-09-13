@@ -12,7 +12,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { Check } from "lucide-react";
 
-import { loadCatalogoAction } from "@/components/actions/catalogo-action";
 import {
   defaultZonaIds,
   OnboardingCatalogPickers,
@@ -140,7 +139,10 @@ export function AuthCard({
   );
   const [actionPending, setActionPending] = useState(false);
   const [isNavigating, startNavigation] = useTransition();
+  const [catalogRetrying, startCatalogRetry] = useTransition();
   const isPending = actionPending || isNavigating;
+  const catalog = initialCatalog ?? null;
+  const catalogFailed = catalog === null;
   const [error, setError] = useState<string | null>(initialError ?? null);
   const [shakeOtp, setShakeOtp] = useState(false);
   const [otpResetKey, setOtpResetKey] = useState(0);
@@ -158,15 +160,19 @@ export function AuthCard({
   const [role, setRole] = useState<Role | null>(null);
   const [documentoTipo, setDocumentoTipo] = useState<TipoDocumento | "">("");
   const [documentoNumero, setDocumentoNumero] = useState("");
-  const [catalog, setCatalog] = useState<CatalogoData | null>(initialCatalog);
-  const [catalogFailed, setCatalogFailed] = useState(initialCatalog === null);
   const [zonaIds, setZonaIds] = useState<string[]>(() =>
     initialCatalog ? defaultZonaIds(initialCatalog.zonas) : [],
   );
   const [categoriaIds, setCategoriaIds] = useState<string[]>([]);
-  const [catalogRetrying, setCatalogRetrying] = useState(false);
 
   const [welcomeBackDismissed, setWelcomeBackDismissed] = useState(false);
+
+  useEffect(() => {
+    if (!catalog) return;
+    setZonaIds((current) =>
+      current.length > 0 ? current : defaultZonaIds(catalog.zonas),
+    );
+  }, [catalog]);
 
   useEffect(() => {
     if (resendIn <= 0) return;
@@ -277,20 +283,10 @@ export function AuthCard({
     setStep("onboarding-name");
   }
 
-  async function handleRetryCatalog() {
-    setCatalogRetrying(true);
-    const result = await loadCatalogoAction();
-    setCatalogRetrying(false);
-    if (!result.ok) {
-      setCatalog(null);
-      setCatalogFailed(true);
-      return;
-    }
-    setCatalog(result.data);
-    setCatalogFailed(false);
-    setZonaIds((current) =>
-      current.length > 0 ? current : defaultZonaIds(result.data.zonas),
-    );
+  function handleRetryCatalog() {
+    startCatalogRetry(() => {
+      router.refresh();
+    });
   }
 
   async function handleCompleteOnboarding() {

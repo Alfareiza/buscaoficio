@@ -1,6 +1,12 @@
 # Active Context
 
 ## Current focus
+- **Hybrid BFF (2026-09-13, issue [#38](https://github.com/Alfareiza/buscaoficio/issues/38)).** Auth
+  stays on Server Actions / dedicated Route Handlers. Domain data:
+  RSC loaders (`loadItems`, `loadCatalogo`) hit FastAPI in one hop;
+  the browser uses `backendFetch` → `/api/backend/*`. `proxy.ts`
+  dropped `GET /users/me` and matches `/api/backend` without 307.
+  Catalog retry is `router.refresh()`. Token still never enters JS.
 - **Catálogo domain (issue [#34](https://github.com/Alfareiza/buscaoficio/issues/34),
   PR [#35](https://github.com/Alfareiza/buscaoficio/pull/35), merged to
   `main` 2026-09-09).** First ER-dictionary slice: five tables +
@@ -149,25 +155,21 @@
   `OtpCodeInput`, a real `OtpManager` resend-cooldown bug fix, inline PNG
   logo in OTP emails, and a required WhatsApp field in onboarding. See
   Recent changes below.
-- **Open architecture question, unresolved:** whether to keep the current
-  server-mediated frontend (Server Actions + Edge middleware — what #10 was
-  built on), move toward a client-side SPA calling FastAPI directly, or a
-  hybrid (server-mediated auth + client-side CRUD/live features once a short
-  token is available). Surfaced when the user pushed back on the "Server
-  Actions, not a client SPA" characterization and described the product's
-  intended client-server usage pattern (cliente/profesional actions
-  eventually calling the API directly). Not decided — user wants to keep
-  talking it through (e.g. by walking a concrete future feature, like a
-  service request with live status, through each option) before committing.
-  This choice determines whether the already-built #10 work is the right
-  long-term foundation or needs rework. See Active decisions below for the
-  provisional lean.
+- **Frontend architecture: hybrid BFF, decided 2026-09-13.** Auth stays
+  server-mediated (#10). Domain data: RSC loaders in one hop; browser uses
+  same-origin `/api/backend/*`. Token never enters JavaScript.
 - FastAdmin branding (site name + logo) is wired; issue #1 (email
   verification) is open but its premise likely changed now that OTP
   accounts are auto-verified and password registration is gone — see Next
   steps.
 
 ## Recent changes
+- **Hybrid BFF (2026-09-13).** `proxy.ts` no longer calls `GET /users/me`.
+  Same-origin `/api/backend/*` attaches Bearer from the HttpOnly cookie
+  (auth paths blocked; no `Set-Cookie` forwarded). RSC loaders:
+  `loadItems`, `loadCatalogo`. Catalog retry is `router.refresh()`.
+  Delete item uses `backendFetch`. `catalogo-action.ts` removed.
+  Token still never enters JS. OpenAPI / Sentry three-runtime unchanged.
 - **AuthCard pending through dashboard navigation, 2026-09-10.** After
   OTP register or existing-user verify, `finish()` used to
   `setIsPending(false)` then `router.push("/dashboard")`. The App Router
@@ -623,18 +625,14 @@
   via PR #14 once given the go-ahead. The 2026-08-20 OTP UX polish batch
   (issue #15, branch `otp-ux-polish-required-whatsapp`) was committed and
   pushed once explicitly requested — not yet opened as a PR.
-- Frontend architecture (server-mediated vs. SPA vs. hybrid): **not yet
-  decided**, actively being discussed with the user (see Current focus).
-  Provisional lean (not agreed): **hybrid** — keep auth server-mediated
-  exactly as #10 built it (HttpOnly-only cookies, strongest security
-  posture, no client JS ever touches a token), and give the client a
-  short-lived access token only for the specific future features that need
-  it (live status, messaging/notifications — a two-sided marketplace will
-  plausibly want these, and a Server Action has no way to receive a
-  server-push update). Reasoning: no stated need today for a mobile app or
-  third-party API consumer that would justify a full SPA rewrite, and the
-  #10 work already built is exactly the auth foundation a hybrid model
-  needs (nothing built so far would need to be redone under this option).
+- Frontend architecture: **hybrid BFF, decided 2026-09-13.** Auth stays
+  server-mediated (#10): HttpOnly cookies, token never in JavaScript,
+  `API_BASE_URL` not public. Domain data does **not** get a Server Action
+  per resource. RSC loaders call FastAPI in one hop. The browser uses
+  same-origin `/api/backend/*` (`backendFetch`); the Route Handler
+  attaches Bearer from the cookie. `proxy.ts` no longer calls
+  `/users/me`. Do not copy LinkGraph's `localStorage` JWT. OpenAPI sync,
+  Sentry three-runtime, and auth-action tests stay.
 - **Login is passwordless email OTP, not password auth** — decided and
   built 2026-08-18. Login and signup share one screen; the backend doesn't
   know which the user "meant" until the OTP is verified (see `docs/auth.md`
@@ -674,10 +672,9 @@
    already collected on the role step).
 4. Open a PR for branch `otp-ux-polish-required-whatsapp` (issue #15,
    pushed 2026-08-20) once ready for review.
-5. **Resolve the frontend architecture question** (server-mediated vs. SPA
-   vs. hybrid — see Current focus / Active decisions). Now somewhat
-   independent of #10 (already merged) but still relevant to how future
-   features (live status, messaging) get built.
+5. Future live features (solicitudes, chat) should use `backendFetch` +
+   a client cache, not a new Server Action per endpoint. Auth stays as
+   built in #10.
 6. Close out issue #8 (parent) once the architecture question above is settled.
 7. **Re-evaluate GitHub issue #1 (email verification)** — its premise may
    have changed: OTP-created accounts are already `is_verified=true` at

@@ -1,6 +1,8 @@
 "use client";
 
-import { removeItem } from "@/components/actions/items-action";
+import { useRouter } from "next/navigation";
+
+import { backendFetch } from "@/lib/backend-fetch";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 interface DeleteButtonProps {
@@ -8,8 +10,19 @@ interface DeleteButtonProps {
 }
 
 export function DeleteButton({ itemId }: DeleteButtonProps) {
+  const router = useRouter();
+
   const handleDelete = async () => {
-    await removeItem(itemId);
+    const response = await backendFetch(`/api/v1/items/${itemId}`, {
+      method: "DELETE",
+    });
+    if (response.status === 401) {
+      router.push("/login");
+      return;
+    }
+    if (response.ok) {
+      router.refresh();
+    }
   };
 
   return (

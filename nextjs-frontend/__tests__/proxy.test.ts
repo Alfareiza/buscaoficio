@@ -3,11 +3,6 @@
  */
 import { NextRequest } from "next/server";
 import { proxy } from "@/proxy";
-import { usersCurrentUser } from "@/app/clientService";
-
-jest.mock("../app/clientService", () => ({
-  usersCurrentUser: jest.fn(),
-}));
 
 function makeJwt(payload: Record<string, unknown>): string {
   const header = Buffer.from(JSON.stringify({ alg: "HS256" })).toString(
@@ -20,11 +15,12 @@ function makeJwt(payload: Record<string, unknown>): string {
 function makeRequest(
   cookiePairs: Record<string, string>,
   extraHeaders?: Record<string, string>,
+  url = "https://frontend.test/dashboard",
 ): NextRequest {
   const cookieHeader = Object.entries(cookiePairs)
     .map(([name, value]) => `${name}=${value}`)
     .join("; ");
-  return new NextRequest("https://frontend.test/dashboard", {
+  return new NextRequest(url, {
     headers: {
       ...(cookieHeader ? { cookie: cookieHeader } : {}),
       ...extraHeaders,
@@ -36,6 +32,17 @@ function makeServerActionRequest(
   cookiePairs: Record<string, string>,
 ): NextRequest {
   return makeRequest(cookiePairs, { "next-action": "test-action-id" });
+}
+
+function makeBackendRequest(
+  cookiePairs: Record<string, string>,
+  extraHeaders?: Record<string, string>,
+): NextRequest {
+  return makeRequest(
+    cookiePairs,
+    extraHeaders,
+    "https://frontend.test/api/backend/api/v1/catalogo/categorias",
+  );
 }
 
 function mockFetchResponse(options: {
@@ -72,31 +79,15 @@ describe("proxy middleware", () => {
     );
   });
 
-  it("passes through when the token is valid and not near expiry", async () => {
+  it("passes through a valid token without calling FastAPI /me", async () => {
+    global.fetch = jest.fn();
     const token = makeJwt({ sub: "u1", exp: NOT_NEAR_EXPIRY });
-    (usersCurrentUser as jest.Mock).mockResolvedValue({ error: undefined });
     const request = makeRequest({ accessToken: token });
 
     const response = await proxy(request);
 
-    expect(usersCurrentUser).toHaveBeenCalledWith({
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    expect(global.fetch).not.toHaveBeenCalled();
     expect(response.headers.get("location")).toBeNull();
-  });
-
-  it("redirects to /login and clears cookies when the token is invalid", async () => {
-    const token = makeJwt({ sub: "u1", exp: NOT_NEAR_EXPIRY });
-    (usersCurrentUser as jest.Mock).mockResolvedValue({
-      error: { detail: "unauthorized" },
-    });
-    const request = makeRequest({ accessToken: token });
-
-    const response = await proxy(request);
-
-    expect(response.headers.get("location")).toBe(
-      "https://frontend.test/login",
-    );
   });
 
   it("refreshes the token when near expiry and forwards new cookies", async () => {
@@ -113,7 +104,6 @@ describe("proxy middleware", () => {
         ],
       }),
     );
-    (usersCurrentUser as jest.Mock).mockResolvedValue({ error: undefined });
 
     const request = makeRequest({
       accessToken: oldToken,
@@ -132,9 +122,6 @@ describe("proxy middleware", () => {
         },
       }),
     );
-    expect(usersCurrentUser).toHaveBeenCalledWith({
-      headers: { Authorization: `Bearer ${newToken}` },
-    });
     expect(response.cookies.get("accessToken")?.value).toBe(newToken);
     expect(response.cookies.get("refreshToken")?.value).toBe("new-refresh");
     expect(response.cookies.get("fingerprintToken")?.value).toBe(
@@ -173,7 +160,6 @@ describe("proxy middleware", () => {
     expect(response.headers.get("location")).toBe(
       "https://frontend.test/login",
     );
-    expect(usersCurrentUser).not.toHaveBeenCalled();
   });
 
   it("treats an undecodable access token as needing refresh", async () => {
@@ -204,19 +190,6 @@ describe("proxy middleware", () => {
     expect(response.headers.get("location")).toBeNull();
   });
 
-  it("does not 307 a Server Action when the token is invalid", async () => {
-    const token = makeJwt({ sub: "u1", exp: NOT_NEAR_EXPIRY });
-    (usersCurrentUser as jest.Mock).mockResolvedValue({
-      error: { detail: "unauthorized" },
-    });
-    const request = makeServerActionRequest({ accessToken: token });
-
-    const response = await proxy(request);
-
-    expect(response.status).not.toBe(307);
-    expect(response.headers.get("location")).toBeNull();
-  });
-
   it("does not 307 a Server Action when refresh fails", async () => {
     const oldToken = makeJwt({ sub: "u1", exp: NEAR_EXPIRY });
     global.fetch = jest
@@ -233,6 +206,61 @@ describe("proxy middleware", () => {
 
     expect(response.status).not.toBe(307);
     expect(response.headers.get("location")).toBeNull();
-    expect(usersCurrentUser).not.toHaveBeenCalled();
   });
+
+  it("lets /api/backend through without a token so public catalog works", async () => {
+    global.fetch = jest.fn();
+    const request = makeBackendRequest({});
+
+    const response = await proxy(request);
+
+    expect(response.status).not.toBe(307);
+    expect(response.headers.get("location")).toBeNull();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("refreshes on /api/backend when the token is near expiry without redirecting", async () => {
+    const oldToken = makeJwt({ sub: "u1", exp: NEAR_EXPIRY });
+    const newToken = makeJwt({ sub: "u1", exp: NOT_NEAR_EXPIRY });
+    global.fetch = jest.fn().mockResolvedValue(
+      mockFetchResponse({
+        ok: true,
+        accessToken: newToken,
+        setCookies: [
+          "refreshToken=new-refresh; HttpOnly; Max-Age=2592000",
+          "fingerprintToken=new-fingerprint; HttpOnly; Max-Age=2592000",
+        ],
+      }),
+    );
+
+    const response = await proxy(
+      makeBackendRequest({
+        accessToken: oldToken,
+        refreshToken: "old-refresh",
+        fingerprintToken: "old-fingerprint",
+      }),
+    );
+
+    expect(response.status).not.toBe(307);
+    expect(response.cookies.get("accessToken")?.value).toBe(newToken);
+  });
+
+  it("clears cookies on /api/backend when refresh fails but does not 307", async () => {
+    const oldToken = makeJwt({ sub: "u1", exp: NEAR_EXPIRY });
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(mockFetchResponse({ ok: false }));
+
+    const response = await proxy(
+      makeBackendRequest({
+        accessToken: oldToken,
+        refreshToken: "old-refresh",
+        fingerprintToken: "old-fingerprint",
+      }),
+    );
+
+    expect(response.status).not.toBe(307);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
 });

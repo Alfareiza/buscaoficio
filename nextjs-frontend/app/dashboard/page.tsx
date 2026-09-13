@@ -12,7 +12,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { fetchItems } from "@/components/actions/items-action";
+import { loadItems } from "@/lib/load-items";
 import { DeleteButton } from "./deleteButton";
 import { ReadItemResponse } from "@/app/openapi-client";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,7 @@ export default async function DashboardPage({
   const page = Number(params.page) || 1;
   const size = Number(params.size) || 10;
 
-  const items = (await fetchItems(page, size)) as ReadItemResponse;
+  const items = (await loadItems(page, size)) as ReadItemResponse;
   const totalPages = Math.ceil((items.total || 0) / size);
 
   return (

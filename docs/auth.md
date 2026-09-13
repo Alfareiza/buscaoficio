@@ -163,7 +163,7 @@ All rotation/validation/revocation logic lives in `RefreshTokenManager` (`fastap
 
 ## Frontend: cookie forwarding & silent refresh
 
-**This app is Server Actions + Edge middleware based, not a client-side SPA.** `API_BASE_URL` (no `NEXT_PUBLIC_` prefix) means the browser never calls FastAPI directly — every request goes through a Next.js Server Action (`components/actions/*.ts`) or `proxy.ts` (Edge middleware, matches `/dashboard/:path*`), both of which do a **server-to-server** fetch to the backend. This matters a lot for how refresh tokens work here, and is easy to get wrong by copying a typical SPA pattern.
+**Auth is Server Actions + Edge middleware, not a client-side SPA.** Domain data is a **hybrid BFF**: RSC loads go FastAPI in one hop; the browser talks to same-origin `/api/backend/...` (the Route Handler attaches `Authorization` from the HttpOnly cookie). `API_BASE_URL` has no `NEXT_PUBLIC_` prefix — the browser never calls FastAPI's origin and never reads the access token. OTP, Google, refresh, and logout stay on dedicated handlers (blocklisted on the proxy). Do not copy a typical SPA `localStorage` JWT pattern.
 
 ### The cookie-forwarding problem
 
@@ -178,7 +178,7 @@ These helpers accept a small structural `CookieWriter` interface (`set`/`delete`
 
 ### Silent refresh via `proxy.ts`
 
-There is no persistent client-side JS holding a refresh timer — instead, `proxy.ts` (which already runs on every `/dashboard/:path*` request, including Server Action POSTs to those routes) decodes the access token's `exp` before validating it. If it's expired or within 2 minutes of expiring, the middleware:
+There is no persistent client-side JS holding a refresh timer — instead, `proxy.ts` (matcher: `/dashboard/:path*` and `/api/backend/:path*`) decodes the access token's `exp`. It does **not** call FastAPI `/users/me`. If the token is expired or within 2 minutes of expiring, the middleware:
 1. Reads `refreshToken` + `fingerprintToken` from the incoming request's cookies
 2. Calls `POST {API_BASE_URL}/api/v1/auth/jwt/refresh` via a plain `fetch()` (not the axios-based generated client — native `fetch` is simpler to guarantee Edge-runtime-compatible), manually forwarding the cookies as a `Cookie` request header, since server-to-server calls don't auto-attach the browser's cookies
 3. On success: forwards the new cookies via `forwardAuthCookies` onto the outgoing `NextResponse`, and continues the request with the new access token
@@ -206,11 +206,15 @@ There is exactly **one** gate, and it is not per-page code. `proxy.ts` only runs
 
 ```ts
 export const config = {
-  matcher: ["/dashboard/:path*"],
+  matcher: ["/dashboard/:path*", "/api/backend/:path*"],
 };
 ```
 
-Any route matching that pattern gets the full treatment before it renders: no `accessToken` cookie → redirect to `/login`; token expired or near-expiry → silent refresh (see above) or redirect if that fails; token present but rejected by the backend → redirect. Those redirects apply to **document / RSC GETs only**. A Server Action POST (`next-action` header) is passed through so the action can `redirect()` itself — a middleware 307 of that POST is not a client navigation (see [Silent refresh via `proxy.ts`](#silent-refresh-via-proxyts)). Any route that does **not** match — `/`, `/login`, `/register`, `/password-recovery`, or any brand-new top-level page you add — gets **none of this**. There is no auth check inside `app/dashboard/layout.tsx` or any other layout; the layout is UI chrome only. The middleware's `matcher` is the entire mechanism.
+`/dashboard` document GETs: no `accessToken` → 307 `/login`; near-expiry → silent refresh or 307 if that fails. FastAPI is not called just to ask "is this user still valid" — the real data request authorizes. Those redirects apply to **document / RSC GETs only**. A Server Action POST (`next-action` header) is passed through so the action can `redirect()` itself — a middleware 307 of that POST is not a client navigation (see [Silent refresh via `proxy.ts`](#silent-refresh-via-proxyts)).
+
+`/api/backend` is never 307'd (public catalog must work without a session). A failed refresh there clears cookies and lets the Route Handler return FastAPI's status.
+
+Any route that does **not** match — `/`, `/login`, `/register`, `/password-recovery`, or any brand-new top-level page you add — gets **none of this**. There is no auth check inside `app/dashboard/layout.tsx` or any other layout; the layout is UI chrome only. The middleware's `matcher` is the entire mechanism.
 
 **If a new page needs a logged-in user:**
 - Put it under `/dashboard/...` (e.g. `app/dashboard/requests/page.tsx`) — it's covered automatically, no changes needed anywhere else.

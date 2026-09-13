@@ -72,12 +72,14 @@
 - [x] FastAdmin site name + header/sign-in logo served from `/static`
 
 ## What's left / unknown
-- [ ] **Decide frontend architecture** (server-mediated vs. SPA vs. hybrid —
-  see `activeContext.md`) — #9/#10 are already merged regardless, but this
-  still shapes future features (live status, messaging)
+- [x] **Frontend architecture: hybrid BFF** (2026-09-13) — auth stays
+  server-mediated; `/api/backend/*` for client domain data; RSC loaders
+  for first paint; `proxy.ts` dropped `/users/me`
+- [ ] Live features (solicitudes, chat) should use `backendFetch` +
+  client cache, not a new Server Action per endpoint
 - [ ] Open a PR for branch `otp-ux-polish-required-whatsapp` (issue #15,
   pushed 2026-08-20) once ready for review
-- [ ] Close issue #8 (parent) once the architecture question above is settled
+- [x] Frontend architecture decided (hybrid BFF, 2026-09-13); #8 already closed
 - [ ] Re-evaluate issue #1 (email verification) — OTP accounts are already
   `is_verified=true` at creation and the password registration path that
   could produce an unverified account is gone; decide whether to close #1,
