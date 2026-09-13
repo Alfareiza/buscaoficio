@@ -1,0 +1,37 @@
+---
+description: proxy.ts session gate, cookie refresh, logout, AuthCard pending
+globs: nextjs-frontend/proxy.ts,nextjs-frontend/app/api/**/*.ts,nextjs-frontend/lib/auth-cookies.ts,nextjs-frontend/components/auth/AuthCard.tsx,nextjs-frontend/app/global-error.tsx
+alwaysApply: false
+---
+
+# Frontend session
+
+`proxy.ts` `config.matcher` **must be a literal array**. A const reference
+is not statically parsed and the proxy applies globally.
+
+```ts
+export const config = {
+  matcher: ["/dashboard/:path*", "/api/backend/:path*"],
+};
+```
+
+- Gate on cookie + JWT `exp` (+ 2 min refresh). **Do not** call
+  `GET /users/me` from the proxy. FastAPI authorizes the real request.
+- Dashboard document GETs may 307 to `/login` on a dead session.
+  `/api/backend` **must not** 307 (public catalog). Clear cookies and
+  continue; the Route Handler returns FastAPI's status.
+- **Never 307 a `next-action` POST.** Next posts actions to the current
+  page; a 307 is followed as another Flight POST, not a navigation.
+- Logout is `POST /api/auth/logout` (native form + Route Handler), not a
+  hashed Server Action — stale tabs after a frontend deploy must still
+  sign out. Do not convert other actions to Route Handlers for that.
+- Stale action ids → Flight
+  `"An unexpected response was received from the server."` →
+  `global-error.tsx` reloads (no Sentry). Nested `error.tsx` needs the
+  same check.
+- `AuthCard.finish()`: wrap `router.push("/dashboard")` in
+  `useTransition`. `isPending` is `actionPending || isNavigating`. Do
+  not clear pending before `push`. **Volver** stays clickable.
+- Page protection **is** the matcher. `app/dashboard/layout.tsx` is UI
+  chrome only. New protected page: put it under `/dashboard/...` or add
+  the path to the literal matcher.
