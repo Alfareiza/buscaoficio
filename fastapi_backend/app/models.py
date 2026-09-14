@@ -3,19 +3,30 @@ from uuid import uuid4
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
+    Numeric,
     SmallInteger,
     String,
+    Text,
 )
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.sql import func
 
-from .enums import ComplejidadCategoria, EstadoVerificacionProfesional
+from .enums import (
+    ComplejidadCategoria,
+    EstadoPropuesta,
+    EstadoSolicitud,
+    EstadoVerificacionProfesional,
+    IniciadaPor,
+    ResultadoNegociacion,
+)
 
 
 class Base(DeclarativeBase):
@@ -108,7 +119,9 @@ class Cliente(TimestampMixin, UsuarioProvisioningDisplayMixin, Base):
 
     usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), primary_key=True)
     direccion_default = Column(String, nullable=True)
-    zona_id = Column(UUID(as_uuid=True), ForeignKey("zonas_cobertura.id"), nullable=True)
+    zona_id = Column(
+        UUID(as_uuid=True), ForeignKey("zonas_cobertura.id"), nullable=True
+    )
     repeat_customer = Column(Boolean, default=False, nullable=False)
     referido_por_id = Column(
         UUID(as_uuid=True), ForeignKey("clientes.usuario_id"), nullable=True
@@ -296,3 +309,114 @@ class ProfesionalZona(Base):
         ForeignKey("zonas_cobertura.id"),
         primary_key=True,
     )
+
+
+class Solicitud(TimestampMixin, Base):
+    """Pedido que publica un cliente: qué oficio necesita, dónde y con qué detalle.
+
+    Es el punto de entrada del ciclo. Un profesional responde con una
+    ``Propuesta``; si no se cierran en el precio, las ``Negociacion``
+    (contraofertas) cuelgan de esa propuesta, no de la solicitud.
+    """
+
+    __tablename__ = "solicitudes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    cliente_id = Column(
+        UUID(as_uuid=True), ForeignKey("clientes.usuario_id"), nullable=False
+    )
+    categoria_id = Column(
+        UUID(as_uuid=True), ForeignKey("categorias_servicio.id"), nullable=False
+    )
+    subcategoria_id = Column(
+        UUID(as_uuid=True), ForeignKey("subcategorias_servicio.id"), nullable=True
+    )
+    descripcion = Column(Text, nullable=False)
+    fotos_urls = Column(JSON, nullable=True)
+    presupuesto_aproximado = Column(Numeric(12, 2), nullable=True)
+    es_urgente = Column(Boolean, nullable=False, default=False)
+    estado = Column(String(30), nullable=False, default=EstadoSolicitud.PUBLICADA.value)
+    # TODO: increment when a profesional is actually notified (email/WhatsApp).
+    num_profesionales_notificados = Column(SmallInteger, nullable=False, default=0)
+    primera_propuesta_en = Column(DateTime(timezone=True), nullable=True)
+    zona_id = Column(
+        UUID(as_uuid=True), ForeignKey("zonas_cobertura.id"), nullable=False
+    )
+    motivo_cancelamiento = Column(Text, nullable=True)
+
+    cliente = relationship("Cliente")
+    categoria = relationship("CategoriaServicio")
+    zona = relationship("ZonaCobertura")
+    propuestas = relationship("Propuesta", back_populates="solicitud")
+
+    def __str__(self) -> str:
+        return f"Solicitud de {self.categoria.nombre} {self.creado_en:%Y/%m/%d/%H/%M}"
+
+
+class Propuesta(TimestampMixin, Base):
+    """Oferta de un profesional a una ``Solicitud`` (precio, plazo, enfoque).
+
+    Varias propuestas pueden apuntar a la misma solicitud. El
+    ``precio_inicial`` es el P₀ de las ``Negociacion``: las contraofertas
+    no pueden bajar de ~80% de ese valor (regla de negocio, no de esta
+    tabla).
+    """
+
+    __tablename__ = "propuestas"
+    __table_args__ = (
+        CheckConstraint(
+            "plazo_ejecucion_dias IS NULL OR plazo_ejecucion_dias >= 1",
+            name="propuestas_plazo_min_1",
+        ),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    solicitud_id = Column(
+        UUID(as_uuid=True), ForeignKey("solicitudes.id"), nullable=False
+    )
+    profesional_id = Column(
+        UUID(as_uuid=True), ForeignKey("profesionales.usuario_id"), nullable=False
+    )
+    precio_inicial = Column(Numeric(12, 2), nullable=False)
+    plazo_ejecucion_dias = Column(SmallInteger, nullable=True)
+    descripcion_enfoque = Column(Text, nullable=True)
+    estado = Column(String(30), nullable=False, default=EstadoPropuesta.ENVIADA.value)
+    motivo_cancelamiento = Column(Text, nullable=True)
+    motivo_rechazo = Column(Text, nullable=True)
+
+    solicitud = relationship("Solicitud", back_populates="propuestas")
+    profesional = relationship("Profesional")
+
+    def __str__(self) -> str:
+        return f"Propuesta {self.id}"
+
+
+class Negociacion(TimestampMixin, Base):
+    """Una ronda de contraoferta sobre una ``Propuesta`` (máximo 2).
+
+    No vive suelta: siempre pertenece a una propuesta, y por ella a la
+    ``Solicitud``. ``iniciada_por`` dice si el movimiento lo hizo el
+    cliente o el profesional. ``precio_propuesto`` debe ser mayor que 0.
+    """
+
+    __tablename__ = "negociaciones"
+    __table_args__ = (
+        CheckConstraint("ronda <= 2", name="negociaciones_ronda_max_2"),
+        CheckConstraint("precio_propuesto > 0", name="negociaciones_precio_positivo"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    propuesta_id = Column(
+        UUID(as_uuid=True), ForeignKey("propuestas.id"), nullable=False
+    )
+    ronda = Column(SmallInteger, nullable=False)
+    iniciada_por = Column(String(20), nullable=False, default=IniciadaPor.CLIENTE.value)
+    precio_propuesto = Column(Numeric(12, 2), nullable=False)
+    resultado = Column(
+        String(20), nullable=False, default=ResultadoNegociacion.PENDIENTE.value
+    )
+
+    propuesta = relationship("Propuesta")
+
+    def __str__(self) -> str:
+        return f"Negociación {self.id} ronda {self.ronda}"

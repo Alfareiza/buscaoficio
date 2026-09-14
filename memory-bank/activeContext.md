@@ -1,6 +1,16 @@
 # Active Context
 
 ## Current focus
+- **Operación domain (2026-09-13, issue [#41](https://github.com/Alfareiza/buscaoficio/issues/41)).** Section 3 of the ER dictionary:
+  `solicitudes`, `propuestas`, `negociaciones` + FastAdmin + authenticated
+  `GET/POST /api/v1/solicitudes` and `POST …/cancelar`. Cliente creates
+  and lists own rows; profesional sees open jobs matching N:M cat/zona
+  (nombre + zona city only). Cancel in `publicada`/`con_propuestas`
+  copies `motivo_cancelamiento` onto open propuestas (`cancelada`).
+  `num_profesionales_notificados` starts at 0 (TODO: increment on real
+  email/WhatsApp). `fotos_urls` stores URL strings; hosting is issue
+  [#40](https://github.com/Alfareiza/buscaoficio/issues/40). Alembic
+  `e7f8a9b0c1d2`. No Next.js screens yet. Hybrid BFF still applies.
 - **Hybrid BFF (2026-09-13, issue [#38](https://github.com/Alfareiza/buscaoficio/issues/38)).** Auth
   stays on Server Actions / dedicated Route Handlers. Domain data:
   RSC loaders (`loadItems`, `loadCatalogo`) hit FastAPI in one hop;

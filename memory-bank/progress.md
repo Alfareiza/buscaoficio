@@ -51,10 +51,13 @@
 - **Catálogo domain** (issue [#34](https://github.com/Alfareiza/buscaoficio/issues/34),
   PR [#35](https://github.com/Alfareiza/buscaoficio/pull/35), merged
   2026-09-09): tables + seed + FastAdmin + public
-  `GET /api/v1/catalogo/{categorias,zonas}`. Alembic head
-  `a1b2c3d4e5f6`. Profesional OTP writes N:M catalog rows. Cliente
-  `zona_id` is still unset. See
+  `GET /api/v1/catalogo/{categorias,zonas}`. Profesional OTP writes N:M
+  catalog rows. Cliente `zona_id` is still unset. See
   `systemPatterns.md` § Catálogo domain pattern.
+- **Operación domain** (2026-09-13, issue [#41](https://github.com/Alfareiza/buscaoficio/issues/41)): `solicitudes` / `propuestas` /
+  `negociaciones`, one Alembic revision `e7f8a9b0c1d2` (after Catálogo
+  seed `a1b2c3d4e5f6`), FastAdmin, authenticated solicitudes API. No
+  FE UI. No `POST` propuesta; precio ≤ presupuesto is not validated.
 
 ## Local customizations done
 - [x] Postgres host ports remapped to **5434** (db) and **5435** (db_test)
@@ -96,7 +99,8 @@
   rows (not started, not urgent at current scale)
 - [ ] Confirm DBs restarted and migrations applied after port change
 - [x] Domain product features for "busca oficio" — **started**: Catálogo
-  (PR #35). Remaining ER domains (solicitudes, pagos, etc.) not started
+  (PR #35). **Operación** tables + solicitudes API (2026-09-13). Remaining:
+  front, matching/notify, pagos/escrow. Photo hosting: issue #40
 - [x] Wire OTP profesional registration to `profesional_categoria` /
   `profesional_zona` (cliente `zona_id` still open)
 - [ ] Decide Gap #7 (`activa_v1` launch set)

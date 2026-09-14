@@ -271,6 +271,36 @@ OTP `register_profesional_otp` requires `zona_ids` and `categoria_ids`
 still leaves `clientes.zona_id` empty. Pickers list all seeded rows
 (`activa_v1` is not a signup filter).
 
+## Operación domain pattern (issue #41)
+Second ER-dictionary slice. One Alembic revision (`e7f8a9b0c1d2`)
+after Catálogo seed. No Next.js screens; photo hosting is issue #40.
+
+### Tables
+| Table | Role |
+|-------|------|
+| `solicitudes` | Cliente pedido (cat, zona, texto, fotos URL, presupuesto) |
+| `propuestas` | Oferta de un profesional a una solicitud |
+| `negociaciones` | Contraoferta sobre una propuesta (`ronda <= 2`) |
+
+FKs `cliente_id` / `profesional_id` → `*.usuario_id`. Extra vs
+dictionary: `motivo_cancelamiento` on solicitud + propuesta;
+`motivo_rechazo` on propuesta; propuesta estado includes `cancelada`.
+
+CHECKs: `propuestas.plazo_ejecucion_dias` null or `>= 1`;
+`negociaciones.precio_propuesto > 0`; `ronda <= 2`.
+
+### API / admin
+- JWT: `GET/POST /api/v1/solicitudes`, `POST /{id}/cancelar` —
+  `app/routes/solicitudes.py` (no service layer). Cliente: own rows.
+  Profesional: open feed matching N:M cat/zona (nombre + ciudad only).
+- Cancel in `publicada`/`con_propuestas` copies `motivo_cancelamiento`
+  onto open propuestas.
+- FastAdmin for all three tables. `Solicitud.__str__` needs
+  `categoria` loaded (`orm_get_list` / `orm_get_obj`); otherwise
+  retrieve 500s and the UI says “No permissions for model”.
+- `num_profesionales_notificados` default 0 (increment when a real
+  email/WhatsApp is sent). `POST` ignores `subcategoria_id`.
+
 ## Database patterns
 - **Prod Postgres is temporarily Supabase** (transaction pooler `:6543`).
   After launch, point `DATABASE_URL` at RDS — no engine-code change.

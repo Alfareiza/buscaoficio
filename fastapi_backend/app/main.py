@@ -9,6 +9,7 @@ from fastadmin import fastapi_app as admin_app
 from app.routes.auth import router as auth_router
 from app.routes.catalogo import router as catalogo_router
 from app.routes.items import router as items_router
+from app.routes.solicitudes import router as solicitudes_router
 from app.routes.users import router as users_router
 
 from . import admin  # noqa: F401
@@ -64,5 +65,6 @@ app.include_router(auth_router, prefix=f"{API_V1_PREFIX}/{AUTH_URL_PATH}")
 app.include_router(users_router, prefix=f"{API_V1_PREFIX}/users")
 app.include_router(items_router, prefix=f"{API_V1_PREFIX}/items")
 app.include_router(catalogo_router, prefix=f"{API_V1_PREFIX}/catalogo")
+app.include_router(solicitudes_router, prefix=f"{API_V1_PREFIX}/solicitudes")
 
 add_pagination(app)

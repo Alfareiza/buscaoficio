@@ -36,3 +36,48 @@ class ComplejidadCategoria(str, Enum):
     BAJA = "baja"
     MEDIA = "media"
     ALTA = "alta"
+
+
+class EstadoSolicitud(str, Enum):
+    PUBLICADA = "publicada"
+    CON_PROPUESTAS = "con_propuestas"
+    EN_NEGOCIACION = "en_negociacion"
+    PAGADA = "pagada"
+    EN_EJECUCION = "en_ejecucion"
+    COMPLETADA = "completada"
+    EN_GARANTIA = "en_garantia"
+    DISPUTADA = "disputada"
+    CERRADA = "cerrada"
+    CANCELADA = "cancelada"
+
+
+class EstadoPropuesta(str, Enum):
+    ENVIADA = "enviada"
+    RECHAZADA = "rechazada"
+    EN_NEGOCIACION = "en_negociacion"
+    ACEPTADA = "aceptada"
+    EXPIRADA = "expirada"
+    CANCELADA = "cancelada"
+
+
+class IniciadaPor(str, Enum):
+    CLIENTE = "cliente"
+    PROFESIONAL = "profesional"
+
+
+class ResultadoNegociacion(str, Enum):
+    PENDIENTE = "pendiente"
+    ACEPTADA = "aceptada"
+    RECHAZADA = "rechazada"
+
+
+SOLICITUD_ABIERTA = (
+    EstadoSolicitud.PUBLICADA,
+    EstadoSolicitud.CON_PROPUESTAS,
+    EstadoSolicitud.EN_NEGOCIACION,
+)
+
+PROPUESTA_ABIERTA = (
+    EstadoPropuesta.ENVIADA,
+    EstadoPropuesta.EN_NEGOCIACION,
+)

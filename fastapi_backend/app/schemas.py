@@ -1,6 +1,7 @@
 import re
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from fastapi_users import schemas
 from pydantic import BaseModel, EmailStr, Field, ValidationInfo, field_validator
@@ -159,5 +160,40 @@ class ZonaCoberturaRead(BaseModel):
     ciudad: str
     localidad: str | None = None
     activa_v1: bool
+
+    model_config = {"from_attributes": True}
+
+
+class SolicitudCreate(BaseModel):
+    categoria_id: UUID
+    zona_id: UUID
+    descripcion: str
+    presupuesto_aproximado: Decimal | None = Field(default=None, ge=50000)
+    es_urgente: bool = False
+    fotos_urls: list[str] | None = None
+    subcategoria_id: UUID | None = None
+
+
+class SolicitudCancel(BaseModel):
+    motivo_cancelamiento: str | None = None
+
+
+class SolicitudRead(BaseModel):
+    id: UUID
+    cliente_id: UUID
+    categoria_id: UUID
+    subcategoria_id: UUID | None = None
+    descripcion: str
+    fotos_urls: list[str] | None = None
+    presupuesto_aproximado: Decimal | None = None
+    es_urgente: bool
+    estado: str
+    num_profesionales_notificados: int
+    primera_propuesta_en: datetime | None = None
+    zona_id: UUID
+    motivo_cancelamiento: str | None = None
+    creado_en: datetime
+    cliente_nombre: str | None = None
+    zona_ciudad: str | None = None
 
     model_config = {"from_attributes": True}
