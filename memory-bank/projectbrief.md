@@ -22,9 +22,11 @@ This repo is based on Vinta Software’s **Next.js FastAPI Template** (`vintasof
 - Observability: Sentry (errors + tracing + logs) on FastAPI and Next.js.
 
 ## Out of scope (for now)
-- Full marketplace cycle (solicitudes, propuestas, pagos, escrow, etc.) —
-  domain work is being installed slice-by-slice from the ER dictionary;
-  **Catálogo** (categories/zones) landed 2026-09-09 via PR #35 / issue #34.
+- Full marketplace cycle (pagos, escrow, matching, etc.) — domain work is
+  installed slice-by-slice from the ER dictionary; **Catálogo** (PR #35)
+  and **Operación** schema/API (`solicitudes` / `propuestas` /
+  `negociaciones`) are in. Front de solicitudes and photo hosting
+  ([#40](https://github.com/Alfareiza/buscaoficio/issues/40)) are not.
 - Production email provider configuration beyond local MailHog.
 - Returning to EC2 + ECR until the product is ready for launch (see
   branch `ec2` for the preserved configuration).

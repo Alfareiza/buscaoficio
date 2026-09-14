@@ -267,6 +267,32 @@ export type PageItemRead = {
 };
 
 /**
+ * Page[SolicitudRead]
+ */
+export type PageSolicitudRead = {
+  /**
+   * Items
+   */
+  items: Array<SolicitudRead>;
+  /**
+   * Total
+   */
+  total?: number | null;
+  /**
+   * Page
+   */
+  page: number | null;
+  /**
+   * Size
+   */
+  size: number | null;
+  /**
+   * Pages
+   */
+  pages?: number | null;
+};
+
+/**
  * ProfesionalAdminUpdate
  */
 export type ProfesionalAdminUpdate = {
@@ -402,6 +428,120 @@ export type ProfesionalUpdate = {
    * Foto Perfil Url
    */
   foto_perfil_url?: string | null;
+};
+
+/**
+ * SolicitudCancel
+ */
+export type SolicitudCancel = {
+  /**
+   * Motivo Cancelamiento
+   */
+  motivo_cancelamiento?: string | null;
+};
+
+/**
+ * SolicitudCreate
+ */
+export type SolicitudCreate = {
+  /**
+   * Categoria Id
+   */
+  categoria_id: string;
+  /**
+   * Zona Id
+   */
+  zona_id: string;
+  /**
+   * Descripcion
+   */
+  descripcion: string;
+  /**
+   * Presupuesto Aproximado
+   */
+  presupuesto_aproximado?: number | string | null;
+  /**
+   * Es Urgente
+   */
+  es_urgente?: boolean;
+  /**
+   * Fotos Urls
+   */
+  fotos_urls?: Array<string> | null;
+  /**
+   * Subcategoria Id
+   */
+  subcategoria_id?: string | null;
+};
+
+/**
+ * SolicitudRead
+ */
+export type SolicitudRead = {
+  /**
+   * Id
+   */
+  id: string;
+  /**
+   * Cliente Id
+   */
+  cliente_id: string;
+  /**
+   * Categoria Id
+   */
+  categoria_id: string;
+  /**
+   * Subcategoria Id
+   */
+  subcategoria_id?: string | null;
+  /**
+   * Descripcion
+   */
+  descripcion: string;
+  /**
+   * Fotos Urls
+   */
+  fotos_urls?: Array<string> | null;
+  /**
+   * Presupuesto Aproximado
+   */
+  presupuesto_aproximado?: string | null;
+  /**
+   * Es Urgente
+   */
+  es_urgente: boolean;
+  /**
+   * Estado
+   */
+  estado: string;
+  /**
+   * Num Profesionales Notificados
+   */
+  num_profesionales_notificados: number;
+  /**
+   * Primera Propuesta En
+   */
+  primera_propuesta_en?: string | null;
+  /**
+   * Zona Id
+   */
+  zona_id: string;
+  /**
+   * Motivo Cancelamiento
+   */
+  motivo_cancelamiento?: string | null;
+  /**
+   * Creado En
+   */
+  creado_en: string;
+  /**
+   * Cliente Nombre
+   */
+  cliente_nombre?: string | null;
+  /**
+   * Zona Ciudad
+   */
+  zona_ciudad?: string | null;
 };
 
 /**
@@ -1400,6 +1540,134 @@ export type ListZonasResponses = {
 };
 
 export type ListZonasResponse = ListZonasResponses[keyof ListZonasResponses];
+
+export type ListSolicitudesData = {
+  body?: never;
+  path?: never;
+  query?: {
+    /**
+     * Page
+     * Page number
+     */
+    page?: number;
+    /**
+     * Size
+     * Page size
+     */
+    size?: number;
+  };
+  url: "/api/v1/solicitudes/";
+};
+
+export type ListSolicitudesErrors = {
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type ListSolicitudesError =
+  ListSolicitudesErrors[keyof ListSolicitudesErrors];
+
+export type ListSolicitudesResponses = {
+  /**
+   * Successful Response
+   */
+  200: PageSolicitudRead;
+};
+
+export type ListSolicitudesResponse =
+  ListSolicitudesResponses[keyof ListSolicitudesResponses];
+
+export type CreateSolicitudData = {
+  body: SolicitudCreate;
+  path?: never;
+  query?: never;
+  url: "/api/v1/solicitudes/";
+};
+
+export type CreateSolicitudErrors = {
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type CreateSolicitudError =
+  CreateSolicitudErrors[keyof CreateSolicitudErrors];
+
+export type CreateSolicitudResponses = {
+  /**
+   * Successful Response
+   */
+  201: SolicitudRead;
+};
+
+export type CreateSolicitudResponse =
+  CreateSolicitudResponses[keyof CreateSolicitudResponses];
+
+export type GetSolicitudData = {
+  body?: never;
+  path: {
+    /**
+     * Solicitud Id
+     */
+    solicitud_id: string;
+  };
+  query?: never;
+  url: "/api/v1/solicitudes/{solicitud_id}";
+};
+
+export type GetSolicitudErrors = {
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type GetSolicitudError = GetSolicitudErrors[keyof GetSolicitudErrors];
+
+export type GetSolicitudResponses = {
+  /**
+   * Successful Response
+   */
+  200: SolicitudRead;
+};
+
+export type GetSolicitudResponse =
+  GetSolicitudResponses[keyof GetSolicitudResponses];
+
+export type CancelSolicitudData = {
+  body: SolicitudCancel;
+  path: {
+    /**
+     * Solicitud Id
+     */
+    solicitud_id: string;
+  };
+  query?: never;
+  url: "/api/v1/solicitudes/{solicitud_id}/cancelar";
+};
+
+export type CancelSolicitudErrors = {
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type CancelSolicitudError =
+  CancelSolicitudErrors[keyof CancelSolicitudErrors];
+
+export type CancelSolicitudResponses = {
+  /**
+   * Successful Response
+   */
+  200: SolicitudRead;
+};
+
+export type CancelSolicitudResponse =
+  CancelSolicitudResponses[keyof CancelSolicitudResponses];
 
 export type ClientOptions = {
   baseURL: `${string}://openapi.json` | (string & {});

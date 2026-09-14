@@ -1,0 +1,16 @@
+/* FastAdmin forms are a single stacked column. Pair these two Propuesta fields. */
+.ant-form-item:has(#precio_inicial),
+.ant-form-item:has(#plazo_ejecucion_dias) {
+  display: inline-block;
+  vertical-align: top;
+  box-sizing: border-box;
+}
+
+.ant-form-item:has(#precio_inicial) {
+  width: calc(100% - 8em);
+  padding-right: 1em;
+}
+
+.ant-form-item:has(#plazo_ejecucion_dias) {
+  width: 7em;
+}

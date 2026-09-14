@@ -97,6 +97,18 @@ import type {
   ListCategoriasResponses,
   ListZonasData,
   ListZonasResponses,
+  ListSolicitudesData,
+  ListSolicitudesResponses,
+  ListSolicitudesErrors,
+  CreateSolicitudData,
+  CreateSolicitudResponses,
+  CreateSolicitudErrors,
+  GetSolicitudData,
+  GetSolicitudResponses,
+  GetSolicitudErrors,
+  CancelSolicitudData,
+  CancelSolicitudResponses,
+  CancelSolicitudErrors,
 } from "./types.gen";
 import { client } from "./client.gen";
 
@@ -1059,5 +1071,105 @@ export const listZonas = <ThrowOnError extends boolean = false>(
     responseType: "json",
     url: "/api/v1/catalogo/zonas",
     ...options,
+  });
+};
+
+/**
+ * Paginated solicitudes (cliente: own; profesional: open feed)
+ */
+export const listSolicitudes = <ThrowOnError extends boolean = false>(
+  options?: Options<ListSolicitudesData, ThrowOnError>,
+) => {
+  return (options?.client ?? client).get<
+    ListSolicitudesResponses,
+    ListSolicitudesErrors,
+    ThrowOnError
+  >({
+    responseType: "json",
+    security: [
+      {
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/api/v1/solicitudes/",
+    ...options,
+  });
+};
+
+/**
+ * Create solicitud (cliente)
+ */
+export const createSolicitud = <ThrowOnError extends boolean = false>(
+  options: Options<CreateSolicitudData, ThrowOnError>,
+) => {
+  return (options.client ?? client).post<
+    CreateSolicitudResponses,
+    CreateSolicitudErrors,
+    ThrowOnError
+  >({
+    responseType: "json",
+    security: [
+      {
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/api/v1/solicitudes/",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+};
+
+/**
+ * Solicitud detail (owner or matching profesional)
+ */
+export const getSolicitud = <ThrowOnError extends boolean = false>(
+  options: Options<GetSolicitudData, ThrowOnError>,
+) => {
+  return (options.client ?? client).get<
+    GetSolicitudResponses,
+    GetSolicitudErrors,
+    ThrowOnError
+  >({
+    responseType: "json",
+    security: [
+      {
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/api/v1/solicitudes/{solicitud_id}",
+    ...options,
+  });
+};
+
+/**
+ * Cancel solicitud (cliente, publicada or con_propuestas)
+ */
+export const cancelSolicitud = <ThrowOnError extends boolean = false>(
+  options: Options<CancelSolicitudData, ThrowOnError>,
+) => {
+  return (options.client ?? client).post<
+    CancelSolicitudResponses,
+    CancelSolicitudErrors,
+    ThrowOnError
+  >({
+    responseType: "json",
+    security: [
+      {
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/api/v1/solicitudes/{solicitud_id}/cancelar",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 };

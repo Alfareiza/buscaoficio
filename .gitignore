@@ -161,3 +161,6 @@ cython_debug/
 # Claude
 .claude/
 .agents/
+
+# FastAdmin local photo uploads (no object store yet)
+fastapi_backend/app/static/admin-uploads/
